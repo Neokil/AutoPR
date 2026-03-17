@@ -177,8 +177,14 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	case models.StateImplementing, models.StateValidating:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Continue workflow: ai-orchestrator resume %s\n  2. Check progress: ai-orchestrator status %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
 	case models.StatePRReady:
+		if strings.TrimSpace(st.PRURL) != "" {
+			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review PR markdown: %s\n  2. Review GitHub PR: %s", st.TicketNumber, st.PRPath, st.PRURL), nil
+		}
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Generate/create PR: ai-orchestrator pr %s\n  2. Review PR markdown: %s", st.TicketNumber, st.TicketNumber, st.PRPath), nil
 	case models.StateDone:
+		if strings.TrimSpace(st.PRURL) != "" {
+			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Review GitHub PR: %s", st.TicketNumber, st.PRPath, st.PRURL), nil
+		}
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Check current state: ai-orchestrator status %s", st.TicketNumber, st.PRPath, st.TicketNumber), nil
 	case models.StateFailed:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Inspect log: %s\n  2. Add feedback: ai-orchestrator feedback %s --message \"...\"\n  3. Retry: ai-orchestrator resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber), nil
@@ -199,7 +205,14 @@ func (o *Orchestrator) GeneratePR(ctx context.Context, ticketNumber string) erro
 	if err != nil {
 		return err
 	}
-	return o.generatePR(ctx, &st, t)
+	if err := o.generatePR(ctx, &st, t); err != nil {
+		return err
+	}
+	st.Status = models.StateDone
+	if err := o.Store.SaveState(ticketNumber, st); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*models.TicketState, error) {
@@ -412,6 +425,7 @@ func (o *Orchestrator) generatePR(ctx context.Context, st *models.TicketState, t
 			_ = markdown.AppendSection(st.LogPath, "PR Create Failed", msg)
 			return fmt.Errorf(msg)
 		}
+		st.PRURL = strings.TrimSpace(url)
 		_ = markdown.AppendSection(st.LogPath, "PR Created", url)
 	}
 	return nil
@@ -459,6 +473,9 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 	fmt.Printf("  worktree: %s\n", st.WorktreePath)
 	fmt.Printf("  proposal: %s\n", st.ProposalPath)
 	fmt.Printf("  pr: %s\n", st.PRPath)
+	if strings.TrimSpace(st.PRURL) != "" {
+		fmt.Printf("  pr_url: %s\n", st.PRURL)
+	}
 	if st.LastError != "" {
 		fmt.Printf("  last_error: %s\n", st.LastError)
 	}

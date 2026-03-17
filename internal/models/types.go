@@ -46,6 +46,7 @@ type TicketState struct {
 	ChecksLogPath   string        `json:"checks_log_path"`
 	TicketJSONPath  string        `json:"ticket_json_path"`
 	ProviderDirPath string        `json:"provider_dir_path"`
+	PRURL           string        `json:"pr_url,omitempty"`
 }
 
 func NewTicketState(ticketNumber string) TicketState {
