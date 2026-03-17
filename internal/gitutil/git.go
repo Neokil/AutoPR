@@ -68,3 +68,19 @@ func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
 	}
 	return n, nil
 }
+
+func HasChanges(ctx context.Context, repoRoot string) (bool, error) {
+	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(res.Stdout) != "", nil
+}
+
+func CommitAll(ctx context.Context, repoRoot, message string) error {
+	if _, err := shell.Run(ctx, repoRoot, nil, "", "git", "add", "-A"); err != nil {
+		return err
+	}
+	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "commit", "-m", message)
+	return err
+}

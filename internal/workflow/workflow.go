@@ -49,6 +49,13 @@ func (o *Orchestrator) RunTicket(ctx context.Context, ticketNumber string) error
 	if err != nil {
 		return err
 	}
+	if st.Status == models.StatePRReady {
+		t, err := o.Store.LoadTicket(ticketNumber)
+		if err != nil {
+			return err
+		}
+		return o.generatePR(ctx, st, t)
+	}
 	if st.Status == models.StateWaitingForHuman && !st.Approved {
 		fmt.Printf("ticket %s is waiting for human input. Run approve/feedback/reject.\n", ticketNumber)
 		return nil
@@ -74,6 +81,13 @@ func (o *Orchestrator) ResumeTicket(ctx context.Context, ticketNumber string) er
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
 		return err
+	}
+	if st.Status == models.StatePRReady {
+		t, err := o.Store.LoadTicket(ticketNumber)
+		if err != nil {
+			return err
+		}
+		return o.generatePR(ctx, &st, t)
 	}
 	if st.Status == models.StateWaitingForHuman && !st.Approved {
 		fmt.Printf("ticket %s is waiting for human input.\n", ticketNumber)
@@ -344,6 +358,13 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 	}
 
 	st.Status = models.StatePRReady
+	if err := o.ensureCommitForTicket(ctx, *st, ticket); err != nil {
+		st.Status = models.StateFailed
+		st.LastError = err.Error()
+		_ = o.Store.SaveState(st.TicketNumber, *st)
+		_ = markdown.AppendSection(st.LogPath, "Commit Failed", err.Error())
+		return err
+	}
 	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 		return err
 	}
@@ -537,6 +558,22 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	return err
 }
 
+func (o *Orchestrator) ensureCommitForTicket(ctx context.Context, st models.TicketState, ticket models.Ticket) error {
+	hasChanges, err := gitutil.HasChanges(ctx, st.WorktreePath)
+	if err != nil {
+		return fmt.Errorf("check git status before commit: %w", err)
+	}
+	if !hasChanges {
+		return fmt.Errorf("implementation finished but produced no file changes to commit for ticket %s", st.TicketNumber)
+	}
+	msg := fmt.Sprintf("sc-%s: %s", ticket.Number, ticket.Title)
+	if err := gitutil.CommitAll(ctx, st.WorktreePath, msg); err != nil {
+		return fmt.Errorf("create commit: %w", err)
+	}
+	_ = markdown.AppendSection(st.LogPath, "Commit Created", msg)
+	return nil
+}
+
 func (o *Orchestrator) validatePRPrereqs(ctx context.Context, st models.TicketState) error {
 	if st.Status == models.StateWaitingForHuman && !st.Approved {
 		return fmt.Errorf("ticket %s is waiting for human approval.\n\nNext steps:\n  1. Review proposal: %s\n  2. Approve to continue: ai-orchestrator approve %s\n  3. Or send more feedback: ai-orchestrator feedback %s --message \"...\"", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber)
@@ -566,7 +603,7 @@ func (o *Orchestrator) ensureBranchHasCommits(ctx context.Context, st models.Tic
 		if ahead > 0 {
 			return nil
 		}
-		return fmt.Errorf("branch %s has no commits ahead of %s, so a PR cannot be created.\n\nNext steps:\n  1. Continue implementation: ai-orchestrator resume %s\n  2. Or commit work manually in %s\n  3. Push and retry: git -C %s push -u origin %s && ai-orchestrator pr %s", st.BranchName, base, st.TicketNumber, st.WorktreePath, st.WorktreePath, st.BranchName, st.TicketNumber)
+		return fmt.Errorf("branch %s has no commits ahead of %s, so a PR cannot be created.\n\nNext steps:\n  1. Check whether implementation actually changed code in %s\n  2. If code is missing, request another pass: ai-orchestrator feedback %s --message \"implementation produced no branch changes; please apply code changes\" && ai-orchestrator resume %s\n  3. If changes exist but are uncommitted, commit/push manually: git -C %s add -A && git -C %s commit -m \"sc-%s: implement\" && git -C %s push -u origin %s\n  4. Retry PR: ai-orchestrator pr %s", st.BranchName, base, st.WorktreePath, st.TicketNumber, st.TicketNumber, st.WorktreePath, st.WorktreePath, st.TicketNumber, st.WorktreePath, st.BranchName, st.TicketNumber)
 	}
 
 	// If base detection failed, fall back to checking any changes in working tree.
