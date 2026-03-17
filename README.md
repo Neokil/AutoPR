@@ -16,13 +16,14 @@ Simple CLI-only orchestrator for AI-assisted ticket workflows.
 
 ## Install
 
-Build binary:
+Build and register PATH entry in your `~/.zshrc`:
 
 ```bash
-go build -o ai-orchestrator ./cmd/ai-orchestrator
+make install
+source ~/.zshrc
 ```
 
-Move/copy `ai-orchestrator` into your `PATH`.
+This builds the binary to `.build/ai-orchestrator` and adds `.build/` to `PATH`.
 
 ## Commands
 
