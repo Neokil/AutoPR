@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   approveTicket,
   cleanupAll,
@@ -16,15 +16,13 @@ import {
 } from "./api";
 import type { EventItem, Job, TicketDetails, TicketSummary } from "./types";
 
-const DEFAULT_REPO_PATH = "";
+function ticketKey(t: TicketSummary): string {
+  return `${t.repo_id}::${t.ticket_number}`;
+}
 
 export function App() {
-  const [repoPathInput, setRepoPathInput] = useState(
-    localStorage.getItem("ai_orchestrator_repo_path") ?? DEFAULT_REPO_PATH
-  );
-  const [repoPath, setRepoPath] = useState(repoPathInput);
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
-  const [selectedTicket, setSelectedTicket] = useState<string>("");
+  const [selectedKey, setSelectedKey] = useState<string>("");
   const [details, setDetails] = useState<TicketDetails | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -33,30 +31,25 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
 
-  useEffect(() => {
-    localStorage.setItem("ai_orchestrator_repo_path", repoPathInput);
-  }, [repoPathInput]);
+  const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
 
   useEffect(() => {
-    if (!repoPath) {
-      setTickets([]);
+    void refreshTickets();
+    const timer = setInterval(() => {
+      void refreshTickets(false);
+    }, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSummary) {
       setDetails(null);
       setEvents([]);
       return;
     }
-    void refreshTickets(repoPath);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoPath]);
-
-  useEffect(() => {
-    if (!repoPath || !selectedTicket) {
-      setDetails(null);
-      setEvents([]);
-      return;
-    }
-    void refreshTicketDetails(repoPath, selectedTicket);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoPath, selectedTicket]);
+    void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
+  }, [selectedSummary?.repo_path, selectedSummary?.ticket_number]);
 
   useEffect(() => {
     if (!activeJobId) {
@@ -69,9 +62,9 @@ export function App() {
         if (job.status === "done" || job.status === "failed") {
           clearInterval(timer);
           setActiveJobId("");
-          await refreshTickets(repoPath);
-          if (selectedTicket) {
-            await refreshTicketDetails(repoPath, selectedTicket);
+          await refreshTickets();
+          if (selectedSummary) {
+            await refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
           }
         }
       } catch (err) {
@@ -79,42 +72,36 @@ export function App() {
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, [activeJobId, repoPath, selectedTicket]);
+  }, [activeJobId, selectedSummary?.repo_path, selectedSummary?.ticket_number]);
 
-  const selectedSummary = useMemo(
-    () => tickets.find((t) => t.ticket_number === selectedTicket) ?? null,
-    [tickets, selectedTicket]
-  );
-
-  async function refreshTickets(path: string) {
-    if (!path) {
-      return;
+  async function refreshTickets(showLoader = true) {
+    if (showLoader) {
+      setLoading(true);
     }
-    setLoading(true);
-    setError("");
     try {
-      const data = await listTickets(path);
+      const data = await listTickets();
       setTickets(data);
-      if (!selectedTicket && data.length > 0) {
-        setSelectedTicket(data[0].ticket_number);
-      } else if (selectedTicket && !data.find((t) => t.ticket_number === selectedTicket)) {
-        setSelectedTicket(data[0]?.ticket_number ?? "");
+      if (data.length === 0) {
+        setSelectedKey("");
+        return;
+      }
+      if (!selectedKey || !data.some((t) => ticketKey(t) === selectedKey)) {
+        setSelectedKey(ticketKey(data[0]));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load tickets");
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      }
     }
   }
 
-  async function refreshTicketDetails(path: string, ticket: string) {
-    if (!path || !ticket) {
-      return;
-    }
+  async function refreshTicketDetails(repoPath: string, ticket: string) {
     setLoading(true);
     setError("");
     try {
-      const [ticketDetails, eventItems] = await Promise.all([getTicket(path, ticket), getEvents(path, ticket)]);
+      const [ticketDetails, eventItems] = await Promise.all([getTicket(repoPath, ticket), getEvents(repoPath, ticket)]);
       setDetails(ticketDetails);
       setEvents(eventItems);
     } catch (err) {
@@ -137,23 +124,13 @@ export function App() {
     }
   }
 
-  function onConnectRepo(e: FormEvent) {
-    e.preventDefault();
-    setRepoPath(repoPathInput.trim());
-  }
-
   return (
     <div className="app">
       <header className="header">
         <h1>AI Orchestrator</h1>
-        <form onSubmit={onConnectRepo} className="repo-form">
-          <input
-            value={repoPathInput}
-            onChange={(e) => setRepoPathInput(e.target.value)}
-            placeholder="/absolute/path/to/repo"
-          />
-          <button type="submit">Load Repo</button>
-        </form>
+        <button onClick={() => void refreshTickets()} disabled={loading}>
+          Refresh All Tickets
+        </button>
       </header>
 
       {error ? <div className="banner error">{error}</div> : null}
@@ -167,31 +144,21 @@ export function App() {
       <main className="main">
         <section className="panel left">
           <div className="panel-header">
-            <h2>Tickets</h2>
-            <button onClick={() => void refreshTickets(repoPath)} disabled={!repoPath || loading}>
-              Refresh
-            </button>
-          </div>
-          <div className="button-row">
-            <button onClick={() => void queueAction(() => cleanupDone(repoPath))} disabled={!repoPath}>
-              Cleanup Done
-            </button>
-            <button onClick={() => void queueAction(() => cleanupAll(repoPath))} disabled={!repoPath}>
-              Cleanup All
-            </button>
+            <h2>Tickets (All Repos)</h2>
           </div>
           <ul className="ticket-list">
             {tickets.map((t) => (
-              <li key={t.repo_id + t.ticket_number}>
+              <li key={ticketKey(t)}>
                 <button
-                  className={selectedTicket === t.ticket_number ? "ticket-item active" : "ticket-item"}
-                  onClick={() => setSelectedTicket(t.ticket_number)}
+                  className={selectedKey === ticketKey(t) ? "ticket-item active" : "ticket-item"}
+                  onClick={() => setSelectedKey(ticketKey(t))}
                 >
                   <strong>{t.ticket_number}</strong>
                   <span>{t.title || "(no title)"}</span>
                   <span className="meta">
                     {t.status} {t.approved ? "· approved" : ""}
                   </span>
+                  <span className="meta">{t.repo_path}</span>
                 </button>
               </li>
             ))}
@@ -208,17 +175,32 @@ export function App() {
             ) : null}
           </div>
 
-          {selectedTicket ? (
+          {selectedSummary ? (
             <>
               <div className="button-row">
-                <button onClick={() => void queueAction(() => runTicket(repoPath, selectedTicket))}>Run</button>
-                <button onClick={() => void queueAction(() => resumeTicket(repoPath, selectedTicket))}>Resume</button>
-                <button onClick={() => void queueAction(() => approveTicket(repoPath, selectedTicket))}>
+                <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                  Run
+                </button>
+                <button onClick={() => void queueAction(() => resumeTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                  Resume
+                </button>
+                <button onClick={() => void queueAction(() => approveTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
                   Approve
                 </button>
-                <button onClick={() => void queueAction(() => rejectTicket(repoPath, selectedTicket))}>Reject</button>
-                <button onClick={() => void queueAction(() => createPR(repoPath, selectedTicket))}>Create PR</button>
-                <button onClick={() => void queueAction(() => cleanupTicket(repoPath, selectedTicket))}>Cleanup</button>
+                <button onClick={() => void queueAction(() => rejectTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                  Reject
+                </button>
+                <button onClick={() => void queueAction(() => createPR(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                  Create PR
+                </button>
+                <button onClick={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                  Cleanup
+                </button>
+              </div>
+
+              <div className="button-row">
+                <button onClick={() => void queueAction(() => cleanupDone(selectedSummary.repo_path))}>Cleanup Done (Repo)</button>
+                <button onClick={() => void queueAction(() => cleanupAll(selectedSummary.repo_path))}>Cleanup All (Repo)</button>
               </div>
 
               <form
@@ -228,9 +210,9 @@ export function App() {
                   if (!feedbackMessage.trim()) {
                     return;
                   }
-                  void queueAction(() => feedbackTicket(repoPath, selectedTicket, feedbackMessage)).then(() =>
-                    setFeedbackMessage("")
-                  );
+                  void queueAction(() =>
+                    feedbackTicket(selectedSummary.repo_path, selectedSummary.ticket_number, feedbackMessage)
+                  ).then(() => setFeedbackMessage(""));
                 }}
               >
                 <input
@@ -244,6 +226,7 @@ export function App() {
               <article className="card">
                 <h3>{details?.ticket?.title || "(no title)"}</h3>
                 <p>{details?.ticket?.description || "No description"}</p>
+                <p className="meta">{selectedSummary.repo_path}</p>
                 {details?.next_steps ? (
                   <>
                     <h4>Next Steps</h4>

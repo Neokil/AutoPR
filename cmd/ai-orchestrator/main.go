@@ -35,30 +35,28 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		runCmd(ctx, svc, os.Args[2:])
+	case "wait-for-job":
+		waitForJobCmd(ctx, svc, os.Args[2:])
 	case "status":
 		statusCmd(svc, os.Args[2:])
 	case "approve":
 		requireArgs("approve", os.Args[2:], 1)
 		ticket := os.Args[2]
 		fatalIf(svc.Approve(ctx, ticket))
-		printNextSteps(svc, ticket)
 	case "feedback":
 		feedbackCmd(svc, os.Args[2:])
 	case "reject":
 		requireArgs("reject", os.Args[2:], 1)
 		ticket := os.Args[2]
 		fatalIf(svc.Reject(ticket))
-		printNextSteps(svc, ticket)
 	case "resume":
 		requireArgs("resume", os.Args[2:], 1)
 		ticket := os.Args[2]
 		fatalIf(svc.ResumeTicket(ctx, ticket))
-		printNextSteps(svc, ticket)
 	case "pr":
 		requireArgs("pr", os.Args[2:], 1)
 		ticket := os.Args[2]
 		fatalIf(svc.GeneratePR(ctx, ticket))
-		printNextSteps(svc, ticket)
 	case "cleanup":
 		cleanupCmd(ctx, svc, os.Args[2:])
 	default:
@@ -70,9 +68,6 @@ func main() {
 func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	requireArgs("run", args, 1)
 	fatalIf(svc.RunTickets(ctx, args))
-	for _, ticket := range args {
-		printNextSteps(svc, ticket)
-	}
 }
 
 func statusCmd(svc orchestrator.Service, args []string) {
@@ -101,7 +96,17 @@ func feedbackCmd(svc orchestrator.Service, args []string) {
 		fatalIf(errors.New("feedback requires --message"))
 	}
 	fatalIf(svc.Feedback(ticket, *message))
-	printNextSteps(svc, ticket)
+}
+
+func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+	requireArgs("wait-for-job", args, 1)
+	remote, ok := svc.(*orchestrator.RemoteService)
+	if !ok {
+		fatalIf(errors.New("wait-for-job is only supported in server mode"))
+	}
+	job, err := remote.WaitForJob(ctx, args[0])
+	fatalIf(err)
+	fmt.Printf("job %s completed with status %s\n", job.ID, job.Status)
 }
 
 func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
@@ -148,6 +153,7 @@ func usage() {
 
 Commands:
   ai-orchestrator run <ticket-number> [<ticket-number>...]
+  ai-orchestrator wait-for-job <job-id>
   ai-orchestrator status [<ticket-number>]
   ai-orchestrator approve <ticket-number>
   ai-orchestrator feedback <ticket-number> --message "..."

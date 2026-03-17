@@ -66,6 +66,7 @@ During implementation, the coding agent is instructed to auto-detect and run for
 
 ```bash
 ai-orchestrator run <ticket-number> <ticket-number>...
+ai-orchestrator wait-for-job <job-id>
 ai-orchestrator status <ticket-number>
 ai-orchestrator approve <ticket-number>
 ai-orchestrator feedback <ticket-number> --message "..."
@@ -161,7 +162,10 @@ Set this env var to point at a different server URL:
 ```bash
 export AI_ORCHESTRATOR_SERVER_URL=http://127.0.0.1:8080
 ai-orchestrator run 12345
+ai-orchestrator wait-for-job <job-id>
 ```
+
+Mutating commands (`run`, `resume`, `approve`, `reject`, `feedback`, `pr`, `cleanup`) schedule background jobs and return immediately with a job id.
 
 ## Config
 

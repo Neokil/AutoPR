@@ -30,9 +30,9 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 	}
 }
 
-func (s *RemoteService) RunTickets(ctx context.Context, ticketNumbers []string) error {
+func (s *RemoteService) RunTickets(_ context.Context, ticketNumbers []string) error {
 	for _, ticket := range ticketNumbers {
-		if _, err := s.enqueueAndWait(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticket)), api.RepoRequest{RepoPath: s.repoPath}); err != nil {
+		if _, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticket)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticket); err != nil {
 			return err
 		}
 	}
@@ -77,46 +77,46 @@ func (s *RemoteService) Status(ticketNumber string) error {
 	return nil
 }
 
-func (s *RemoteService) Approve(ctx context.Context, ticketNumber string) error {
-	_, err := s.enqueueAndWait(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/approve", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath})
+func (s *RemoteService) Approve(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/approve", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "approve", ticketNumber)
 	return err
 }
 
 func (s *RemoteService) Feedback(ticketNumber, message string) error {
-	_, err := s.enqueueAndWait(context.Background(), http.MethodPost, fmt.Sprintf("/api/tickets/%s/feedback", url.PathEscape(ticketNumber)), api.FeedbackRequest{
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/feedback", url.PathEscape(ticketNumber)), api.FeedbackRequest{
 		RepoPath: s.repoPath,
 		Message:  message,
-	})
+	}, "feedback", ticketNumber)
 	return err
 }
 
 func (s *RemoteService) Reject(ticketNumber string) error {
-	_, err := s.enqueueAndWait(context.Background(), http.MethodPost, fmt.Sprintf("/api/tickets/%s/reject", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath})
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/reject", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "reject", ticketNumber)
 	return err
 }
 
-func (s *RemoteService) ResumeTicket(ctx context.Context, ticketNumber string) error {
-	_, err := s.enqueueAndWait(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/resume", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath})
+func (s *RemoteService) ResumeTicket(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/resume", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "resume", ticketNumber)
 	return err
 }
 
-func (s *RemoteService) GeneratePR(ctx context.Context, ticketNumber string) error {
-	_, err := s.enqueueAndWait(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/pr", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath})
+func (s *RemoteService) GeneratePR(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/pr", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "pr", ticketNumber)
 	return err
 }
 
-func (s *RemoteService) CleanupDone(ctx context.Context) error {
-	_, err := s.enqueueAndWait(ctx, http.MethodPost, "/api/cleanup", api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"})
+func (s *RemoteService) CleanupDone(_ context.Context) error {
+	_, err := s.enqueueOnly(http.MethodPost, "/api/cleanup", api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"}, "cleanup done", "")
 	return err
 }
 
-func (s *RemoteService) CleanupAll(ctx context.Context) error {
-	_, err := s.enqueueAndWait(ctx, http.MethodPost, "/api/cleanup", api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "all"})
+func (s *RemoteService) CleanupAll(_ context.Context) error {
+	_, err := s.enqueueOnly(http.MethodPost, "/api/cleanup", api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "all"}, "cleanup all", "")
 	return err
 }
 
-func (s *RemoteService) CleanupTicket(ctx context.Context, ticketNumber string) error {
-	_, err := s.enqueueAndWait(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath})
+func (s *RemoteService) CleanupTicket(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
 	return err
 }
 
@@ -131,19 +131,24 @@ func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
 	return out.NextSteps, nil
 }
 
-func (s *RemoteService) enqueueAndWait(ctx context.Context, method, path string, body interface{}) (api.JobStatusResponse, error) {
+func (s *RemoteService) enqueueOnly(method, path string, body interface{}, action, ticket string) (api.ActionAcceptedResponse, error) {
 	var accepted api.ActionAcceptedResponse
 	if err := s.doJSON(method, path, body, &accepted); err != nil {
-		return api.JobStatusResponse{}, err
+		return api.ActionAcceptedResponse{}, err
 	}
 	jobID := strings.TrimSpace(accepted.JobID)
 	if jobID == "" {
-		return api.JobStatusResponse{}, fmt.Errorf("server response missing job_id")
+		return api.ActionAcceptedResponse{}, fmt.Errorf("server response missing job_id")
 	}
-	return s.waitForJob(ctx, jobID)
+	if ticket != "" {
+		fmt.Printf("%s scheduled for ticket %s, job id is %s\n", action, ticket, jobID)
+	} else {
+		fmt.Printf("%s scheduled, job id is %s\n", action, jobID)
+	}
+	return accepted, nil
 }
 
-func (s *RemoteService) waitForJob(ctx context.Context, jobID string) (api.JobStatusResponse, error) {
+func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobStatusResponse, error) {
 	for {
 		var job api.JobStatusResponse
 		if err := s.doJSON(http.MethodGet, "/api/jobs/"+url.PathEscape(jobID), nil, &job); err != nil {
