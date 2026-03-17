@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"ai-ticket-worker/internal/application/orchestrator"
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/providers"
@@ -34,52 +35,52 @@ func main() {
 	provider, err := providers.NewFromConfig(cfg)
 	fatalIf(err)
 
-	orch := workflow.New(cfg, repoRoot, provider)
+	svc := orchestrator.NewWorkflowService(cfg, repoRoot, provider)
 
 	switch os.Args[1] {
 	case "run":
-		runCmd(ctx, orch, os.Args[2:])
+		runCmd(ctx, svc, os.Args[2:])
 	case "status":
-		statusCmd(orch, os.Args[2:])
+		statusCmd(svc, os.Args[2:])
 	case "approve":
 		requireArgs("approve", os.Args[2:], 1)
 		ticket := os.Args[2]
-		fatalIf(orch.Approve(ctx, ticket))
-		printNextSteps(orch, ticket)
+		fatalIf(svc.Approve(ctx, ticket))
+		printNextSteps(svc, ticket)
 	case "feedback":
-		feedbackCmd(orch, os.Args[2:])
+		feedbackCmd(svc, os.Args[2:])
 	case "reject":
 		requireArgs("reject", os.Args[2:], 1)
 		ticket := os.Args[2]
-		fatalIf(orch.Reject(ticket))
-		printNextSteps(orch, ticket)
+		fatalIf(svc.Reject(ticket))
+		printNextSteps(svc, ticket)
 	case "resume":
 		requireArgs("resume", os.Args[2:], 1)
 		ticket := os.Args[2]
-		fatalIf(orch.ResumeTicket(ctx, ticket))
-		printNextSteps(orch, ticket)
+		fatalIf(svc.ResumeTicket(ctx, ticket))
+		printNextSteps(svc, ticket)
 	case "pr":
 		requireArgs("pr", os.Args[2:], 1)
 		ticket := os.Args[2]
-		fatalIf(orch.GeneratePR(ctx, ticket))
-		printNextSteps(orch, ticket)
+		fatalIf(svc.GeneratePR(ctx, ticket))
+		printNextSteps(svc, ticket)
 	case "cleanup":
-		cleanupCmd(ctx, orch, os.Args[2:])
+		cleanupCmd(ctx, svc, os.Args[2:])
 	default:
 		usage()
 		os.Exit(1)
 	}
 }
 
-func runCmd(ctx context.Context, orch *workflow.Orchestrator, args []string) {
+func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	requireArgs("run", args, 1)
-	fatalIf(orch.RunTickets(ctx, args))
+	fatalIf(svc.RunTickets(ctx, args))
 	for _, ticket := range args {
-		printNextSteps(orch, ticket)
+		printNextSteps(svc, ticket)
 	}
 }
 
-func statusCmd(orch *workflow.Orchestrator, args []string) {
+func statusCmd(svc orchestrator.Service, args []string) {
 	if len(args) > 1 {
 		fatalIf(errors.New("usage: ai-orchestrator status [ticket-number]"))
 	}
@@ -87,13 +88,13 @@ func statusCmd(orch *workflow.Orchestrator, args []string) {
 	if len(args) == 1 {
 		ticket = args[0]
 	}
-	fatalIf(orch.Status(ticket))
+	fatalIf(svc.Status(ticket))
 	if ticket != "" {
-		printNextSteps(orch, ticket)
+		printNextSteps(svc, ticket)
 	}
 }
 
-func feedbackCmd(orch *workflow.Orchestrator, args []string) {
+func feedbackCmd(svc orchestrator.Service, args []string) {
 	requireArgs("feedback", args, 1)
 	ticket := args[0]
 
@@ -104,11 +105,11 @@ func feedbackCmd(orch *workflow.Orchestrator, args []string) {
 	if strings.TrimSpace(*message) == "" {
 		fatalIf(errors.New("feedback requires --message"))
 	}
-	fatalIf(orch.Feedback(ticket, *message))
-	printNextSteps(orch, ticket)
+	fatalIf(svc.Feedback(ticket, *message))
+	printNextSteps(svc, ticket)
 }
 
-func cleanupCmd(ctx context.Context, orch *workflow.Orchestrator, args []string) {
+func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	fs := flag.NewFlagSet("cleanup", flag.ExitOnError)
 	doneOnly := fs.Bool("done", false, "cleanup only done tickets")
 	all := fs.Bool("all", false, "cleanup all tickets")
@@ -118,11 +119,11 @@ func cleanupCmd(ctx context.Context, orch *workflow.Orchestrator, args []string)
 		fatalIf(errors.New("cleanup: use either --done or --all, not both"))
 	}
 	if *doneOnly {
-		fatalIf(orch.CleanupDone(ctx))
+		fatalIf(svc.CleanupDone(ctx))
 		return
 	}
 	if *all {
-		fatalIf(orch.CleanupAll(ctx))
+		fatalIf(svc.CleanupAll(ctx))
 		return
 	}
 
@@ -130,7 +131,7 @@ func cleanupCmd(ctx context.Context, orch *workflow.Orchestrator, args []string)
 	if len(rest) != 1 {
 		fatalIf(errors.New("usage: ai-orchestrator cleanup <ticket-number> | --done | --all"))
 	}
-	fatalIf(orch.CleanupTicket(ctx, rest[0]))
+	fatalIf(svc.CleanupTicket(ctx, rest[0]))
 }
 
 func requireArgs(cmd string, args []string, min int) {
@@ -163,8 +164,8 @@ Commands:
   ai-orchestrator cleanup --all`)
 }
 
-func printNextSteps(orch *workflow.Orchestrator, ticket string) {
-	msg, err := orch.NextSteps(ticket)
+func printNextSteps(svc orchestrator.Service, ticket string) {
+	msg, err := svc.NextSteps(ticket)
 	if err != nil {
 		return
 	}

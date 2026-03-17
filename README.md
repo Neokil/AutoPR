@@ -14,6 +14,21 @@ Simple CLI-only orchestrator for AI-assisted ticket workflows.
 - Runs checks and generates `pr.md`
 - Optionally creates a PR via `gh pr create`
 
+## Architecture
+
+The project now uses a DDD-inspired layered structure so logic can be reused by CLI, server, and web clients:
+
+- `internal/domain/ticket`: core ticket/state models and workflow state values
+- `internal/application/orchestrator`: application service interface/use-cases used by clients
+- `internal/ports`: storage contracts (interfaces) for persistence abstraction
+- `internal/state`: current JSON/filesystem-backed store adapter implementing ports
+- `internal/workflow`: orchestration logic (currently reused by the application service)
+- `cmd/ai-orchestrator`: CLI adapter (calls application service)
+
+Notes:
+- `internal/models` currently re-exports domain types as backward-compatible aliases.
+- This is an incremental refactor to preserve behavior while preparing for `orchestratord` (REST + web UI).
+
 ## Install
 
 Build and register PATH entry in your `~/.zshrc`:

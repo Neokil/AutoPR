@@ -13,6 +13,7 @@ import (
 	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/markdown"
 	"ai-ticket-worker/internal/models"
+	"ai-ticket-worker/internal/ports"
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/shell"
 	"ai-ticket-worker/internal/state"
@@ -22,15 +23,19 @@ import (
 type Orchestrator struct {
 	Cfg      config.Config
 	RepoRoot string
-	Store    *state.Store
+	Store    ports.StateStore
 	Provider providers.AIProvider
 }
 
 func New(cfg config.Config, repoRoot string, provider providers.AIProvider) *Orchestrator {
+	return NewWithStore(cfg, repoRoot, state.NewStore(repoRoot, cfg.StateDirName), provider)
+}
+
+func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, provider providers.AIProvider) *Orchestrator {
 	return &Orchestrator{
 		Cfg:      cfg,
 		RepoRoot: repoRoot,
-		Store:    state.NewStore(repoRoot, cfg.StateDirName),
+		Store:    store,
 		Provider: provider,
 	}
 }
