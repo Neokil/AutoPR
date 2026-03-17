@@ -296,7 +296,7 @@ func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*mo
 		return nil, err
 	}
 	_ = markdown.AppendSection(st.LogPath, "Ticket Fetch (Provider)", rawTicket)
-	if err := markdown.AppendSection(st.LogPath, "Ticket Loaded", fmt.Sprintf("#%s %s\n\n%s\n\nAcceptance Criteria:\n%s", ticket.Number, ticket.Title, ticket.Description, ticket.AcceptanceCriteria)); err != nil {
+	if err := markdown.AppendSection(st.LogPath, "Ticket Loaded", fmt.Sprintf("#%s %s\n\n%s\n\nAcceptance Criteria:\n%s\n\nRelated Context:\n%s", ticket.Number, ticket.Title, ticket.Description, ticket.AcceptanceCriteria, relatedContextSummary(ticket))); err != nil {
 		return nil, err
 	}
 	if err := o.Store.SaveState(ticketNumber, st); err != nil {
@@ -607,6 +607,20 @@ func indent(s, pref string) string {
 		lines[i] = pref + l
 	}
 	return strings.Join(lines, "\n")
+}
+
+func relatedContextSummary(ticket models.Ticket) string {
+	var parts []string
+	if ticket.ParentTicket != nil {
+		parts = append(parts, fmt.Sprintf("Parent Ticket: %s (%s)", ticket.ParentTicket.Title, ticket.ParentTicket.URL))
+	}
+	if ticket.Epic != nil {
+		parts = append(parts, fmt.Sprintf("Epic: %s (%s)", ticket.Epic.Title, ticket.Epic.URL))
+	}
+	if len(parts) == 0 {
+		return "None"
+	}
+	return strings.Join(parts, "\n")
 }
 
 func EnsureStateIgnored(repoRoot, stateDirName string) error {

@@ -56,10 +56,24 @@ Return ONLY valid JSON (no markdown fences, no extra text) with this shape:
   "priority": "string",
   "url": "string",
   "labels": ["string"],
-  "workflow_fields": {"key":"value"}
+  "workflow_fields": {"key":"value"},
+  "parent_ticket": {
+    "id": "string",
+    "number": "string",
+    "title": "string",
+    "description": "string",
+    "url": "string"
+  },
+  "epic": {
+    "id": "string",
+    "title": "string",
+    "description": "string",
+    "url": "string"
+  }
 }
 
-If a field is unknown, use empty string or empty arrays/maps.
+Also fetch parent ticket and epic context if available in Shortcut.
+If unavailable, use null for parent_ticket/epic and empty values for unknown primitive fields.
 `, ticketNumber, ticketNumber)
 	out, err := p.runPrompt(ctx, repoPath, runtimeDir, "ticket", prompt)
 	if err != nil {
@@ -109,6 +123,9 @@ Description:
 Acceptance Criteria:
 %s
 
+Related Context:
+%s
+
 Repo path: %s
 Worktree path: %s
 Guidelines file: %s
@@ -123,7 +140,7 @@ Return markdown with sections:
 - Risks
 - Test Plan
 - Open Questions
-`, req.Ticket.Number, req.Ticket.Title, req.Ticket.URL, req.Ticket.Description, req.Ticket.AcceptanceCriteria, req.RepoPath, req.WorktreePath, req.GuidelinesPath, req.LogPath, req.ProposalPath, req.Feedback)
+`, req.Ticket.Number, req.Ticket.Title, req.Ticket.URL, req.Ticket.Description, req.Ticket.AcceptanceCriteria, renderTicketContext(req.Ticket), req.RepoPath, req.WorktreePath, req.GuidelinesPath, req.LogPath, req.ProposalPath, req.Feedback)
 }
 
 func buildImplementPrompt(req ImplementRequest) string {
@@ -131,6 +148,9 @@ func buildImplementPrompt(req ImplementRequest) string {
 
 Ticket #%s: %s
 Description:
+%s
+
+Related Context:
 %s
 
 Use proposal at: %s
@@ -151,7 +171,7 @@ After making changes, return markdown with sections:
 - Notable Files Changed
 - Remaining Risks
 - Tests To Run
-`, req.Ticket.Number, req.Ticket.Title, req.Ticket.Description, req.ProposalPath, req.LogPath, req.GuidelinesPath, req.FailureContext)
+`, req.Ticket.Number, req.Ticket.Title, req.Ticket.Description, renderTicketContext(req.Ticket), req.ProposalPath, req.LogPath, req.GuidelinesPath, req.FailureContext)
 }
 
 func buildPRPrompt(req PRRequest) string {
@@ -159,6 +179,9 @@ func buildPRPrompt(req PRRequest) string {
 
 Ticket #%s: %s
 Description:
+%s
+
+Related Context:
 %s
 
 Use these files as source of truth:
@@ -174,7 +197,23 @@ Include sections:
 - Implementation Overview
 - Risks / Follow-ups
 - Test Failures / Blockers (only when checks/tests failed)
-`, req.Ticket.Number, req.Ticket.Title, req.Ticket.Description, req.WorktreePath, req.LogPath, req.ProposalPath, req.FinalSolutionPath, req.ChecksLogPath)
+`, req.Ticket.Number, req.Ticket.Title, req.Ticket.Description, renderTicketContext(req.Ticket), req.WorktreePath, req.LogPath, req.ProposalPath, req.FinalSolutionPath, req.ChecksLogPath)
+}
+
+func renderTicketContext(ticket models.Ticket) string {
+	var b strings.Builder
+	if ticket.ParentTicket != nil {
+		parent := ticket.ParentTicket
+		fmt.Fprintf(&b, "Parent Ticket:\n- id: %s\n- number: %s\n- title: %s\n- url: %s\n- description: %s\n\n", parent.ID, parent.Number, parent.Title, parent.URL, parent.Description)
+	}
+	if ticket.Epic != nil {
+		epic := ticket.Epic
+		fmt.Fprintf(&b, "Epic:\n- id: %s\n- title: %s\n- url: %s\n- description: %s\n\n", epic.ID, epic.Title, epic.URL, epic.Description)
+	}
+	if b.Len() == 0 {
+		return "None"
+	}
+	return strings.TrimSpace(b.String())
 }
 
 type GeminiProvider struct{ CLIProvider }

@@ -26,6 +26,16 @@ type Ticket struct {
 	URL                string            `json:"url"`
 	Labels             []string          `json:"labels,omitempty"`
 	WorkflowFields     map[string]string `json:"workflow_fields,omitempty"`
+	ParentTicket       *TicketContext    `json:"parent_ticket,omitempty"`
+	Epic               *TicketContext    `json:"epic,omitempty"`
+}
+
+type TicketContext struct {
+	ID          string `json:"id"`
+	Number      string `json:"number,omitempty"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	URL         string `json:"url"`
 }
 
 type TicketState struct {
