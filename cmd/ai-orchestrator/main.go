@@ -9,11 +9,10 @@ import (
 	"strings"
 
 	"ai-ticket-worker/internal/application/orchestrator"
-	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/gitutil"
-	"ai-ticket-worker/internal/providers"
-	"ai-ticket-worker/internal/workflow"
 )
+
+const defaultServerURL = "http://127.0.0.1:8080"
 
 func main() {
 	ctx := context.Background()
@@ -22,24 +21,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg, err := config.Load()
-	fatalIf(err)
-
 	cwd, err := os.Getwd()
 	fatalIf(err)
 
 	repoRoot, err := gitutil.RepoRoot(ctx, cwd)
 	fatalIf(err)
 	serverURL := strings.TrimSpace(os.Getenv("AI_ORCHESTRATOR_SERVER_URL"))
-	var svc orchestrator.Service
-	if serverURL != "" {
-		svc = orchestrator.NewRemoteService(serverURL, repoRoot)
-	} else {
-		fatalIf(workflow.EnsureStateIgnored(repoRoot, cfg.StateDirName))
-		provider, err := providers.NewFromConfig(cfg)
-		fatalIf(err)
-		svc = orchestrator.NewWorkflowService(cfg, repoRoot, provider)
+	if serverURL == "" {
+		serverURL = defaultServerURL
 	}
+	svc := orchestrator.NewRemoteService(serverURL, repoRoot)
 
 	switch os.Args[1] {
 	case "run":

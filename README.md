@@ -155,7 +155,8 @@ Workers run jobs concurrently, while still guaranteeing:
 - per-ticket serialization
 - repo-wide exclusive cleanup (`cleanup done/all`) against other jobs in the same repo
 
-CLI can target the server instead of running workflows locally:
+CLI always targets `orchestratord` (default URL: `http://127.0.0.1:8080`).
+Set this env var to point at a different server URL:
 
 ```bash
 export AI_ORCHESTRATOR_SERVER_URL=http://127.0.0.1:8080
