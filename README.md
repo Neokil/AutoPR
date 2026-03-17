@@ -96,6 +96,28 @@ URL layout:
 - React frontend is served at `/` (embedded from `web/dist` at Go build time)
 - API is served under `/api/*`
 
+Frontend development:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Frontend build (required before `go build ./cmd/orchestratord` if you want updated UI in the binary):
+
+```bash
+cd web
+npm run build
+```
+
+Optional API base override for frontend dev:
+
+```bash
+cp web/.env.example web/.env
+# set VITE_API_BASE_URL if needed, default is same-origin
+```
+
 Server metadata/state is stored in:
 
 - `~/.ai-orchestrator/server/state.json`

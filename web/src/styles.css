@@ -1,0 +1,174 @@
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  color: #101828;
+  background: radial-gradient(circle at top left, #f2f7ff, #f7f9fc 45%, #f0f2f5 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.repo-form {
+  display: flex;
+  gap: 8px;
+  width: min(100%, 560px);
+}
+
+.repo-form input {
+  flex: 1;
+}
+
+input,
+button {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+button {
+  background: #155eef;
+  color: #fff;
+  border-color: #155eef;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.main {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 14px;
+}
+
+.panel {
+  background: #ffffffcc;
+  border: 1px solid #d0d5dd;
+  border-radius: 12px;
+  padding: 12px;
+  backdrop-filter: blur(3px);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ticket-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ticket-item {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #fff;
+  color: #101828;
+  border-color: #d0d5dd;
+}
+
+.ticket-item.active {
+  border-color: #155eef;
+  box-shadow: 0 0 0 2px #cfe0ff;
+}
+
+.meta {
+  color: #667085;
+  font-size: 0.85rem;
+}
+
+.feedback-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.card {
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+pre {
+  white-space: pre-wrap;
+  background: #f8f9fc;
+  border-radius: 8px;
+  border: 1px solid #eaecf0;
+  padding: 10px;
+  overflow: auto;
+}
+
+.events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.banner {
+  margin-top: 10px;
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid;
+}
+
+.banner.info {
+  background: #eef4ff;
+  border-color: #b2ccff;
+}
+
+.banner.error {
+  background: #fff1f1;
+  border-color: #f4b5b5;
+}
+
+@media (max-width: 980px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .main {
+    grid-template-columns: 1fr;
+  }
+}
