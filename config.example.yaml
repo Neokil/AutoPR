@@ -17,4 +17,6 @@ providers:
     args: []
   codex:
     command: codex
-    args: []
+    args:
+      - exec
+      - "-"

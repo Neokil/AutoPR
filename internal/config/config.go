@@ -35,7 +35,7 @@ func Default() Config {
 		CheckCommands:  []string{"go test ./..."},
 		Providers: map[string]ProviderCommand{
 			"gemini": {Command: "gemini", Args: []string{}},
-			"codex":  {Command: "codex", Args: []string{}},
+			"codex":  {Command: "codex", Args: []string{"exec", "-"}},
 		},
 	}
 }

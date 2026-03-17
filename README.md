@@ -25,6 +25,15 @@ source ~/.zshrc
 
 This builds the binary to `.build/ai-orchestrator` and adds `.build/` to `PATH`.
 
+If you use Codex as provider, run it in non-interactive mode in config:
+
+```yaml
+providers:
+  codex:
+    command: codex
+    args: ["exec", "-"]
+```
+
 ## Commands
 
 ```bash

@@ -24,6 +24,10 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	if !ok {
 		return nil, fmt.Errorf("provider %q missing from config providers", cfg.Provider)
 	}
+	if cfg.Provider == "codex" && len(pc.Args) == 0 {
+		// Interactive `codex` requires a TTY; use non-interactive mode by default.
+		pc.Args = []string{"exec", "-"}
+	}
 	if pc.Command == "" {
 		return nil, fmt.Errorf("provider %q command is empty", cfg.Provider)
 	}
@@ -230,6 +234,14 @@ func (p *CodexProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeD
 
 func decodeTicketPayload(raw string) (models.Ticket, error) {
 	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "```") {
+		trimmed = stripCodeFence(trimmed)
+	}
+	if start := strings.Index(trimmed, "{"); start >= 0 {
+		if end := strings.LastIndex(trimmed, "}"); end > start {
+			trimmed = trimmed[start : end+1]
+		}
+	}
 	var direct models.Ticket
 	if err := json.Unmarshal([]byte(trimmed), &direct); err == nil && strings.TrimSpace(direct.Title) != "" {
 		return direct, nil
@@ -270,4 +282,15 @@ func decodeTicketPayload(raw string) (models.Ticket, error) {
 		URL:         shortcut.AppURL,
 		Labels:      labels,
 	}, nil
+}
+
+func stripCodeFence(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	if len(lines) < 3 {
+		return s
+	}
+	if strings.HasPrefix(strings.TrimSpace(lines[0]), "```") && strings.HasPrefix(strings.TrimSpace(lines[len(lines)-1]), "```") {
+		return strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
+	}
+	return s
 }
