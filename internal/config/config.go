@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,7 +19,6 @@ type Config struct {
 	StateDirName   string                     `yaml:"state_dir_name"`
 	ServerPort     int                        `yaml:"server_port"`
 	ServerWorkers  int                        `yaml:"server_workers"`
-	ServerWebDir   string                     `yaml:"server_web_dir"`
 	CreatePR       bool                       `yaml:"create_pr"`
 	MaxFixAttempts int                        `yaml:"max_fix_attempts"`
 	BaseBranch     string                     `yaml:"base_branch"`
@@ -36,7 +34,6 @@ func Default() Config {
 		StateDirName:   ".ai-orchestrator",
 		ServerPort:     9000,
 		ServerWorkers:  4,
-		ServerWebDir:   "web/dist",
 		CreatePR:       true,
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{},
@@ -106,9 +103,6 @@ func Load() (Config, error) {
 	}
 	if cfg.ServerWorkers <= 0 {
 		cfg.ServerWorkers = 4
-	}
-	if strings.TrimSpace(cfg.ServerWebDir) == "" {
-		cfg.ServerWebDir = "web/dist"
 	}
 	if cfg.MaxFixAttempts < 0 {
 		cfg.MaxFixAttempts = 0

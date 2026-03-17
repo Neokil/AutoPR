@@ -50,12 +50,11 @@ providers:
     args: ["exec", "-"]
 ```
 
-Checks are empty by default. Configure repo-appropriate commands in `~/.config/ai-orchestrator/config.yaml`, for example:
+Checks are empty by default. Configure repo-appropriate commands in `~/.ai-orchestrator/config.yaml`, for example:
 
 ```yaml
 server_port: 9000
 server_workers: 4
-server_web_dir: web/dist
 check_commands:
   - npm test
   - npm run typecheck
@@ -89,12 +88,12 @@ orchestratord
 Optional flags:
 
 ```bash
-orchestratord --port 9010 --web-dir /abs/path/to/web/dist
+orchestratord --port 9010
 ```
 
 URL layout:
 
-- React frontend is served at `/`
+- React frontend is served at `/` (embedded from `web/dist` at Go build time)
 - API is served under `/api/*`
 
 Server metadata/state is stored in:

@@ -4,7 +4,6 @@ guidelines_file: CODING_GUIDELINES.md
 state_dir_name: .ai-orchestrator
 server_port: 9000
 server_workers: 4
-server_web_dir: web/dist
 create_pr: true
 max_fix_attempts: 1
 base_branch: ""

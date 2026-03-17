@@ -6,9 +6,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
+	"mime"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/state"
+	"ai-ticket-worker/web"
 )
 
 const (
@@ -52,7 +54,7 @@ type server struct {
 	runtimes map[string]*repoRuntime
 	mu       sync.Mutex
 	jobs     chan queuedJob
-	webDir   string
+	webFS    fs.FS
 
 	repoLockMu sync.Mutex
 	repoLocks  map[string]*sync.RWMutex
@@ -80,7 +82,6 @@ var sectionHeaderRE = regexp.MustCompile(`^## (.+) \(([^)]+)\)$`)
 
 func main() {
 	portFlag := flag.Int("port", 0, "HTTP port override (default uses config server_port)")
-	webDirFlag := flag.String("web-dir", "", "frontend build directory override (default uses config server_web_dir)")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -90,6 +91,8 @@ func main() {
 	fatalIf(err)
 	meta, err := servermeta.NewStore(metaPath)
 	fatalIf(err)
+	distFS, err := web.Dist()
+	fatalIf(err)
 
 	s := &server{
 		cfg:         cfg,
@@ -98,6 +101,7 @@ func main() {
 		jobs:        make(chan queuedJob, 256),
 		repoLocks:   map[string]*sync.RWMutex{},
 		ticketLocks: map[string]*sync.Mutex{},
+		webFS:       distFS,
 	}
 	for i := 0; i < cfg.ServerWorkers; i++ {
 		go s.workerLoop()
@@ -110,17 +114,6 @@ func main() {
 	if port <= 0 {
 		port = 9000
 	}
-	webDir := strings.TrimSpace(cfg.ServerWebDir)
-	if strings.TrimSpace(*webDirFlag) != "" {
-		webDir = strings.TrimSpace(*webDirFlag)
-	}
-	if !filepath.IsAbs(webDir) {
-		cwd, err := os.Getwd()
-		fatalIf(err)
-		webDir = filepath.Join(cwd, webDir)
-	}
-	s.webDir = webDir
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
@@ -139,7 +132,7 @@ func main() {
 	mux.HandleFunc("/", s.handleFrontend)
 
 	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("orchestratord listening on %s (web: %s)\n", addr, s.webDir)
+	fmt.Printf("orchestratord listening on %s\n", addr)
 	fatalIf(http.ListenAndServe(addr, mux))
 }
 
@@ -148,7 +141,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":       "ok",
 		"server_state": "~/.ai-orchestrator/server/state.json",
 		"queue_depth":  len(s.jobs),
-		"web_dir":      s.webDir,
+		"frontend":     "embedded",
 	})
 }
 
@@ -161,25 +154,21 @@ func (s *server) handleFrontend(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	requestPath := path.Clean("/" + r.URL.Path)
+	requestPath := filepath.ToSlash(filepath.Clean("/" + r.URL.Path))
 	rel := strings.TrimPrefix(requestPath, "/")
 	if rel == "" {
 		rel = "index.html"
 	}
-	target := filepath.Join(s.webDir, filepath.FromSlash(rel))
-	if fileExists(target) {
-		http.ServeFile(w, r, target)
+	if s.serveEmbeddedFile(w, r, rel) {
 		return
 	}
 	// SPA fallback for client-side routes.
-	indexPath := filepath.Join(s.webDir, "index.html")
-	if fileExists(indexPath) {
-		http.ServeFile(w, r, indexPath)
+	if s.serveEmbeddedFile(w, r, "index.html") {
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
-	_, _ = fmt.Fprintf(w, "frontend not found. build React app into %s", s.webDir)
+	_, _ = fmt.Fprint(w, "embedded frontend index.html not found")
 }
 
 func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
@@ -740,12 +729,23 @@ func artifactPath(paths map[string]string, name string) (string, bool) {
 	}
 }
 
-func fileExists(path string) bool {
-	st, err := os.Stat(path)
+func (s *server) serveEmbeddedFile(w http.ResponseWriter, r *http.Request, rel string) bool {
+	if strings.Contains(rel, "..") {
+		return false
+	}
+	data, err := fs.ReadFile(s.webFS, rel)
 	if err != nil {
 		return false
 	}
-	return !st.IsDir()
+	ext := filepath.Ext(rel)
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(data)
+	}
+	return true
 }
 
 func writeError(w http.ResponseWriter, code int, msg string) {
