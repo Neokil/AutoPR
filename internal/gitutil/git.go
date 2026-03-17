@@ -46,6 +46,11 @@ func WorktreeRemove(ctx context.Context, repoRoot, worktreePath string) error {
 	return err
 }
 
+func PushBranch(ctx context.Context, repoRoot, branch string) error {
+	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "push", "-u", "origin", branch)
+	return err
+}
+
 func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (string, error) {
 	args := []string{"pr", "create", "--title", title, "--body-file", bodyFile}
 	if base != "" {

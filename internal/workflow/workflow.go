@@ -466,6 +466,11 @@ func (o *Orchestrator) generatePR(ctx context.Context, st *models.TicketState, t
 			_ = markdown.AppendSection(st.LogPath, "PR Create Failed", err.Error())
 			return err
 		}
+		if err := gitutil.PushBranch(ctx, st.WorktreePath, st.BranchName); err != nil {
+			msg := fmt.Sprintf("failed to push branch %s before PR creation: %v\n\nNext steps:\n  1. Verify remote/auth: git -C %s remote -v && gh auth status\n  2. Push manually: git -C %s push -u origin %s\n  3. Retry: ai-orchestrator pr %s", st.BranchName, err, st.WorktreePath, st.WorktreePath, st.BranchName, st.TicketNumber)
+			_ = markdown.AppendSection(st.LogPath, "PR Push Failed", msg)
+			return fmt.Errorf(msg)
+		}
 		url, err := gitutil.CreatePR(ctx, st.WorktreePath, title, st.PRPath, o.Cfg.BaseBranch)
 		if err != nil {
 			msg := fmt.Sprintf("failed to create PR for ticket %s on branch %s: %v\n\nNext steps:\n  1. Verify auth: gh auth status\n  2. Ensure branch is pushed: git -C %s push -u origin %s\n  3. Retry: ai-orchestrator pr %s", st.TicketNumber, st.BranchName, err, st.WorktreePath, st.BranchName, st.TicketNumber)
