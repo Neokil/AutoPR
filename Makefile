@@ -1,10 +1,12 @@
 SHELL := /bin/zsh
 
-.PHONY: install
+.PHONY: build install
 
-install:
+build:
 	@mkdir -p .build
 	@go build -o .build/ai-orchestrator ./cmd/ai-orchestrator
+
+install: build
 	@ZSHRC="$$HOME/.zshrc"; \
 	ALIAS_START="# >>> ai-orchestrator alias >>>"; \
 	ALIAS_END="# <<< ai-orchestrator alias <<<"; \
