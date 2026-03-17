@@ -6,8 +6,7 @@ create_pr: true
 max_fix_attempts: 1
 base_branch: ""
 
-check_commands:
-  - go test ./...
+check_commands: []
 format_commands: []
 lint_commands: []
 

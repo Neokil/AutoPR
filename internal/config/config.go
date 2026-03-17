@@ -32,7 +32,7 @@ func Default() Config {
 		StateDirName:   ".ai-orchestrator",
 		CreatePR:       true,
 		MaxFixAttempts: 1,
-		CheckCommands:  []string{"go test ./..."},
+		CheckCommands:  []string{},
 		Providers: map[string]ProviderCommand{
 			"gemini": {Command: "gemini", Args: []string{}},
 			"codex":  {Command: "codex", Args: []string{"exec", "-"}},

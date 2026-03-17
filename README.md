@@ -34,6 +34,14 @@ providers:
     args: ["exec", "-"]
 ```
 
+Checks are empty by default. Configure repo-appropriate commands in `~/.config/ai-orchestrator/config.yaml`, for example:
+
+```yaml
+check_commands:
+  - npm test
+  - npm run lint
+```
+
 ## Commands
 
 ```bash
