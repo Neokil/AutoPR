@@ -1,7 +1,49 @@
 :root {
   font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-  color: #101828;
-  background: radial-gradient(circle at top left, #f2f7ff, #f7f9fc 45%, #f0f2f5 100%);
+  color-scheme: light dark;
+  --bg: radial-gradient(circle at top left, #f2f7ff, #f7f9fc 45%, #f0f2f5 100%);
+  --text: #101828;
+  --muted: #667085;
+  --panel-bg: #ffffffcc;
+  --panel-border: #d0d5dd;
+  --input-bg: #ffffff;
+  --input-border: #d0d5dd;
+  --button-bg: #155eef;
+  --button-border: #155eef;
+  --button-text: #ffffff;
+  --selected-ring: #cfe0ff;
+  --card-bg: #ffffff;
+  --soft-bg: #f8f9fc;
+  --soft-border: #eaecf0;
+  --banner-info-bg: #eef4ff;
+  --banner-info-border: #b2ccff;
+  --banner-error-bg: #fff1f1;
+  --banner-error-border: #f4b5b5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: radial-gradient(circle at top left, #172036, #101827 45%, #0a1020 100%);
+    --text: #e5ecf6;
+    --muted: #a4b0c2;
+    --panel-bg: #101a2dd6;
+    --panel-border: #2a3c5b;
+    --input-bg: #111f35;
+    --input-border: #2e466e;
+    --button-bg: #3b82f6;
+    --button-border: #3b82f6;
+    --button-text: #f7fbff;
+    --selected-ring: #294f8f;
+    --card-bg: #111f35;
+    --soft-bg: #0d1a2f;
+    --soft-border: #273955;
+    --banner-info-bg: #10223f;
+    --banner-info-border: #2f4f85;
+    --banner-error-bg: #3a1318;
+    --banner-error-border: #7f2c36;
+  }
 }
 
 * {
@@ -10,6 +52,8 @@
 
 body {
   margin: 0;
+  color: var(--text);
+  background: var(--bg);
 }
 
 .app {
@@ -36,16 +80,18 @@ body {
 
 input,
 button {
-  border: 1px solid #d0d5dd;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   padding: 10px 12px;
   font: inherit;
+  background: var(--input-bg);
+  color: var(--text);
 }
 
 button {
-  background: #155eef;
-  color: #fff;
-  border-color: #155eef;
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-color: var(--button-border);
   cursor: pointer;
 }
 
@@ -62,8 +108,8 @@ button:disabled {
 }
 
 .panel {
-  background: #ffffffcc;
-  border: 1px solid #d0d5dd;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 12px;
   backdrop-filter: blur(3px);
@@ -97,18 +143,18 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: #fff;
-  color: #101828;
-  border-color: #d0d5dd;
+  background: var(--input-bg);
+  color: var(--text);
+  border-color: var(--input-border);
 }
 
 .ticket-item.active {
-  border-color: #155eef;
-  box-shadow: 0 0 0 2px #cfe0ff;
+  border-color: var(--button-border);
+  box-shadow: 0 0 0 2px var(--selected-ring);
 }
 
 .meta {
-  color: #667085;
+  color: var(--muted);
   font-size: 0.85rem;
 }
 
@@ -126,37 +172,37 @@ button:disabled {
 }
 
 .tab {
-  background: #fff;
-  color: #101828;
-  border-color: #d0d5dd;
+  background: var(--input-bg);
+  color: var(--text);
+  border-color: var(--input-border);
 }
 
 .tab.active {
-  border-color: #155eef;
-  box-shadow: 0 0 0 2px #cfe0ff;
+  border-color: var(--button-border);
+  box-shadow: 0 0 0 2px var(--selected-ring);
 }
 
 .card {
-  border: 1px solid #d0d5dd;
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--card-bg);
   padding: 12px;
   margin-top: 12px;
 }
 
 pre {
   white-space: pre-wrap;
-  background: #f8f9fc;
+  background: var(--soft-bg);
   border-radius: 8px;
-  border: 1px solid #eaecf0;
+  border: 1px solid var(--soft-border);
   padding: 10px;
   overflow: auto;
 }
 
 .markdown {
-  background: #f8f9fc;
+  background: var(--soft-bg);
   border-radius: 8px;
-  border: 1px solid #eaecf0;
+  border: 1px solid var(--soft-border);
   padding: 10px;
   overflow: auto;
 }
@@ -190,13 +236,13 @@ pre {
 }
 
 .banner.info {
-  background: #eef4ff;
-  border-color: #b2ccff;
+  background: var(--banner-info-bg);
+  border-color: var(--banner-info-border);
 }
 
 .banner.error {
-  background: #fff1f1;
-  border-color: #f4b5b5;
+  background: var(--banner-error-bg);
+  border-color: var(--banner-error-border);
 }
 
 @media (max-width: 980px) {
