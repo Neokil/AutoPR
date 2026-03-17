@@ -1,0 +1,509 @@
+package workflow
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+
+	"ai-ticket-worker/internal/config"
+	"ai-ticket-worker/internal/gitutil"
+	"ai-ticket-worker/internal/markdown"
+	"ai-ticket-worker/internal/models"
+	"ai-ticket-worker/internal/providers"
+	"ai-ticket-worker/internal/shell"
+	"ai-ticket-worker/internal/state"
+	"ai-ticket-worker/internal/ticketsource"
+	"ai-ticket-worker/internal/worktree"
+)
+
+type Orchestrator struct {
+	Cfg      config.Config
+	RepoRoot string
+	Store    *state.Store
+	Source   ticketsource.TicketSource
+	Provider providers.AIProvider
+}
+
+func New(cfg config.Config, repoRoot string, src ticketsource.TicketSource, provider providers.AIProvider) *Orchestrator {
+	return &Orchestrator{
+		Cfg:      cfg,
+		RepoRoot: repoRoot,
+		Store:    state.NewStore(repoRoot, cfg.StateDirName),
+		Source:   src,
+		Provider: provider,
+	}
+}
+
+func (o *Orchestrator) RunTickets(ctx context.Context, ticketNumbers []string) error {
+	for _, n := range ticketNumbers {
+		if err := o.RunTicket(ctx, n); err != nil {
+			fmt.Fprintf(os.Stderr, "ticket %s failed: %v\n", n, err)
+		}
+	}
+	return nil
+}
+
+func (o *Orchestrator) RunTicket(ctx context.Context, ticketNumber string) error {
+	st, err := o.initOrLoad(ctx, ticketNumber)
+	if err != nil {
+		return err
+	}
+	if st.Status == models.StateWaitingForHuman && !st.Approved {
+		fmt.Printf("ticket %s is waiting for human input. Run approve/feedback/reject.\n", ticketNumber)
+		return nil
+	}
+	if st.Status == models.StateQueued ||
+		st.Status == models.StateInvestigating ||
+		st.Status == models.StateProposalReady {
+		return o.investigate(ctx, st)
+	}
+	if st.Approved ||
+		st.Status == models.StateImplementing ||
+		st.Status == models.StateValidating ||
+		st.Status == models.StatePRReady {
+		return o.implementationPipeline(ctx, st)
+	}
+	if st.Status == models.StateDone {
+		fmt.Printf("ticket %s already done\n", ticketNumber)
+	}
+	return nil
+}
+
+func (o *Orchestrator) ResumeTicket(ctx context.Context, ticketNumber string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	if st.Status == models.StateWaitingForHuman && !st.Approved {
+		fmt.Printf("ticket %s is waiting for human input.\n", ticketNumber)
+		return nil
+	}
+	if st.Status == models.StateQueued ||
+		st.Status == models.StateInvestigating ||
+		st.Status == models.StateProposalReady {
+		return o.investigate(ctx, &st)
+	}
+	if st.Approved ||
+		st.Status == models.StateImplementing ||
+		st.Status == models.StateValidating ||
+		st.Status == models.StatePRReady {
+		return o.implementationPipeline(ctx, &st)
+	}
+	return nil
+}
+
+func (o *Orchestrator) Approve(ctx context.Context, ticketNumber string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	st.Approved = true
+	st.Status = models.StateImplementing
+	if err := o.Store.SaveState(ticketNumber, st); err != nil {
+		return err
+	}
+	_ = markdown.AppendSection(st.LogPath, "Human Approval", "Approved for implementation.")
+	return o.ResumeTicket(ctx, ticketNumber)
+}
+
+func (o *Orchestrator) Feedback(ticketNumber, message string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	st.LastFeedback = message
+	st.Approved = false
+	st.Status = models.StateInvestigating
+	if err := markdown.AppendSection(st.LogPath, "Human Feedback", message); err != nil {
+		return err
+	}
+	return o.Store.SaveState(ticketNumber, st)
+}
+
+func (o *Orchestrator) Reject(ticketNumber string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	st.Status = models.StateFailed
+	st.Approved = false
+	st.LastError = "rejected by human"
+	if err := markdown.AppendSection(st.LogPath, "Human Rejection", "Rejected by reviewer."); err != nil {
+		return err
+	}
+	return o.Store.SaveState(ticketNumber, st)
+}
+
+func (o *Orchestrator) Status(ticketNumber string) error {
+	if ticketNumber != "" {
+		return o.printStatus(ticketNumber)
+	}
+	tickets, err := o.Store.ListTicketDirs()
+	if err != nil {
+		return err
+	}
+	sort.Strings(tickets)
+	for _, t := range tickets {
+		if err := o.printStatus(t); err != nil {
+			fmt.Fprintf(os.Stderr, "status %s: %v\n", t, err)
+		}
+	}
+	return nil
+}
+
+func (o *Orchestrator) GeneratePR(ctx context.Context, ticketNumber string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	t, err := o.Store.LoadTicket(ticketNumber)
+	if err != nil {
+		return err
+	}
+	return o.generatePR(ctx, &st, t)
+}
+
+func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*models.TicketState, error) {
+	if st, err := o.Store.LoadState(ticketNumber); err == nil {
+		return &st, nil
+	}
+
+	ticket, err := o.Source.GetTicket(ctx, ticketNumber)
+	if err != nil {
+		return nil, err
+	}
+	ticket.Number = ticketNumber
+
+	paths := o.Store.Paths(ticketNumber)
+	st := models.NewTicketState(ticketNumber)
+	st.ProposalPath = paths["proposal"]
+	st.FinalPath = paths["final"]
+	st.LogPath = paths["log"]
+	st.PRPath = paths["pr"]
+	st.ChecksLogPath = paths["checks"]
+	st.TicketJSONPath = paths["ticket"]
+	st.ProviderDirPath = paths["providerDir"]
+	st.BranchName = branchName(ticket)
+
+	worktreePath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, ticketNumber, st.BranchName, o.Cfg.BaseBranch)
+	if err != nil {
+		return nil, err
+	}
+	st.WorktreePath = worktreePath
+
+	if _, err := o.Store.SaveTicket(ticketNumber, ticket); err != nil {
+		return nil, err
+	}
+	if err := markdown.AppendSection(st.LogPath, "Ticket Loaded", fmt.Sprintf("#%s %s\n\n%s\n\nAcceptance Criteria:\n%s", ticket.Number, ticket.Title, ticket.Description, ticket.AcceptanceCriteria)); err != nil {
+		return nil, err
+	}
+	if err := o.Store.SaveState(ticketNumber, st); err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
+func (o *Orchestrator) investigate(ctx context.Context, st *models.TicketState) error {
+	ticket, err := o.Store.LoadTicket(st.TicketNumber)
+	if err != nil {
+		return err
+	}
+
+	st.Status = models.StateInvestigating
+	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+		return err
+	}
+
+	res, err := o.Provider.Investigate(ctx, providers.InvestigateRequest{
+		Ticket:         ticket,
+		RepoPath:       o.RepoRoot,
+		WorktreePath:   st.WorktreePath,
+		GuidelinesPath: config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg),
+		LogPath:        st.LogPath,
+		ProposalPath:   st.ProposalPath,
+		Feedback:       st.LastFeedback,
+	}, st.ProviderDirPath)
+	if err != nil {
+		st.Status = models.StateFailed
+		st.LastError = err.Error()
+		_ = o.Store.SaveState(st.TicketNumber, *st)
+		_ = markdown.AppendSection(st.LogPath, "Investigation Failed", err.Error())
+		return err
+	}
+
+	if err := markdown.Write(st.ProposalPath, res.Proposal); err != nil {
+		return err
+	}
+	if err := markdown.AppendSection(st.LogPath, "Investigation", res.RawOut); err != nil {
+		return err
+	}
+	st.Status = models.StateProposalReady
+	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+		return err
+	}
+	st.Status = models.StateWaitingForHuman
+	st.Approved = false
+	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+		return err
+	}
+	fmt.Printf("ticket %s proposal ready: %s\n", st.TicketNumber, st.ProposalPath)
+	return nil
+}
+
+func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.TicketState) error {
+	ticket, err := o.Store.LoadTicket(st.TicketNumber)
+	if err != nil {
+		return err
+	}
+	var failureContext string
+
+	for {
+		st.Status = models.StateImplementing
+		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+			return err
+		}
+
+		impl, err := o.Provider.Implement(ctx, providers.ImplementRequest{
+			Ticket:            ticket,
+			RepoPath:          o.RepoRoot,
+			WorktreePath:      st.WorktreePath,
+			GuidelinesPath:    config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg),
+			LogPath:           st.LogPath,
+			ProposalPath:      st.ProposalPath,
+			FinalSolutionPath: st.FinalPath,
+			FailureContext:    failureContext,
+		}, st.ProviderDirPath)
+		if err != nil {
+			st.Status = models.StateFailed
+			st.LastError = err.Error()
+			_ = markdown.AppendSection(st.LogPath, "Implementation Failed", err.Error())
+			_ = o.Store.SaveState(st.TicketNumber, *st)
+			return err
+		}
+
+		if err := markdown.AppendSection(st.LogPath, "Implementation", impl.RawOut); err != nil {
+			return err
+		}
+		if err := markdown.Write(st.FinalPath, impl.Summary); err != nil {
+			return err
+		}
+
+		st.Status = models.StateValidating
+		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+			return err
+		}
+		ok, checkOutput, err := o.runChecks(ctx, *st)
+		if err != nil {
+			return err
+		}
+		if ok {
+			_ = markdown.AppendSection(st.LogPath, "Validation", "All checks passed.")
+			break
+		}
+
+		failureContext = checkOutput
+		_ = markdown.AppendSection(st.LogPath, "Validation Failed", checkOutput)
+		st.FixAttempts++
+		if st.FixAttempts > o.Cfg.MaxFixAttempts {
+			st.Status = models.StateFailed
+			st.LastError = "checks failed after max attempts"
+			_ = o.Store.SaveState(st.TicketNumber, *st)
+			return fmt.Errorf("ticket %s: checks failed after %d attempts", st.TicketNumber, st.FixAttempts)
+		}
+		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+			return err
+		}
+	}
+
+	st.Status = models.StatePRReady
+	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+		return err
+	}
+	if err := o.generatePR(ctx, st, ticket); err != nil {
+		return err
+	}
+	st.Status = models.StateDone
+	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+		return err
+	}
+	fmt.Printf("ticket %s done. PR markdown: %s\n", st.TicketNumber, st.PRPath)
+	return nil
+}
+
+func (o *Orchestrator) generatePR(ctx context.Context, st *models.TicketState, ticket models.Ticket) error {
+	pr, err := o.Provider.SummarizePR(ctx, providers.PRRequest{
+		Ticket:            ticket,
+		WorktreePath:      st.WorktreePath,
+		LogPath:           st.LogPath,
+		ProposalPath:      st.ProposalPath,
+		FinalSolutionPath: st.FinalPath,
+		ChecksLogPath:     st.ChecksLogPath,
+	}, st.ProviderDirPath)
+	if err != nil {
+		fallback, ferr := o.localPR(ticket, *st)
+		if ferr != nil {
+			return err
+		}
+		pr.Body = fallback
+	}
+	if err := markdown.Write(st.PRPath, pr.Body); err != nil {
+		return err
+	}
+	_ = markdown.AppendSection(st.LogPath, "PR Description", fmt.Sprintf("generated at %s", st.PRPath))
+
+	if o.Cfg.CreatePR {
+		title := fmt.Sprintf("sc-%s: %s", ticket.Number, ticket.Title)
+		url, err := gitutil.CreatePR(ctx, st.WorktreePath, title, st.PRPath, o.Cfg.BaseBranch)
+		if err != nil {
+			_ = markdown.AppendSection(st.LogPath, "PR Create Failed", err.Error())
+			return err
+		}
+		_ = markdown.AppendSection(st.LogPath, "PR Created", url)
+	}
+	return nil
+}
+
+func (o *Orchestrator) runChecks(ctx context.Context, st models.TicketState) (bool, string, error) {
+	commands := make([]string, 0, len(o.Cfg.FormatCommands)+len(o.Cfg.LintCommands)+len(o.Cfg.CheckCommands))
+	commands = append(commands, o.Cfg.FormatCommands...)
+	commands = append(commands, o.Cfg.LintCommands...)
+	commands = append(commands, o.Cfg.CheckCommands...)
+	if len(commands) == 0 {
+		return true, "no checks configured", nil
+	}
+
+	var b strings.Builder
+	allOK := true
+	for _, cmd := range commands {
+		res, err := shell.Run(ctx, st.WorktreePath, nil, "", "/bin/zsh", "-lc", cmd)
+		fmt.Fprintf(&b, "\n$ %s\n", cmd)
+		b.WriteString(res.Stdout)
+		if strings.TrimSpace(res.Stderr) != "" {
+			b.WriteString("\n[stderr]\n")
+			b.WriteString(res.Stderr)
+		}
+		if err != nil {
+			allOK = false
+			fmt.Fprintf(&b, "\n[exit] failed: %v\n", err)
+		}
+	}
+	if err := os.WriteFile(st.ChecksLogPath, []byte(b.String()), 0o644); err != nil {
+		return false, "", err
+	}
+	return allOK, b.String(), nil
+}
+
+func (o *Orchestrator) printStatus(ticketNumber string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("ticket %s\n", ticketNumber)
+	fmt.Printf("  state: %s\n", st.Status)
+	fmt.Printf("  approved: %v\n", st.Approved)
+	fmt.Printf("  branch: %s\n", st.BranchName)
+	fmt.Printf("  worktree: %s\n", st.WorktreePath)
+	fmt.Printf("  proposal: %s\n", st.ProposalPath)
+	fmt.Printf("  pr: %s\n", st.PRPath)
+	if st.LastError != "" {
+		fmt.Printf("  last_error: %s\n", st.LastError)
+	}
+	tail := strings.TrimSpace(markdown.Tail(st.LogPath, 12))
+	if tail != "" {
+		fmt.Printf("  log_tail:\n%s\n", indent(tail, "    "))
+	}
+	return nil
+}
+
+func (o *Orchestrator) localPR(ticket models.Ticket, st models.TicketState) (string, error) {
+	proposal, _ := os.ReadFile(st.ProposalPath)
+	final, _ := os.ReadFile(st.FinalPath)
+	checks, _ := os.ReadFile(st.ChecksLogPath)
+	changed := ""
+	if res, err := shell.Run(context.Background(), st.WorktreePath, nil, "", "git", "status", "--short"); err == nil {
+		changed = strings.TrimSpace(res.Stdout)
+	}
+	body := fmt.Sprintf(`# Summary
+
+Ticket #%s: %s
+
+# Problem Being Solved
+
+%s
+
+# Implementation Overview
+
+%s
+
+# Notable Files Changed
+
+%s
+
+# Risks / Follow-ups
+
+See final solution notes.
+
+# Test Results
+
+`+"```"+`
+%s
+`+"```"+`
+`, ticket.Number, ticket.Title, strings.TrimSpace(string(proposal)), strings.TrimSpace(string(final)), changed, strings.TrimSpace(string(checks)))
+	return body, nil
+}
+
+func branchName(ticket models.Ticket) string {
+	slug := slugify(ticket.Title)
+	if slug == "" {
+		slug = "ticket"
+	}
+	return fmt.Sprintf("sc-%s-%s", ticket.Number, slug)
+}
+
+var slugNonAlphaNum = regexp.MustCompile(`[^a-z0-9\s-]`)
+var slugSpace = regexp.MustCompile(`\s+`)
+var slugDashes = regexp.MustCompile(`-+`)
+
+func slugify(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = slugNonAlphaNum.ReplaceAllString(s, "")
+	s = slugSpace.ReplaceAllString(s, "-")
+	s = slugDashes.ReplaceAllString(s, "-")
+	return strings.Trim(s, "-")
+}
+
+func indent(s, pref string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = pref + l
+	}
+	return strings.Join(lines, "\n")
+}
+
+func EnsureStateIgnored(repoRoot, stateDirName string) error {
+	ignorePath := filepath.Join(repoRoot, ".gitignore")
+	entry := stateDirName + "/"
+	b, err := os.ReadFile(ignorePath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if strings.Contains(string(b), entry) {
+		return nil
+	}
+	f, err := os.OpenFile(ignorePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if len(b) > 0 && !strings.HasSuffix(string(b), "\n") {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	_, err = f.WriteString(entry + "\n")
+	return err
+}
