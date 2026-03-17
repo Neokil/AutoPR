@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -51,6 +52,7 @@ type server struct {
 	runtimes map[string]*repoRuntime
 	mu       sync.Mutex
 	jobs     chan queuedJob
+	webDir   string
 
 	repoLockMu sync.Mutex
 	repoLocks  map[string]*sync.RWMutex
@@ -78,6 +80,7 @@ var sectionHeaderRE = regexp.MustCompile(`^## (.+) \(([^)]+)\)$`)
 
 func main() {
 	portFlag := flag.Int("port", 0, "HTTP port override (default uses config server_port)")
+	webDirFlag := flag.String("web-dir", "", "frontend build directory override (default uses config server_web_dir)")
 	flag.Parse()
 
 	cfg, err := config.Load()
@@ -107,6 +110,16 @@ func main() {
 	if port <= 0 {
 		port = 9000
 	}
+	webDir := strings.TrimSpace(cfg.ServerWebDir)
+	if strings.TrimSpace(*webDirFlag) != "" {
+		webDir = strings.TrimSpace(*webDirFlag)
+	}
+	if !filepath.IsAbs(webDir) {
+		cwd, err := os.Getwd()
+		fatalIf(err)
+		webDir = filepath.Join(cwd, webDir)
+	}
+	s.webDir = webDir
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.handleHealth)
@@ -123,9 +136,10 @@ func main() {
 	mux.HandleFunc("POST /api/tickets/{id}/pr", s.handlePRTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/cleanup", s.handleCleanupTicket)
 	mux.HandleFunc("POST /api/cleanup", s.handleCleanupScope)
+	mux.HandleFunc("/", s.handleFrontend)
 
 	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("orchestratord listening on %s\n", addr)
+	fmt.Printf("orchestratord listening on %s (web: %s)\n", addr, s.webDir)
 	fatalIf(http.ListenAndServe(addr, mux))
 }
 
@@ -134,7 +148,38 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":       "ok",
 		"server_state": "~/.ai-orchestrator/server/state.json",
 		"queue_depth":  len(s.jobs),
+		"web_dir":      s.webDir,
 	})
+}
+
+func (s *server) handleFrontend(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	requestPath := path.Clean("/" + r.URL.Path)
+	rel := strings.TrimPrefix(requestPath, "/")
+	if rel == "" {
+		rel = "index.html"
+	}
+	target := filepath.Join(s.webDir, filepath.FromSlash(rel))
+	if fileExists(target) {
+		http.ServeFile(w, r, target)
+		return
+	}
+	// SPA fallback for client-side routes.
+	indexPath := filepath.Join(s.webDir, "index.html")
+	if fileExists(indexPath) {
+		http.ServeFile(w, r, indexPath)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = fmt.Fprintf(w, "frontend not found. build React app into %s", s.webDir)
 }
 
 func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
@@ -693,6 +738,14 @@ func artifactPath(paths map[string]string, name string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func fileExists(path string) bool {
+	st, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !st.IsDir()
 }
 
 func writeError(w http.ResponseWriter, code int, msg string) {

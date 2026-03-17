@@ -55,6 +55,7 @@ Checks are empty by default. Configure repo-appropriate commands in `~/.config/a
 ```yaml
 server_port: 9000
 server_workers: 4
+server_web_dir: web/dist
 check_commands:
   - npm test
   - npm run typecheck
@@ -88,8 +89,13 @@ orchestratord
 Optional flags:
 
 ```bash
-orchestratord --port 9010
+orchestratord --port 9010 --web-dir /abs/path/to/web/dist
 ```
+
+URL layout:
+
+- React frontend is served at `/`
+- API is served under `/api/*`
 
 Server metadata/state is stored in:
 
