@@ -15,6 +15,7 @@ import (
 
 	"ai-ticket-worker/internal/application/orchestrator"
 	"ai-ticket-worker/internal/config"
+	"ai-ticket-worker/internal/contracts/api"
 	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/servermeta"
@@ -49,20 +50,6 @@ type server struct {
 	runtimes map[string]*repoRuntime
 	mu       sync.Mutex
 	jobs     chan queuedJob
-}
-
-type repoRequest struct {
-	RepoPath string `json:"repo_path"`
-}
-
-type feedbackRequest struct {
-	RepoPath string `json:"repo_path"`
-	Message  string `json:"message"`
-}
-
-type cleanupScopeRequest struct {
-	RepoPath string `json:"repo_path"`
-	Scope    string `json:"scope"`
 }
 
 type ticketDetails struct {
@@ -176,7 +163,7 @@ func (s *server) handleRejectTicket(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleFeedbackTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	var req feedbackRequest
+	var req api.FeedbackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -207,7 +194,7 @@ func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
-	var req cleanupScopeRequest
+	var req api.CleanupScopeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -388,7 +375,7 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (repoRoot, repoID string, rt *repoRuntime, ok bool) {
-	var req repoRequest
+	var req api.RepoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return "", "", nil, false
@@ -449,13 +436,13 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 	qj := queuedJob{record: job, message: message}
 	select {
 	case s.jobs <- qj:
-		writeJSON(w, http.StatusAccepted, map[string]string{
-			"status":        "accepted",
-			"job_id":        job.ID,
-			"action":        action,
-			"repo_id":       repoID,
-			"repo_path":     repoPath,
-			"ticket_number": ticket,
+		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
+			Status:       "accepted",
+			JobID:        job.ID,
+			Action:       action,
+			RepoID:       repoID,
+			RepoPath:     repoPath,
+			TicketNumber: ticket,
 		})
 	default:
 		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
@@ -644,7 +631,7 @@ func artifactPath(paths map[string]string, name string) (string, bool) {
 }
 
 func writeError(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, map[string]string{"error": msg})
+	writeJSON(w, code, api.ErrorResponse{Error: msg})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {
