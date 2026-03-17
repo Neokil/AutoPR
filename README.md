@@ -54,6 +54,7 @@ Checks are empty by default. Configure repo-appropriate commands in `~/.config/a
 
 ```yaml
 server_port: 9000
+server_workers: 4
 check_commands:
   - npm test
   - npm run typecheck
@@ -120,6 +121,11 @@ Job status values:
 - `running`
 - `done`
 - `failed`
+
+Workers run jobs concurrently, while still guaranteeing:
+
+- per-ticket serialization
+- repo-wide exclusive cleanup (`cleanup done/all`) against other jobs in the same repo
 
 ## Config
 

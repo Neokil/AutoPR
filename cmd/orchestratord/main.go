@@ -50,6 +50,12 @@ type server struct {
 	runtimes map[string]*repoRuntime
 	mu       sync.Mutex
 	jobs     chan queuedJob
+
+	repoLockMu sync.Mutex
+	repoLocks  map[string]*sync.RWMutex
+
+	ticketLockMu sync.Mutex
+	ticketLocks  map[string]*sync.Mutex
 }
 
 type ticketDetails struct {
@@ -82,12 +88,16 @@ func main() {
 	fatalIf(err)
 
 	s := &server{
-		cfg:      cfg,
-		meta:     meta,
-		runtimes: map[string]*repoRuntime{},
-		jobs:     make(chan queuedJob, 256),
+		cfg:         cfg,
+		meta:        meta,
+		runtimes:    map[string]*repoRuntime{},
+		jobs:        make(chan queuedJob, 256),
+		repoLocks:   map[string]*sync.RWMutex{},
+		ticketLocks: map[string]*sync.Mutex{},
 	}
-	go s.workerLoop()
+	for i := 0; i < cfg.ServerWorkers; i++ {
+		go s.workerLoop()
+	}
 
 	port := cfg.ServerPort
 	if *portFlag > 0 {
@@ -465,6 +475,22 @@ func (s *server) workerLoop() {
 func (s *server) executeJob(job queuedJob) error {
 	repoRoot, repoID := job.record.RepoPath, job.record.RepoID
 	ticket := job.record.TicketNumber
+
+	repoMu := s.getRepoLock(repoID)
+	switch job.record.Action {
+	case jobCleanupDone, jobCleanupAll:
+		repoMu.Lock()
+		defer repoMu.Unlock()
+	default:
+		repoMu.RLock()
+		defer repoMu.RUnlock()
+		if ticket != "" {
+			ticketMu := s.getTicketLock(repoID, ticket)
+			ticketMu.Lock()
+			defer ticketMu.Unlock()
+		}
+	}
+
 	rt, err := s.runtimeForRepo(repoRoot)
 	if err != nil {
 		return err
@@ -515,6 +541,29 @@ func (s *server) executeJob(job queuedJob) error {
 		err = fmt.Errorf("unsupported job action: %s", job.record.Action)
 	}
 	return err
+}
+
+func (s *server) getRepoLock(repoID string) *sync.RWMutex {
+	s.repoLockMu.Lock()
+	defer s.repoLockMu.Unlock()
+	if m, ok := s.repoLocks[repoID]; ok {
+		return m
+	}
+	m := &sync.RWMutex{}
+	s.repoLocks[repoID] = m
+	return m
+}
+
+func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
+	key := repoID + "::" + ticket
+	s.ticketLockMu.Lock()
+	defer s.ticketLockMu.Unlock()
+	if m, ok := s.ticketLocks[key]; ok {
+		return m
+	}
+	m := &sync.Mutex{}
+	s.ticketLocks[key] = m
+	return m
 }
 
 func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime) error {
