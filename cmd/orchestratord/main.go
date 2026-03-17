@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"ai-ticket-worker/internal/application/orchestrator"
 	"ai-ticket-worker/internal/config"
@@ -133,7 +134,7 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", port)
 	fmt.Printf("orchestratord listening on %s\n", addr)
-	fatalIf(http.ListenAndServe(addr, mux))
+	fatalIf(http.ListenAndServe(addr, loggingMiddleware(mux)))
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -764,4 +765,23 @@ func fatalIf(err error) {
 	}
 	fmt.Fprintln(os.Stderr, "error:", err)
 	os.Exit(1)
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		fmt.Printf("%s %s -> %d (%s)\n", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
+	})
 }
