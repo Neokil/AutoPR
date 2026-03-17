@@ -35,6 +35,13 @@ export async function getEvents(repoPath: string, ticket: string): Promise<Event
   return data.events ?? [];
 }
 
+export async function getArtifact(repoPath: string, ticket: string, name: string): Promise<string> {
+  const data = await requestJSON<{ content: string }>(
+    `/api/tickets/${encodeURIComponent(ticket)}/artifacts/${encodeURIComponent(name)}?repo_path=${encodeURIComponent(repoPath)}`
+  );
+  return data.content ?? "";
+}
+
 export async function getJob(jobId: string): Promise<Job> {
   return requestJSON<Job>(`/api/jobs/${encodeURIComponent(jobId)}`);
 }

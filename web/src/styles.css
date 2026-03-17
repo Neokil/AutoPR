@@ -119,6 +119,23 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  background: #fff;
+  color: #101828;
+  border-color: #d0d5dd;
+}
+
+.tab.active {
+  border-color: #155eef;
+  box-shadow: 0 0 0 2px #cfe0ff;
+}
+
 .card {
   border: 1px solid #d0d5dd;
   border-radius: 10px;
@@ -134,6 +151,26 @@ pre {
   border: 1px solid #eaecf0;
   padding: 10px;
   overflow: auto;
+}
+
+.markdown {
+  background: #f8f9fc;
+  border-radius: 8px;
+  border: 1px solid #eaecf0;
+  padding: 10px;
+  overflow: auto;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .events {

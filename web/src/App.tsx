@@ -6,6 +6,7 @@ import {
   cleanupTicket,
   createPR,
   feedbackTicket,
+  getArtifact,
   getEvents,
   getJob,
   getTicket,
@@ -14,10 +15,34 @@ import {
   resumeTicket,
   runTicket
 } from "./api";
+import { MarkdownView } from "./MarkdownView";
 import type { EventItem, Job, TicketDetails, TicketSummary } from "./types";
 
 function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
+}
+
+type Action = "run" | "resume" | "approve" | "reject" | "pr" | "cleanup";
+
+function allowedActions(status: string): Action[] {
+  switch (status) {
+    case "queued":
+      return ["run", "cleanup"];
+    case "proposal_ready":
+    case "waiting_for_human":
+      return ["approve", "reject"];
+    case "failed":
+      return ["resume", "cleanup"];
+    case "pr_ready":
+      return ["pr", "cleanup"];
+    case "done":
+      return ["cleanup"];
+    case "investigating":
+    case "implementing":
+    case "validating":
+    default:
+      return ["resume", "cleanup"];
+  }
 }
 
 export function App() {
@@ -25,6 +50,9 @@ export function App() {
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [details, setDetails] = useState<TicketDetails | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [proposal, setProposal] = useState("");
+  const [logText, setLogText] = useState("");
+  const [activeTab, setActiveTab] = useState<"details" | "proposal" | "logs">("details");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [activeJobId, setActiveJobId] = useState<string>("");
   const [activeJob, setActiveJob] = useState<Job | null>(null);
@@ -46,9 +74,12 @@ export function App() {
     if (!selectedSummary) {
       setDetails(null);
       setEvents([]);
+      setProposal("");
+      setLogText("");
       return;
     }
     void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
+    setActiveTab("details");
   }, [selectedSummary?.repo_path, selectedSummary?.ticket_number]);
 
   useEffect(() => {
@@ -101,13 +132,22 @@ export function App() {
     setLoading(true);
     setError("");
     try {
-      const [ticketDetails, eventItems] = await Promise.all([getTicket(repoPath, ticket), getEvents(repoPath, ticket)]);
+      const [ticketDetails, eventItems, proposalText, logs] = await Promise.all([
+        getTicket(repoPath, ticket),
+        getEvents(repoPath, ticket),
+        getArtifact(repoPath, ticket, "proposal"),
+        getArtifact(repoPath, ticket, "log")
+      ]);
       setDetails(ticketDetails);
       setEvents(eventItems);
+      setProposal(proposalText);
+      setLogText(logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load ticket details");
       setDetails(null);
       setEvents([]);
+      setProposal("");
+      setLogText("");
     } finally {
       setLoading(false);
     }
@@ -178,76 +218,117 @@ export function App() {
           {selectedSummary ? (
             <>
               <div className="button-row">
-                <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                  Run
-                </button>
-                <button onClick={() => void queueAction(() => resumeTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                  Resume
-                </button>
-                <button onClick={() => void queueAction(() => approveTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                  Approve
-                </button>
-                <button onClick={() => void queueAction(() => rejectTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                  Reject
-                </button>
-                <button onClick={() => void queueAction(() => createPR(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                  Create PR
-                </button>
-                <button onClick={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                  Cleanup
-                </button>
-              </div>
-
-              <div className="button-row">
-                <button onClick={() => void queueAction(() => cleanupDone(selectedSummary.repo_path))}>Cleanup Done (Repo)</button>
-                <button onClick={() => void queueAction(() => cleanupAll(selectedSummary.repo_path))}>Cleanup All (Repo)</button>
-              </div>
-
-              <form
-                className="feedback-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!feedbackMessage.trim()) {
-                    return;
-                  }
-                  void queueAction(() =>
-                    feedbackTicket(selectedSummary.repo_path, selectedSummary.ticket_number, feedbackMessage)
-                  ).then(() => setFeedbackMessage(""));
-                }}
-              >
-                <input
-                  value={feedbackMessage}
-                  onChange={(e) => setFeedbackMessage(e.target.value)}
-                  placeholder="Feedback message"
-                />
-                <button type="submit">Send Feedback</button>
-              </form>
-
-              <article className="card">
-                <h3>{details?.ticket?.title || "(no title)"}</h3>
-                <p>{details?.ticket?.description || "No description"}</p>
-                <p className="meta">{selectedSummary.repo_path}</p>
-                {details?.next_steps ? (
-                  <>
-                    <h4>Next Steps</h4>
-                    <pre>{details.next_steps}</pre>
-                  </>
+                {allowedActions(selectedSummary.status).includes("run") ? (
+                  <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                    Run
+                  </button>
                 ) : null}
-              </article>
+                {allowedActions(selectedSummary.status).includes("resume") ? (
+                  <button onClick={() => void queueAction(() => resumeTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                    Resume
+                  </button>
+                ) : null}
+                {allowedActions(selectedSummary.status).includes("approve") ? (
+                  <button onClick={() => void queueAction(() => approveTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                    Approve
+                  </button>
+                ) : null}
+                {allowedActions(selectedSummary.status).includes("reject") ? (
+                  <button onClick={() => void queueAction(() => rejectTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                    Reject
+                  </button>
+                ) : null}
+                {allowedActions(selectedSummary.status).includes("pr") ? (
+                  <button onClick={() => void queueAction(() => createPR(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                    Create PR
+                  </button>
+                ) : null}
+                {allowedActions(selectedSummary.status).includes("cleanup") ? (
+                  <button onClick={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                    Cleanup
+                  </button>
+                ) : null}
+              </div>
 
-              <article className="card">
-                <h4>Recent Events</h4>
-                <ul className="events">
-                  {events.slice(0, 10).map((ev, idx) => (
-                    <li key={`${ev.timestamp}-${idx}`}>
-                      <div>
-                        <strong>{ev.title}</strong> <span className="meta">{ev.timestamp}</span>
-                      </div>
-                      <pre>{ev.body}</pre>
-                    </li>
-                  ))}
-                </ul>
-              </article>
+              <div className="tabs">
+                <button className={activeTab === "details" ? "tab active" : "tab"} onClick={() => setActiveTab("details")}>
+                  Details
+                </button>
+                <button className={activeTab === "proposal" ? "tab active" : "tab"} onClick={() => setActiveTab("proposal")}>
+                  Proposal
+                </button>
+                <button className={activeTab === "logs" ? "tab active" : "tab"} onClick={() => setActiveTab("logs")}>
+                  Logs
+                </button>
+              </div>
+
+              {activeTab === "details" ? (
+                <article className="card">
+                  <h3>{details?.ticket?.title || "(no title)"}</h3>
+                  <MarkdownView content={details?.ticket?.description ?? ""} emptyText="No description." />
+                  <p className="meta">{selectedSummary.repo_path}</p>
+                  {details?.next_steps ? (
+                    <>
+                      <h4>Next Steps</h4>
+                      <MarkdownView content={details.next_steps} />
+                    </>
+                  ) : null}
+                  <div className="button-row">
+                    <button onClick={() => void queueAction(() => cleanupDone(selectedSummary.repo_path))}>Cleanup Done (Repo)</button>
+                    <button onClick={() => void queueAction(() => cleanupAll(selectedSummary.repo_path))}>Cleanup All (Repo)</button>
+                  </div>
+                  <h4>Recent Events</h4>
+                  <ul className="events">
+                    {events.slice(0, 10).map((ev, idx) => (
+                      <li key={`${ev.timestamp}-${idx}`}>
+                        <div>
+                          <strong>{ev.title}</strong> <span className="meta">{ev.timestamp}</span>
+                        </div>
+                        <MarkdownView content={ev.body} />
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ) : null}
+
+              {activeTab === "proposal" ? (
+                <>
+                  {selectedSummary.status === "proposal_ready" || selectedSummary.status === "waiting_for_human" ? (
+                    <form
+                      className="feedback-form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!feedbackMessage.trim()) {
+                          return;
+                        }
+                        void queueAction(() =>
+                          feedbackTicket(selectedSummary.repo_path, selectedSummary.ticket_number, feedbackMessage)
+                        ).then(() => setFeedbackMessage(""));
+                      }}
+                    >
+                      <input
+                        value={feedbackMessage}
+                        onChange={(e) => setFeedbackMessage(e.target.value)}
+                        placeholder="Send feedback on proposal"
+                      />
+                      <button type="submit">Send Feedback</button>
+                    </form>
+                  ) : (
+                    <p className="meta">Feedback is available in proposal phase only.</p>
+                  )}
+                  <article className="card">
+                    <h4>Proposal</h4>
+                    <MarkdownView content={proposal} emptyText="No proposal available." />
+                  </article>
+                </>
+              ) : null}
+
+              {activeTab === "logs" ? (
+                <article className="card">
+                  <h4>Logs</h4>
+                  <MarkdownView content={logText} emptyText="No logs available." />
+                </article>
+              ) : null}
             </>
           ) : (
             <p>Select a ticket to continue.</p>
