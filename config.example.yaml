@@ -2,7 +2,7 @@ provider: codex
 
 guidelines_file: CODING_GUIDELINES.md
 state_dir_name: .ai-orchestrator
-server_port: 9000
+server_port: 8080
 server_workers: 4
 create_pr: true
 max_fix_attempts: 1

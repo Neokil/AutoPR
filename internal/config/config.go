@@ -32,7 +32,7 @@ func Default() Config {
 	return Config{
 		Provider:       "codex",
 		StateDirName:   ".ai-orchestrator",
-		ServerPort:     9000,
+		ServerPort:     8080,
 		ServerWorkers:  4,
 		CreatePR:       true,
 		MaxFixAttempts: 1,
@@ -99,7 +99,7 @@ func Load() (Config, error) {
 		cfg.StateDirName = ".ai-orchestrator"
 	}
 	if cfg.ServerPort <= 0 {
-		cfg.ServerPort = 9000
+		cfg.ServerPort = 8080
 	}
 	if cfg.ServerWorkers <= 0 {
 		cfg.ServerWorkers = 4

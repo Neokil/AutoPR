@@ -53,7 +53,7 @@ providers:
 Checks are empty by default. Configure repo-appropriate commands in `~/.ai-orchestrator/config.yaml`, for example:
 
 ```yaml
-server_port: 9000
+server_port: 8080
 server_workers: 4
 check_commands:
   - npm test
@@ -79,7 +79,7 @@ ai-orchestrator cleanup --all
 
 ## Server
 
-Start the REST server (default port from config: `server_port`, default `9000`):
+Start the REST server (default port from config: `server_port`, default `8080`):
 
 ```bash
 orchestratord
@@ -158,7 +158,7 @@ Workers run jobs concurrently, while still guaranteeing:
 CLI can target the server instead of running workflows locally:
 
 ```bash
-export AI_ORCHESTRATOR_SERVER_URL=http://127.0.0.1:9000
+export AI_ORCHESTRATOR_SERVER_URL=http://127.0.0.1:8080
 ai-orchestrator run 12345
 ```
 
