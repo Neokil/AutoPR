@@ -39,8 +39,10 @@ Checks are empty by default. Configure repo-appropriate commands in `~/.config/a
 ```yaml
 check_commands:
   - npm test
-  - npm run lint
+  - npm run typecheck
 ```
+
+During implementation, the coding agent is instructed to auto-detect and run formatter/linter commands from the repository itself (for example scripts, Make targets, and tool config files) before returning.
 
 ## Commands
 

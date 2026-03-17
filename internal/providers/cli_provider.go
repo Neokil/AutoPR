@@ -140,6 +140,12 @@ Guidelines file: %s
 If validation failed previously, address these failures:
 %s
 
+Before you finish, automatically detect and run this project's formatting and linting commands directly in the worktree.
+Do not rely on preconfigured command lists.
+Discover commands from the repository itself (for example package scripts, Makefile targets, tool config files, or language-native defaults).
+Prefer project-defined commands when available, and only fall back to sensible language defaults if no project command is defined.
+If a command fails, fix the code and re-run until it passes or clearly report blockers.
+
 After making changes, return markdown with sections:
 - Changes Made
 - Notable Files Changed
