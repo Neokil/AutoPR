@@ -6,6 +6,7 @@ export interface TicketSummary {
   ticket_number: string;
   title?: string;
   status: string;
+  busy: boolean;
   approved: boolean;
   updated_at: string;
   pr_url?: string;

@@ -223,9 +223,12 @@ export function App() {
                 >
                   <strong>{t.ticket_number}</strong>
                   <span>{t.title || "(no title)"}</span>
-                  <span className="meta">
-                    {t.status} {t.approved ? "· approved" : ""}
-                  </span>
+                  <div className="ticket-status-row">
+                    {t.busy ? <span className="spinner" title="Worker is running" aria-label="Worker running" /> : null}
+                    <span className="meta">
+                      {t.status} {t.approved ? "· approved" : ""}
+                    </span>
+                  </div>
                   <span className="meta">{t.repo_path}</span>
                 </button>
               </li>

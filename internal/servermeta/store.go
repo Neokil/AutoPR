@@ -26,6 +26,7 @@ type TicketRecord struct {
 	TicketNumber string    `json:"ticket_number"`
 	Title        string    `json:"title,omitempty"`
 	Status       string    `json:"status"`
+	Busy         bool      `json:"busy"`
 	Approved     bool      `json:"approved"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	PRURL        string    `json:"pr_url,omitempty"`
@@ -129,11 +130,21 @@ func (s *Store) ReplaceRepoTickets(repoID string, tickets []TicketRecord) error 
 func (s *Store) ListTickets(repoID string) []TicketRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	activeByTicket := map[string]bool{}
+	for _, job := range s.data.Jobs {
+		if (job.Status != "queued" && job.Status != "running") || job.RepoID == "" || job.TicketNumber == "" {
+			continue
+		}
+		activeByTicket[ticketKey(job.RepoID, job.TicketNumber)] = true
+	}
+
 	out := make([]TicketRecord, 0, len(s.data.Tickets))
 	for _, t := range s.data.Tickets {
 		if repoID != "" && t.RepoID != repoID {
 			continue
 		}
+		t.Busy = activeByTicket[ticketKey(t.RepoID, t.TicketNumber)]
 		out = append(out, t)
 	}
 	sort.Slice(out, func(i, j int) bool {
