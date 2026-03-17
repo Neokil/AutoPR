@@ -1,5 +1,7 @@
 package api
 
+import "time"
+
 type RepoRequest struct {
 	RepoPath string `json:"repo_path"`
 }
@@ -25,4 +27,18 @@ type ActionAcceptedResponse struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+type JobStatusResponse struct {
+	ID           string     `json:"id"`
+	Action       string     `json:"action"`
+	RepoID       string     `json:"repo_id"`
+	RepoPath     string     `json:"repo_path"`
+	TicketNumber string     `json:"ticket_number,omitempty"`
+	Status       string     `json:"status"`
+	Scope        string     `json:"scope,omitempty"`
+	Error        string     `json:"error,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }

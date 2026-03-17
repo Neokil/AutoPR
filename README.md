@@ -112,6 +112,7 @@ Endpoints:
 - `POST /api/tickets/{id}/approve` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
 - `POST /api/tickets/{id}/reject` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
 - `POST /api/tickets/{id}/feedback` (JSON body: `{"repo_path":"...","message":"..."}`) -> returns `202` with `job_id`
+- `POST /api/tickets/{id}/pr` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
 - `POST /api/tickets/{id}/cleanup` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
 - `POST /api/cleanup` (JSON body: `{"repo_path":"...","scope":"done|all"}`) -> returns `202` with `job_id`
 
@@ -126,6 +127,13 @@ Workers run jobs concurrently, while still guaranteeing:
 
 - per-ticket serialization
 - repo-wide exclusive cleanup (`cleanup done/all`) against other jobs in the same repo
+
+CLI can target the server instead of running workflows locally:
+
+```bash
+export AI_ORCHESTRATOR_SERVER_URL=http://127.0.0.1:9000
+ai-orchestrator run 12345
+```
 
 ## Config
 

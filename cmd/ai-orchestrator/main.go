@@ -30,12 +30,16 @@ func main() {
 
 	repoRoot, err := gitutil.RepoRoot(ctx, cwd)
 	fatalIf(err)
-	fatalIf(workflow.EnsureStateIgnored(repoRoot, cfg.StateDirName))
-
-	provider, err := providers.NewFromConfig(cfg)
-	fatalIf(err)
-
-	svc := orchestrator.NewWorkflowService(cfg, repoRoot, provider)
+	serverURL := strings.TrimSpace(os.Getenv("AI_ORCHESTRATOR_SERVER_URL"))
+	var svc orchestrator.Service
+	if serverURL != "" {
+		svc = orchestrator.NewRemoteService(serverURL, repoRoot)
+	} else {
+		fatalIf(workflow.EnsureStateIgnored(repoRoot, cfg.StateDirName))
+		provider, err := providers.NewFromConfig(cfg)
+		fatalIf(err)
+		svc = orchestrator.NewWorkflowService(cfg, repoRoot, provider)
+	}
 
 	switch os.Args[1] {
 	case "run":
