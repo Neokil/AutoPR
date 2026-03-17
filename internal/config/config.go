@@ -13,13 +13,6 @@ type ProviderCommand struct {
 	Args    []string `yaml:"args"`
 }
 
-type ShortcutMCPConfig struct {
-	Enabled bool              `yaml:"enabled"`
-	Command string            `yaml:"command"`
-	Args    []string          `yaml:"args"`
-	Env     map[string]string `yaml:"env"`
-}
-
 type Config struct {
 	Provider       string                     `yaml:"provider"`
 	GuidelinesFile string                     `yaml:"guidelines_file"`
@@ -30,7 +23,6 @@ type Config struct {
 	CheckCommands  []string                   `yaml:"check_commands"`
 	FormatCommands []string                   `yaml:"format_commands"`
 	LintCommands   []string                   `yaml:"lint_commands"`
-	ShortcutMCP    ShortcutMCPConfig          `yaml:"shortcut_mcp"`
 	Providers      map[string]ProviderCommand `yaml:"providers"`
 }
 
@@ -41,12 +33,6 @@ func Default() Config {
 		CreatePR:       false,
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{"go test ./..."},
-		ShortcutMCP: ShortcutMCPConfig{
-			Enabled: true,
-			Command: "",
-			Args:    []string{},
-			Env:     map[string]string{},
-		},
 		Providers: map[string]ProviderCommand{
 			"gemini": {Command: "gemini", Args: []string{}},
 			"codex":  {Command: "codex", Args: []string{}},

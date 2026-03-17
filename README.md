@@ -6,7 +6,7 @@ Simple CLI-only orchestrator for AI-assisted ticket workflows.
 
 - Runs from any git subdirectory (auto-detects repo root)
 - Accepts ticket numbers as CLI args
-- Fetches ticket details from Shortcut via a configured MCP command
+- Fetches ticket details from Shortcut through the selected provider (provider-side MCP)
 - Creates per-ticket worktrees and branches (`sc-<ticket>-<slug>`)
 - Runs investigation + implementation with a switchable provider (`codex` or `gemini`)
 - Stores persistent state/logs in `.ai-orchestrator/`
@@ -47,33 +47,9 @@ Use [`config.example.yaml`](./config.example.yaml) as a starting point.
 
 ### Shortcut MCP
 
-`shortcut_mcp.command` should be a local command that returns JSON ticket data for a ticket number.
+Shortcut access is expected to be configured in your selected provider CLI (`codex` or `gemini`) via that provider's MCP/tool configuration.
 
-Supported JSON shapes:
-
-1. Direct tool shape:
-
-```json
-{
-  "number": "12345",
-  "id": "12345",
-  "title": "Fix login race condition",
-  "description": "...",
-  "acceptance_criteria": "...",
-  "priority": "high",
-  "url": "https://app.shortcut.com/..."
-}
-```
-
-2. Wrapped:
-
-```json
-{ "ticket": { ...same fields... } }
-```
-
-3. Shortcut story-like shape with fields such as `name`, `description`, `app_url`, `labels`.
-
-If `shortcut_mcp.args` includes `{ticket}`, it will be replaced. Otherwise the ticket number is appended as the final arg.
+When you run `ai-orchestrator run <ticket>`, the orchestrator asks the active provider to fetch ticket details for that ticket number and return normalized JSON.
 
 ## Runtime files
 

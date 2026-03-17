@@ -2,12 +2,14 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"ai-ticket-worker/internal/config"
+	"ai-ticket-worker/internal/models"
 	"ai-ticket-worker/internal/shell"
 )
 
@@ -36,6 +38,41 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 }
 
 func (p *CLIProvider) Name() string { return p.name }
+
+func (p *CLIProvider) getTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error) {
+	prompt := fmt.Sprintf(`Fetch Shortcut ticket details for story/ticket number %s using your configured MCP integration.
+
+Return ONLY valid JSON (no markdown fences, no extra text) with this shape:
+{
+  "number": "%s",
+  "id": "string",
+  "title": "string",
+  "description": "string",
+  "acceptance_criteria": "string",
+  "priority": "string",
+  "url": "string",
+  "labels": ["string"],
+  "workflow_fields": {"key":"value"}
+}
+
+If a field is unknown, use empty string or empty arrays/maps.
+`, ticketNumber, ticketNumber)
+	out, err := p.runPrompt(ctx, repoPath, runtimeDir, "ticket", prompt)
+	if err != nil {
+		return models.Ticket{}, "", err
+	}
+	ticket, err := decodeTicketPayload(out)
+	if err != nil {
+		return models.Ticket{}, out, err
+	}
+	if ticket.Number == "" {
+		ticket.Number = ticketNumber
+	}
+	if ticket.ID == "" {
+		ticket.ID = ticket.Number
+	}
+	return ticket, out, nil
+}
 
 func (p *CLIProvider) runPrompt(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, error) {
 	inputPath := filepath.Join(runtimeDir, fmt.Sprintf("%s-input.md", phase))
@@ -135,6 +172,10 @@ type GeminiProvider struct{ CLIProvider }
 
 type CodexProvider struct{ CLIProvider }
 
+func (p *GeminiProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error) {
+	return p.getTicket(ctx, ticketNumber, repoPath, runtimeDir)
+}
+
 func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
 	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", buildInvestigatePrompt(req))
 	if err != nil {
@@ -159,6 +200,10 @@ func (p *GeminiProvider) SummarizePR(ctx context.Context, req PRRequest, runtime
 	return PRResult{Body: out, RawOut: out}, nil
 }
 
+func (p *CodexProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error) {
+	return p.getTicket(ctx, ticketNumber, repoPath, runtimeDir)
+}
+
 func (p *CodexProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
 	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", buildInvestigatePrompt(req))
 	if err != nil {
@@ -181,4 +226,48 @@ func (p *CodexProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeD
 		return PRResult{}, err
 	}
 	return PRResult{Body: out, RawOut: out}, nil
+}
+
+func decodeTicketPayload(raw string) (models.Ticket, error) {
+	trimmed := strings.TrimSpace(raw)
+	var direct models.Ticket
+	if err := json.Unmarshal([]byte(trimmed), &direct); err == nil && strings.TrimSpace(direct.Title) != "" {
+		return direct, nil
+	}
+
+	var wrapped struct {
+		Ticket models.Ticket `json:"ticket"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &wrapped); err == nil && strings.TrimSpace(wrapped.Ticket.Title) != "" {
+		return wrapped.Ticket, nil
+	}
+
+	var shortcut struct {
+		ID          interface{} `json:"id"`
+		Name        string      `json:"name"`
+		Description string      `json:"description"`
+		AppURL      string      `json:"app_url"`
+		Labels      []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &shortcut); err != nil {
+		return models.Ticket{}, fmt.Errorf("parse provider ticket JSON: %w", err)
+	}
+	if strings.TrimSpace(shortcut.Name) == "" {
+		return models.Ticket{}, fmt.Errorf("ticket title missing in provider output")
+	}
+	labels := make([]string, 0, len(shortcut.Labels))
+	for _, l := range shortcut.Labels {
+		if strings.TrimSpace(l.Name) != "" {
+			labels = append(labels, l.Name)
+		}
+	}
+	return models.Ticket{
+		ID:          fmt.Sprintf("%v", shortcut.ID),
+		Title:       shortcut.Name,
+		Description: shortcut.Description,
+		URL:         shortcut.AppURL,
+		Labels:      labels,
+	}, nil
 }

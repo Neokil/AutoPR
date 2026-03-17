@@ -53,6 +53,7 @@ type PRResult struct {
 
 type AIProvider interface {
 	Name() string
+	GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error)
 	Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error)
 	Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error)
 	SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error)

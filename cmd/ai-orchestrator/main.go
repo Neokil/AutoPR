@@ -11,7 +11,6 @@ import (
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/providers"
-	"ai-ticket-worker/internal/ticketsource"
 	"ai-ticket-worker/internal/workflow"
 )
 
@@ -32,11 +31,10 @@ func main() {
 	fatalIf(err)
 	fatalIf(workflow.EnsureStateIgnored(repoRoot, cfg.StateDirName))
 
-	source := ticketsource.NewShortcutMCPSource(cfg.ShortcutMCP, repoRoot)
 	provider, err := providers.NewFromConfig(cfg)
 	fatalIf(err)
 
-	orch := workflow.New(cfg, repoRoot, source, provider)
+	orch := workflow.New(cfg, repoRoot, provider)
 
 	switch os.Args[1] {
 	case "run":

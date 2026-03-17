@@ -16,7 +16,6 @@ import (
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/shell"
 	"ai-ticket-worker/internal/state"
-	"ai-ticket-worker/internal/ticketsource"
 	"ai-ticket-worker/internal/worktree"
 )
 
@@ -24,16 +23,14 @@ type Orchestrator struct {
 	Cfg      config.Config
 	RepoRoot string
 	Store    *state.Store
-	Source   ticketsource.TicketSource
 	Provider providers.AIProvider
 }
 
-func New(cfg config.Config, repoRoot string, src ticketsource.TicketSource, provider providers.AIProvider) *Orchestrator {
+func New(cfg config.Config, repoRoot string, provider providers.AIProvider) *Orchestrator {
 	return &Orchestrator{
 		Cfg:      cfg,
 		RepoRoot: repoRoot,
 		Store:    state.NewStore(repoRoot, cfg.StateDirName),
-		Source:   src,
 		Provider: provider,
 	}
 }
@@ -172,13 +169,15 @@ func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*mo
 		return &st, nil
 	}
 
-	ticket, err := o.Source.GetTicket(ctx, ticketNumber)
+	paths := o.Store.Paths(ticketNumber)
+	if _, err := o.Store.EnsureTicketDir(ticketNumber); err != nil {
+		return nil, err
+	}
+	ticket, rawTicket, err := o.Provider.GetTicket(ctx, ticketNumber, o.RepoRoot, paths["providerDir"])
 	if err != nil {
 		return nil, err
 	}
 	ticket.Number = ticketNumber
-
-	paths := o.Store.Paths(ticketNumber)
 	st := models.NewTicketState(ticketNumber)
 	st.ProposalPath = paths["proposal"]
 	st.FinalPath = paths["final"]
@@ -198,6 +197,7 @@ func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*mo
 	if _, err := o.Store.SaveTicket(ticketNumber, ticket); err != nil {
 		return nil, err
 	}
+	_ = markdown.AppendSection(st.LogPath, "Ticket Fetch (Provider)", rawTicket)
 	if err := markdown.AppendSection(st.LogPath, "Ticket Loaded", fmt.Sprintf("#%s %s\n\n%s\n\nAcceptance Criteria:\n%s", ticket.Number, ticket.Title, ticket.Description, ticket.AcceptanceCriteria)); err != nil {
 		return nil, err
 	}

@@ -11,14 +11,6 @@ check_commands:
 format_commands: []
 lint_commands: []
 
-shortcut_mcp:
-  enabled: true
-  command: shortcut-ticket
-  args:
-    - --ticket
-    - "{ticket}"
-  env: {}
-
 providers:
   gemini:
     command: gemini
