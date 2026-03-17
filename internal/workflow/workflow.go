@@ -542,9 +542,16 @@ func (o *Orchestrator) localPR(ticket models.Ticket, st models.TicketState) (str
 	proposal, _ := os.ReadFile(st.ProposalPath)
 	final, _ := os.ReadFile(st.FinalPath)
 	checks, _ := os.ReadFile(st.ChecksLogPath)
-	changed := ""
-	if res, err := shell.Run(context.Background(), st.WorktreePath, nil, "", "git", "status", "--short"); err == nil {
-		changed = strings.TrimSpace(res.Stdout)
+	checksText := strings.TrimSpace(string(checks))
+	testFailuresSection := ""
+	if hasCheckFailures(checksText) {
+		testFailuresSection = fmt.Sprintf(`
+# Test Failures / Blockers
+
+`+"```"+`
+%s
+`+"```"+`
+`, checksText)
 	}
 	body := fmt.Sprintf(`# Summary
 
@@ -558,21 +565,20 @@ Ticket #%s: %s
 
 %s
 
-# Notable Files Changed
-
-%s
-
 # Risks / Follow-ups
 
 See final solution notes.
-
-# Test Results
-
-`+"```"+`
 %s
-`+"```"+`
-`, ticket.Number, ticket.Title, strings.TrimSpace(string(proposal)), strings.TrimSpace(string(final)), changed, strings.TrimSpace(string(checks)))
+`, ticket.Number, ticket.Title, strings.TrimSpace(string(proposal)), strings.TrimSpace(string(final)), testFailuresSection)
 	return body, nil
+}
+
+func hasCheckFailures(checks string) bool {
+	if checks == "" || checks == "no checks configured" {
+		return false
+	}
+	s := strings.ToLower(checks)
+	return strings.Contains(s, "[exit] failed:") || strings.Contains(s, "failed")
 }
 
 func branchName(ticket models.Ticket) string {

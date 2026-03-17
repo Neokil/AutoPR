@@ -172,9 +172,8 @@ Include sections:
 - Summary
 - Problem Being Solved
 - Implementation Overview
-- Notable Files Changed
 - Risks / Follow-ups
-- Test Results
+- Test Failures / Blockers (only when checks/tests failed)
 `, req.Ticket.Number, req.Ticket.Title, req.Ticket.Description, req.WorktreePath, req.LogPath, req.ProposalPath, req.FinalSolutionPath, req.ChecksLogPath)
 }
 
