@@ -21,10 +21,26 @@ import (
 	"ai-ticket-worker/internal/state"
 )
 
+const (
+	jobRun         = "run"
+	jobResume      = "resume"
+	jobApprove     = "approve"
+	jobReject      = "reject"
+	jobFeedback    = "feedback"
+	jobCleanup     = "cleanup_ticket"
+	jobCleanupDone = "cleanup_done"
+	jobCleanupAll  = "cleanup_all"
+)
+
 type repoRuntime struct {
 	svc      orchestrator.Service
 	repoRoot string
 	store    *state.Store
+}
+
+type queuedJob struct {
+	record  servermeta.JobRecord
+	message string
 }
 
 type server struct {
@@ -32,6 +48,7 @@ type server struct {
 	meta     *servermeta.Store
 	runtimes map[string]*repoRuntime
 	mu       sync.Mutex
+	jobs     chan queuedJob
 }
 
 type repoRequest struct {
@@ -81,7 +98,9 @@ func main() {
 		cfg:      cfg,
 		meta:     meta,
 		runtimes: map[string]*repoRuntime{},
+		jobs:     make(chan queuedJob, 256),
 	}
+	go s.workerLoop()
 
 	port := cfg.ServerPort
 	if *portFlag > 0 {
@@ -97,6 +116,7 @@ func main() {
 	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
 	mux.HandleFunc("GET /api/tickets/{id}/events", s.handleTicketEvents)
 	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name}", s.handleTicketArtifact)
+	mux.HandleFunc("GET /api/jobs/{id}", s.handleGetJob)
 	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/resume", s.handleResumeTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/approve", s.handleApproveTicket)
@@ -111,54 +131,47 @@ func main() {
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":       "ok",
 		"server_state": "~/.ai-orchestrator/server/state.json",
+		"queue_depth":  len(s.jobs),
 	})
 }
 
 func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, rt, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
 	if !ok {
 		return
 	}
-	err := rt.svc.RunTickets(r.Context(), []string{ticket})
-	_ = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
-	s.respondAction(w, repoID, repoRoot, ticket, rt, err)
+	s.enqueueAndRespond(w, jobRun, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleResumeTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, rt, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
 	if !ok {
 		return
 	}
-	err := rt.svc.ResumeTicket(r.Context(), ticket)
-	_ = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
-	s.respondAction(w, repoID, repoRoot, ticket, rt, err)
+	s.enqueueAndRespond(w, jobResume, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleApproveTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, rt, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
 	if !ok {
 		return
 	}
-	err := rt.svc.Approve(r.Context(), ticket)
-	_ = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
-	s.respondAction(w, repoID, repoRoot, ticket, rt, err)
+	s.enqueueAndRespond(w, jobApprove, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleRejectTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, rt, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
 	if !ok {
 		return
 	}
-	err := rt.svc.Reject(ticket)
-	_ = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
-	s.respondAction(w, repoID, repoRoot, ticket, rt, err)
+	s.enqueueAndRespond(w, jobReject, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleFeedbackTicket(w http.ResponseWriter, r *http.Request) {
@@ -176,34 +189,21 @@ func (s *server) handleFeedbackTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "message is required")
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	err = rt.svc.Feedback(ticket, req.Message)
-	_ = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
-	s.respondAction(w, repoID, repoRoot, ticket, rt, err)
+	s.enqueueAndRespond(w, jobFeedback, repoID, repoRoot, ticket, req.Message, "")
 }
 
 func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, rt, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
 	if !ok {
 		return
 	}
-	err := rt.svc.CleanupTicket(r.Context(), ticket)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	_ = s.meta.DeleteTicket(repoID, ticket)
-	writeJSON(w, http.StatusOK, map[string]string{
-		"repo_id":       repoID,
-		"repo_path":     repoRoot,
-		"ticket_number": ticket,
-		"status":        "cleaned",
-	})
+	s.enqueueAndRespond(w, jobCleanup, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
@@ -220,8 +220,7 @@ func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_path is required")
 		return
 	}
-
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -229,28 +228,22 @@ func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
 
 	switch scope {
 	case "done":
-		err = rt.svc.CleanupDone(r.Context())
+		s.enqueueAndRespond(w, jobCleanupDone, repoID, repoRoot, "", "", scope)
 	case "all":
-		err = rt.svc.CleanupAll(r.Context())
+		s.enqueueAndRespond(w, jobCleanupAll, repoID, repoRoot, "", "", scope)
 	default:
 		writeError(w, http.StatusBadRequest, "scope must be 'done' or 'all'")
-		return
 	}
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
+}
 
-	if err := s.syncRepoTickets(repoID, repoRoot, rt); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+func (s *server) handleGetJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	job, ok := s.meta.GetJob(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "job not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status":    "ok",
-		"scope":     scope,
-		"repo_id":   repoID,
-		"repo_path": repoRoot,
-	})
+	writeJSON(w, http.StatusOK, job)
 }
 
 func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
@@ -261,7 +254,6 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
 	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -448,19 +440,94 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 	return rt, nil
 }
 
-func (s *server) respondAction(w http.ResponseWriter, repoID, repoRoot, ticket string, rt *repoRuntime, err error) {
+func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket, message, scope string) {
+	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, scope)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	nextSteps, _ := rt.svc.NextSteps(ticket)
-	writeJSON(w, http.StatusOK, map[string]string{
-		"repo_id":       repoID,
-		"repo_path":     repoRoot,
-		"ticket_number": ticket,
-		"status":        "ok",
-		"next_steps":    nextSteps,
-	})
+	qj := queuedJob{record: job, message: message}
+	select {
+	case s.jobs <- qj:
+		writeJSON(w, http.StatusAccepted, map[string]string{
+			"status":        "accepted",
+			"job_id":        job.ID,
+			"action":        action,
+			"repo_id":       repoID,
+			"repo_path":     repoPath,
+			"ticket_number": ticket,
+		})
+	default:
+		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
+		writeError(w, http.StatusServiceUnavailable, "job queue is full")
+	}
+}
+
+func (s *server) workerLoop() {
+	for job := range s.jobs {
+		_ = s.meta.UpdateJobStatus(job.record.ID, "running", "")
+		err := s.executeJob(job)
+		if err != nil {
+			_ = s.meta.UpdateJobStatus(job.record.ID, "failed", err.Error())
+			continue
+		}
+		_ = s.meta.UpdateJobStatus(job.record.ID, "done", "")
+	}
+}
+
+func (s *server) executeJob(job queuedJob) error {
+	repoRoot, repoID := job.record.RepoPath, job.record.RepoID
+	ticket := job.record.TicketNumber
+	rt, err := s.runtimeForRepo(repoRoot)
+	if err != nil {
+		return err
+	}
+
+	switch job.record.Action {
+	case jobRun:
+		err = rt.svc.RunTickets(context.Background(), []string{ticket})
+		if err == nil {
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+		}
+	case jobResume:
+		err = rt.svc.ResumeTicket(context.Background(), ticket)
+		if err == nil {
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+		}
+	case jobApprove:
+		err = rt.svc.Approve(context.Background(), ticket)
+		if err == nil {
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+		}
+	case jobReject:
+		err = rt.svc.Reject(ticket)
+		if err == nil {
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+		}
+	case jobFeedback:
+		err = rt.svc.Feedback(ticket, job.message)
+		if err == nil {
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+		}
+	case jobCleanup:
+		err = rt.svc.CleanupTicket(context.Background(), ticket)
+		if err == nil {
+			err = s.meta.DeleteTicket(repoID, ticket)
+		}
+	case jobCleanupDone:
+		err = rt.svc.CleanupDone(context.Background())
+		if err == nil {
+			err = s.syncRepoTickets(repoID, repoRoot, rt)
+		}
+	case jobCleanupAll:
+		err = rt.svc.CleanupAll(context.Background())
+		if err == nil {
+			err = s.syncRepoTickets(repoID, repoRoot, rt)
+		}
+	default:
+		err = fmt.Errorf("unsupported job action: %s", job.record.Action)
+	}
+	return err
 }
 
 func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime) error {

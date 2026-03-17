@@ -105,13 +105,21 @@ Endpoints:
 - `GET /api/tickets/{id}?repo_path=/abs/path/to/repo`
 - `GET /api/tickets/{id}/events?repo_path=/abs/path/to/repo`
 - `GET /api/tickets/{id}/artifacts/{name}?repo_path=/abs/path/to/repo`
-- `POST /api/tickets/{id}/run` (JSON body: `{"repo_path":"..."}`)
-- `POST /api/tickets/{id}/resume` (JSON body: `{"repo_path":"..."}`)
-- `POST /api/tickets/{id}/approve` (JSON body: `{"repo_path":"..."}`)
-- `POST /api/tickets/{id}/reject` (JSON body: `{"repo_path":"..."}`)
-- `POST /api/tickets/{id}/feedback` (JSON body: `{"repo_path":"...","message":"..."}`)
-- `POST /api/tickets/{id}/cleanup` (JSON body: `{"repo_path":"..."}`)
-- `POST /api/cleanup` (JSON body: `{"repo_path":"...","scope":"done|all"}`)
+- `GET /api/jobs/{id}`
+- `POST /api/tickets/{id}/run` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
+- `POST /api/tickets/{id}/resume` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
+- `POST /api/tickets/{id}/approve` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
+- `POST /api/tickets/{id}/reject` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
+- `POST /api/tickets/{id}/feedback` (JSON body: `{"repo_path":"...","message":"..."}`) -> returns `202` with `job_id`
+- `POST /api/tickets/{id}/cleanup` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
+- `POST /api/cleanup` (JSON body: `{"repo_path":"...","scope":"done|all"}`) -> returns `202` with `job_id`
+
+Job status values:
+
+- `queued`
+- `running`
+- `done`
+- `failed`
 
 ## Config
 

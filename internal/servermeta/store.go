@@ -1,6 +1,7 @@
 package servermeta
 
 import (
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -33,6 +34,21 @@ type TicketRecord struct {
 type Data struct {
 	Repos   map[string]RepoRecord   `json:"repos"`
 	Tickets map[string]TicketRecord `json:"tickets"`
+	Jobs    map[string]JobRecord    `json:"jobs"`
+}
+
+type JobRecord struct {
+	ID           string     `json:"id"`
+	Action       string     `json:"action"`
+	RepoID       string     `json:"repo_id"`
+	RepoPath     string     `json:"repo_path"`
+	TicketNumber string     `json:"ticket_number,omitempty"`
+	Status       string     `json:"status"`
+	Scope        string     `json:"scope,omitempty"`
+	Error        string     `json:"error,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }
 
 type Store struct {
@@ -53,6 +69,7 @@ func NewStore(path string) (*Store, error) {
 	s := &Store{path: path, data: Data{
 		Repos:   map[string]RepoRecord{},
 		Tickets: map[string]TicketRecord{},
+		Jobs:    map[string]JobRecord{},
 	}}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -131,6 +148,58 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 	return out
 }
 
+func (s *Store) NewJob(action, repoID, repoPath, ticketNumber, scope string) (JobRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id, err := randomID()
+	if err != nil {
+		return JobRecord{}, err
+	}
+	now := time.Now().UTC()
+	rec := JobRecord{
+		ID:           id,
+		Action:       action,
+		RepoID:       repoID,
+		RepoPath:     repoPath,
+		TicketNumber: ticketNumber,
+		Scope:        scope,
+		Status:       "queued",
+		CreatedAt:    now,
+	}
+	s.data.Jobs[id] = rec
+	if err := s.saveLocked(); err != nil {
+		return JobRecord{}, err
+	}
+	return rec, nil
+}
+
+func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.data.Jobs[id]
+	if !ok {
+		return fmt.Errorf("job %s not found", id)
+	}
+	now := time.Now().UTC()
+	switch status {
+	case "running":
+		rec.StartedAt = &now
+	case "done", "failed":
+		rec.FinishedAt = &now
+	}
+	rec.Status = status
+	rec.Error = strings.TrimSpace(errMsg)
+	s.data.Jobs[id] = rec
+	return s.saveLocked()
+}
+
+func (s *Store) GetJob(id string) (JobRecord, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, ok := s.data.Jobs[id]
+	return rec, ok
+}
+
 func (s *Store) load() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
@@ -151,6 +220,9 @@ func (s *Store) load() error {
 	}
 	if parsed.Tickets == nil {
 		parsed.Tickets = map[string]TicketRecord{}
+	}
+	if parsed.Jobs == nil {
+		parsed.Jobs = map[string]JobRecord{}
 	}
 	s.data = parsed
 	return nil
@@ -178,4 +250,12 @@ func repoID(repoPath string) string {
 
 func ticketKey(repoID, ticketNumber string) string {
 	return repoID + "::" + ticketNumber
+}
+
+func randomID() (string, error) {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }
