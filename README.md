@@ -87,27 +87,39 @@ orchestratord
 Optional flags:
 
 ```bash
-orchestratord --repo /path/to/repo --port 9010
+orchestratord --port 9010
 ```
+
+Server metadata/state is stored in:
+
+- `~/.ai-orchestrator/server/state.json`
+
+Ticket artifacts remain in each repository under:
+
+- `<repo>/.ai-orchestrator/...`
 
 Endpoints:
 
 - `GET /api/health`
-- `GET /api/tickets`
-- `GET /api/tickets/{id}`
-- `GET /api/tickets/{id}/events`
-- `GET /api/tickets/{id}/artifacts/{name}`
-- `POST /api/tickets/{id}/run`
-- `POST /api/tickets/{id}/resume`
-- `POST /api/tickets/{id}/approve`
-- `POST /api/tickets/{id}/reject`
-- `POST /api/tickets/{id}/feedback` (JSON body: `{"message":"..."}`)
-- `POST /api/tickets/{id}/cleanup`
-- `POST /api/cleanup?scope=done|all`
+- `GET /api/tickets` (optional query: `repo_path`)
+- `GET /api/tickets/{id}?repo_path=/abs/path/to/repo`
+- `GET /api/tickets/{id}/events?repo_path=/abs/path/to/repo`
+- `GET /api/tickets/{id}/artifacts/{name}?repo_path=/abs/path/to/repo`
+- `POST /api/tickets/{id}/run` (JSON body: `{"repo_path":"..."}`)
+- `POST /api/tickets/{id}/resume` (JSON body: `{"repo_path":"..."}`)
+- `POST /api/tickets/{id}/approve` (JSON body: `{"repo_path":"..."}`)
+- `POST /api/tickets/{id}/reject` (JSON body: `{"repo_path":"..."}`)
+- `POST /api/tickets/{id}/feedback` (JSON body: `{"repo_path":"...","message":"..."}`)
+- `POST /api/tickets/{id}/cleanup` (JSON body: `{"repo_path":"..."}`)
+- `POST /api/cleanup` (JSON body: `{"repo_path":"...","scope":"done|all"}`)
 
 ## Config
 
 Default config path:
+
+- `~/.ai-orchestrator/config.yaml`
+
+Legacy fallback still supported:
 
 - `~/.config/ai-orchestrator/config.yaml`
 

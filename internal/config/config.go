@@ -43,6 +43,14 @@ func Default() Config {
 }
 
 func ConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	return filepath.Join(home, ".ai-orchestrator", "config.yaml"), nil
+}
+
+func legacyConfigPath() (string, error) {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
@@ -63,9 +71,21 @@ func Load() (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return cfg, nil
+			legacyPath, lerr := legacyConfigPath()
+			if lerr != nil {
+				return cfg, lerr
+			}
+			legacyData, lerr := os.ReadFile(legacyPath)
+			if lerr != nil {
+				if os.IsNotExist(lerr) {
+					return cfg, nil
+				}
+				return cfg, fmt.Errorf("read legacy config file %s: %w", legacyPath, lerr)
+			}
+			data = legacyData
+		} else {
+			return cfg, fmt.Errorf("read config file %s: %w", path, err)
 		}
-		return cfg, fmt.Errorf("read config file %s: %w", path, err)
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("parse config yaml: %w", err)
