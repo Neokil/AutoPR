@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   approveTicket,
   cleanupAll,
   cleanupDone,
   cleanupTicket,
+  connectEvents,
   createPR,
   feedbackTicket,
   getArtifact,
@@ -16,7 +17,7 @@ import {
   runTicket
 } from "./api";
 import { MarkdownView } from "./MarkdownView";
-import type { EventItem, Job, TicketDetails, TicketSummary } from "./types";
+import type { EventItem, Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
@@ -60,14 +61,28 @@ export function App() {
   const [error, setError] = useState<string>("");
 
   const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
+  const selectedSummaryRef = useRef<TicketSummary | null>(null);
+  const activeJobIdRef = useRef<string>("");
+
+  useEffect(() => {
+    selectedSummaryRef.current = selectedSummary;
+  }, [selectedSummary]);
+
+  useEffect(() => {
+    activeJobIdRef.current = activeJobId;
+  }, [activeJobId]);
 
   useEffect(() => {
     void refreshTickets();
-    const timer = setInterval(() => {
-      void refreshTickets(false);
-    }, 5000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const stream = connectEvents(
+      (evt) => {
+        void handleServerEvent(evt);
+      },
+      () => {
+        setError("event stream connection lost; reconnecting");
+      }
+    );
+    return () => stream.close();
   }, []);
 
   useEffect(() => {
@@ -82,29 +97,6 @@ export function App() {
     setActiveTab("details");
   }, [selectedSummary?.repo_path, selectedSummary?.ticket_number]);
 
-  useEffect(() => {
-    if (!activeJobId) {
-      return;
-    }
-    const timer = setInterval(async () => {
-      try {
-        const job = await getJob(activeJobId);
-        setActiveJob(job);
-        if (job.status === "done" || job.status === "failed") {
-          clearInterval(timer);
-          setActiveJobId("");
-          await refreshTickets();
-          if (selectedSummary) {
-            await refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
-          }
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "failed to poll job");
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [activeJobId, selectedSummary?.repo_path, selectedSummary?.ticket_number]);
-
   async function refreshTickets(showLoader = true) {
     if (showLoader) {
       setLoading(true);
@@ -112,13 +104,15 @@ export function App() {
     try {
       const data = await listTickets();
       setTickets(data);
-      if (data.length === 0) {
-        setSelectedKey("");
-        return;
-      }
-      if (!selectedKey || !data.some((t) => ticketKey(t) === selectedKey)) {
-        setSelectedKey(ticketKey(data[0]));
-      }
+      setSelectedKey((current) => {
+        if (data.length === 0) {
+          return "";
+        }
+        if (!current || !data.some((t) => ticketKey(t) === current)) {
+          return ticketKey(data[0]);
+        }
+        return current;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load tickets");
     } finally {
@@ -128,8 +122,10 @@ export function App() {
     }
   }
 
-  async function refreshTicketDetails(repoPath: string, ticket: string) {
-    setLoading(true);
+  async function refreshTicketDetails(repoPath: string, ticket: string, showLoader = true) {
+    if (showLoader) {
+      setLoading(true);
+    }
     setError("");
     try {
       const [ticketDetails, eventItems, proposalText, logs] = await Promise.all([
@@ -149,7 +145,39 @@ export function App() {
       setProposal("");
       setLogText("");
     } finally {
-      setLoading(false);
+      if (showLoader) {
+        setLoading(false);
+      }
+    }
+  }
+
+  async function handleServerEvent(evt: ServerEvent) {
+    const selected = selectedSummaryRef.current;
+    const trackedJobID = activeJobIdRef.current;
+    if (evt.type === "job" && evt.job_id && (!trackedJobID || evt.job_id === trackedJobID)) {
+      try {
+        const job = await getJob(evt.job_id);
+        setActiveJob(job);
+        if (job.status === "done" || job.status === "failed") {
+          setActiveJobId("");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "failed to refresh job");
+      }
+    }
+
+    await refreshTickets(false);
+    if (!selected) {
+      return;
+    }
+
+    if (evt.type === "repo_tickets_synced" && evt.repo_path === selected.repo_path) {
+      await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
+      return;
+    }
+
+    if (evt.repo_path === selected.repo_path && evt.ticket_number === selected.ticket_number) {
+      await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
     }
   }
 

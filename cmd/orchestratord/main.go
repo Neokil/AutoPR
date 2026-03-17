@@ -57,6 +57,9 @@ type server struct {
 	jobs     chan queuedJob
 	webFS    fs.FS
 
+	subsMu      sync.Mutex
+	subscribers map[string]chan serverEvent
+
 	repoLockMu sync.Mutex
 	repoLocks  map[string]*sync.RWMutex
 
@@ -77,6 +80,18 @@ type logEvent struct {
 	Title     string `json:"title"`
 	Timestamp string `json:"timestamp"`
 	Body      string `json:"body"`
+}
+
+type serverEvent struct {
+	Type         string `json:"type"`
+	RepoID       string `json:"repo_id,omitempty"`
+	RepoPath     string `json:"repo_path,omitempty"`
+	TicketNumber string `json:"ticket_number,omitempty"`
+	Status       string `json:"status,omitempty"`
+	JobID        string `json:"job_id,omitempty"`
+	Action       string `json:"action,omitempty"`
+	Scope        string `json:"scope,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 var sectionHeaderRE = regexp.MustCompile(`^## (.+) \(([^)]+)\)$`)
@@ -103,6 +118,7 @@ func main() {
 		repoLocks:   map[string]*sync.RWMutex{},
 		ticketLocks: map[string]*sync.Mutex{},
 		webFS:       distFS,
+		subscribers: map[string]chan serverEvent{},
 	}
 	for i := 0; i < cfg.ServerWorkers; i++ {
 		go s.workerLoop()
@@ -122,6 +138,7 @@ func main() {
 	mux.HandleFunc("GET /api/tickets/{id}/events", s.handleTicketEvents)
 	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name}", s.handleTicketArtifact)
 	mux.HandleFunc("GET /api/jobs/{id}", s.handleGetJob)
+	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/resume", s.handleResumeTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/approve", s.handleApproveTicket)
@@ -287,6 +304,42 @@ func (s *server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, job)
+}
+
+func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	subID, ch := s.addSubscriber()
+	defer s.removeSubscriber(subID)
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	keepAlive := time.NewTicker(20 * time.Second)
+	defer keepAlive.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-keepAlive.C:
+			_, _ = fmt.Fprint(w, ": keepalive\n\n")
+			flusher.Flush()
+		case evt := <-ch:
+			data, err := json.Marshal(evt)
+			if err != nil {
+				continue
+			}
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", evt.Type, data)
+			flusher.Flush()
+		}
+	}
 }
 
 func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
@@ -490,6 +543,16 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 		return
 	}
 	qj := queuedJob{record: job, message: message}
+	s.broadcast(serverEvent{
+		Type:         "job",
+		RepoID:       repoID,
+		RepoPath:     repoPath,
+		TicketNumber: ticket,
+		JobID:        job.ID,
+		Action:       action,
+		Scope:        scope,
+		Status:       "queued",
+	})
 	select {
 	case s.jobs <- qj:
 		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
@@ -502,20 +565,46 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 		})
 	default:
 		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
+		s.broadcast(serverEvent{
+			Type:         "job",
+			RepoID:       repoID,
+			RepoPath:     repoPath,
+			TicketNumber: ticket,
+			JobID:        job.ID,
+			Action:       action,
+			Scope:        scope,
+			Status:       "failed",
+			Error:        "job queue is full",
+		})
 		writeError(w, http.StatusServiceUnavailable, "job queue is full")
 	}
 }
 
 func (s *server) workerLoop() {
 	for job := range s.jobs {
-		_ = s.meta.UpdateJobStatus(job.record.ID, "running", "")
+		s.setJobStatus(job.record, "running", "")
 		err := s.executeJob(job)
 		if err != nil {
-			_ = s.meta.UpdateJobStatus(job.record.ID, "failed", err.Error())
+			s.setJobStatus(job.record, "failed", err.Error())
 			continue
 		}
-		_ = s.meta.UpdateJobStatus(job.record.ID, "done", "")
+		s.setJobStatus(job.record, "done", "")
 	}
+}
+
+func (s *server) setJobStatus(job servermeta.JobRecord, status, errMsg string) {
+	_ = s.meta.UpdateJobStatus(job.ID, status, errMsg)
+	s.broadcast(serverEvent{
+		Type:         "job",
+		RepoID:       job.RepoID,
+		RepoPath:     job.RepoPath,
+		TicketNumber: job.TicketNumber,
+		JobID:        job.ID,
+		Action:       job.Action,
+		Scope:        job.Scope,
+		Status:       status,
+		Error:        strings.TrimSpace(errMsg),
+	})
 }
 
 func (s *server) executeJob(job queuedJob) error {
@@ -621,7 +710,16 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 	st, err := rt.store.LoadState(ticket)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return s.meta.DeleteTicket(repoID, ticket)
+			if err := s.meta.DeleteTicket(repoID, ticket); err != nil {
+				return err
+			}
+			s.broadcast(serverEvent{
+				Type:         "ticket_deleted",
+				RepoID:       repoID,
+				RepoPath:     repoRoot,
+				TicketNumber: ticket,
+			})
+			return nil
 		}
 		return err
 	}
@@ -636,7 +734,17 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		UpdatedAt:    st.UpdatedAt.UTC(),
 		PRURL:        st.PRURL,
 	}
-	return s.meta.UpsertTicket(rec)
+	if err := s.meta.UpsertTicket(rec); err != nil {
+		return err
+	}
+	s.broadcast(serverEvent{
+		Type:         "ticket_updated",
+		RepoID:       repoID,
+		RepoPath:     repoRoot,
+		TicketNumber: ticket,
+		Status:       rec.Status,
+	})
+	return nil
 }
 
 func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime) error {
@@ -662,7 +770,15 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime) error
 			PRURL:        st.PRURL,
 		})
 	}
-	return s.meta.ReplaceRepoTickets(repoID, records)
+	if err := s.meta.ReplaceRepoTickets(repoID, records); err != nil {
+		return err
+	}
+	s.broadcast(serverEvent{
+		Type:     "repo_tickets_synced",
+		RepoID:   repoID,
+		RepoPath: repoRoot,
+	})
+	return nil
 }
 
 func resolveRepoRoot(repoPath string) (string, error) {
@@ -784,4 +900,36 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rec, r)
 		fmt.Printf("%s %s -> %d (%s)\n", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
 	})
+}
+
+func (s *server) addSubscriber() (string, chan serverEvent) {
+	id := fmt.Sprintf("sub-%d", time.Now().UnixNano())
+	ch := make(chan serverEvent, 128)
+	s.subsMu.Lock()
+	s.subscribers[id] = ch
+	s.subsMu.Unlock()
+	return id, ch
+}
+
+func (s *server) removeSubscriber(id string) {
+	s.subsMu.Lock()
+	ch, ok := s.subscribers[id]
+	if ok {
+		delete(s.subscribers, id)
+	}
+	s.subsMu.Unlock()
+	if ok {
+		close(ch)
+	}
+}
+
+func (s *server) broadcast(evt serverEvent) {
+	s.subsMu.Lock()
+	defer s.subsMu.Unlock()
+	for _, ch := range s.subscribers {
+		select {
+		case ch <- evt:
+		default:
+		}
+	}
 }

@@ -74,3 +74,15 @@ export interface AcceptedJob {
   repo_path: string;
   ticket_number?: string;
 }
+
+export interface ServerEvent {
+  type: string;
+  repo_id?: string;
+  repo_path?: string;
+  ticket_number?: string;
+  status?: string;
+  job_id?: string;
+  action?: string;
+  scope?: string;
+  error?: string;
+}

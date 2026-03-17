@@ -1,4 +1,4 @@
-import type { AcceptedJob, EventItem, Job, TicketDetails, TicketSummary } from "./types";
+import type { AcceptedJob, EventItem, Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -44,6 +44,26 @@ export async function getArtifact(repoPath: string, ticket: string, name: string
 
 export async function getJob(jobId: string): Promise<Job> {
   return requestJSON<Job>(`/api/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function connectEvents(onEvent: (event: ServerEvent) => void, onError?: () => void): EventSource {
+  const es = new EventSource(apiUrl("/api/events"));
+  const handler = (evt: MessageEvent<string>) => {
+    try {
+      const parsed = JSON.parse(evt.data) as ServerEvent;
+      onEvent(parsed);
+    } catch {
+      // ignore invalid events
+    }
+  };
+  es.addEventListener("job", handler as EventListener);
+  es.addEventListener("ticket_updated", handler as EventListener);
+  es.addEventListener("ticket_deleted", handler as EventListener);
+  es.addEventListener("repo_tickets_synced", handler as EventListener);
+  if (onError) {
+    es.onerror = onError;
+  }
+  return es;
 }
 
 function postAccepted<TBody>(path: string, body: TBody): Promise<AcceptedJob> {
