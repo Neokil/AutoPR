@@ -30,7 +30,7 @@ func Default() Config {
 	return Config{
 		Provider:       "codex",
 		StateDirName:   ".ai-orchestrator",
-		CreatePR:       false,
+		CreatePR:       true,
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{"go test ./..."},
 		Providers: map[string]ProviderCommand{
