@@ -5,6 +5,7 @@ SHELL := /bin/zsh
 build:
 	@mkdir -p .build
 	@go build -o .build/ai-orchestrator ./cmd/ai-orchestrator
+	@go build -o .build/orchestratord ./cmd/orchestratord
 
 install: build
 	@ZSHRC="$$HOME/.zshrc"; \
@@ -26,6 +27,6 @@ install: build
 		echo "$$END"; \
 	} > "$$ZSHRC"; \
 	rm -f "$$TMP"; \
-	echo "built .build/ai-orchestrator"; \
+	echo "built .build/ai-orchestrator and .build/orchestratord"; \
 	echo "updated PATH in $$ZSHRC"; \
 	echo "run: source $$ZSHRC"

@@ -1,6 +1,6 @@
 # ai-orchestrator
 
-Simple CLI-only orchestrator for AI-assisted ticket workflows.
+CLI + server orchestrator for AI-assisted ticket workflows.
 
 ## What it does
 
@@ -24,6 +24,7 @@ The project now uses a DDD-inspired layered structure so logic can be reused by 
 - `internal/state`: current JSON/filesystem-backed store adapter implementing ports
 - `internal/workflow`: orchestration logic (currently reused by the application service)
 - `cmd/ai-orchestrator`: CLI adapter (calls application service)
+- `cmd/orchestratord`: REST API server adapter
 
 Notes:
 - `internal/models` currently re-exports domain types as backward-compatible aliases.
@@ -38,7 +39,7 @@ make install
 source ~/.zshrc
 ```
 
-This builds the binary to `.build/ai-orchestrator` and adds `.build/` to `PATH`.
+This builds the binaries to `.build/ai-orchestrator` and `.build/orchestratord`, then adds `.build/` to `PATH`.
 
 If you use Codex as provider, run it in non-interactive mode in config:
 
@@ -52,6 +53,7 @@ providers:
 Checks are empty by default. Configure repo-appropriate commands in `~/.config/ai-orchestrator/config.yaml`, for example:
 
 ```yaml
+server_port: 9000
 check_commands:
   - npm test
   - npm run typecheck
@@ -73,6 +75,35 @@ ai-orchestrator cleanup <ticket-number>
 ai-orchestrator cleanup --done
 ai-orchestrator cleanup --all
 ```
+
+## Server
+
+Start the REST server (default port from config: `server_port`, default `9000`):
+
+```bash
+orchestratord
+```
+
+Optional flags:
+
+```bash
+orchestratord --repo /path/to/repo --port 9010
+```
+
+Endpoints:
+
+- `GET /api/health`
+- `GET /api/tickets`
+- `GET /api/tickets/{id}`
+- `GET /api/tickets/{id}/events`
+- `GET /api/tickets/{id}/artifacts/{name}`
+- `POST /api/tickets/{id}/run`
+- `POST /api/tickets/{id}/resume`
+- `POST /api/tickets/{id}/approve`
+- `POST /api/tickets/{id}/reject`
+- `POST /api/tickets/{id}/feedback` (JSON body: `{"message":"..."}`)
+- `POST /api/tickets/{id}/cleanup`
+- `POST /api/cleanup?scope=done|all`
 
 ## Config
 

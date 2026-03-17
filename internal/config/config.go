@@ -17,6 +17,7 @@ type Config struct {
 	Provider       string                     `yaml:"provider"`
 	GuidelinesFile string                     `yaml:"guidelines_file"`
 	StateDirName   string                     `yaml:"state_dir_name"`
+	ServerPort     int                        `yaml:"server_port"`
 	CreatePR       bool                       `yaml:"create_pr"`
 	MaxFixAttempts int                        `yaml:"max_fix_attempts"`
 	BaseBranch     string                     `yaml:"base_branch"`
@@ -30,6 +31,7 @@ func Default() Config {
 	return Config{
 		Provider:       "codex",
 		StateDirName:   ".ai-orchestrator",
+		ServerPort:     9000,
 		CreatePR:       true,
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{},
@@ -73,6 +75,9 @@ func Load() (Config, error) {
 	}
 	if cfg.StateDirName == "" {
 		cfg.StateDirName = ".ai-orchestrator"
+	}
+	if cfg.ServerPort <= 0 {
+		cfg.ServerPort = 9000
 	}
 	if cfg.MaxFixAttempts < 0 {
 		cfg.MaxFixAttempts = 0
