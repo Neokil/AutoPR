@@ -45,13 +45,16 @@ check_commands:
 ## Commands
 
 ```bash
-ai-orchestrator run <ticket-number> [<ticket-number>...]
-ai-orchestrator status [<ticket-number>]
+ai-orchestrator run <ticket-number> <ticket-number>...
+ai-orchestrator status <ticket-number>
 ai-orchestrator approve <ticket-number>
 ai-orchestrator feedback <ticket-number> --message "..."
 ai-orchestrator reject <ticket-number>
 ai-orchestrator resume <ticket-number>
 ai-orchestrator pr <ticket-number>
+ai-orchestrator cleanup <ticket-number>
+ai-orchestrator cleanup --done
+ai-orchestrator cleanup --all
 ```
 
 ## Config

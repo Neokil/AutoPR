@@ -193,6 +193,53 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	}
 }
 
+func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	_ = gitutil.WorktreeRemove(ctx, o.RepoRoot, st.WorktreePath)
+	if err := o.Store.RemoveTicketDir(ticketNumber); err != nil {
+		return err
+	}
+	fmt.Printf("cleaned ticket %s\n", ticketNumber)
+	return nil
+}
+
+func (o *Orchestrator) CleanupDone(ctx context.Context) error {
+	tickets, err := o.Store.ListTicketDirs()
+	if err != nil {
+		return err
+	}
+	sort.Strings(tickets)
+	for _, ticket := range tickets {
+		st, err := o.Store.LoadState(ticket)
+		if err != nil {
+			continue
+		}
+		if st.Status == models.StateDone {
+			if err := o.CleanupTicket(ctx, ticket); err != nil {
+				fmt.Fprintf(os.Stderr, "cleanup %s failed: %v\n", ticket, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (o *Orchestrator) CleanupAll(ctx context.Context) error {
+	tickets, err := o.Store.ListTicketDirs()
+	if err != nil {
+		return err
+	}
+	sort.Strings(tickets)
+	for _, ticket := range tickets {
+		if err := o.CleanupTicket(ctx, ticket); err != nil {
+			fmt.Fprintf(os.Stderr, "cleanup %s failed: %v\n", ticket, err)
+		}
+	}
+	return nil
+}
+
 func (o *Orchestrator) GeneratePR(ctx context.Context, ticketNumber string) error {
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {

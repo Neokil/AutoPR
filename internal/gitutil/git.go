@@ -41,6 +41,11 @@ func WorktreePath(repoRoot, stateDirName, ticketNumber string) string {
 	return filepath.Join(repoRoot, stateDirName, "worktrees", ticketNumber)
 }
 
+func WorktreeRemove(ctx context.Context, repoRoot, worktreePath string) error {
+	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "worktree", "remove", worktreePath, "--force")
+	return err
+}
+
 func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (string, error) {
 	args := []string{"pr", "create", "--title", title, "--body-file", bodyFile}
 	if base != "" {

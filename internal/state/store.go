@@ -136,3 +136,7 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	}
 	return out, nil
 }
+
+func (s *Store) RemoveTicketDir(ticketNumber string) error {
+	return os.RemoveAll(s.TicketDir(ticketNumber))
+}

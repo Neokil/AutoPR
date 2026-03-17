@@ -63,6 +63,8 @@ func main() {
 		ticket := os.Args[2]
 		fatalIf(orch.GeneratePR(ctx, ticket))
 		printNextSteps(orch, ticket)
+	case "cleanup":
+		cleanupCmd(ctx, orch, os.Args[2:])
 	default:
 		usage()
 		os.Exit(1)
@@ -106,6 +108,31 @@ func feedbackCmd(orch *workflow.Orchestrator, args []string) {
 	printNextSteps(orch, ticket)
 }
 
+func cleanupCmd(ctx context.Context, orch *workflow.Orchestrator, args []string) {
+	fs := flag.NewFlagSet("cleanup", flag.ExitOnError)
+	doneOnly := fs.Bool("done", false, "cleanup only done tickets")
+	all := fs.Bool("all", false, "cleanup all tickets")
+	_ = fs.Parse(args)
+
+	if *doneOnly && *all {
+		fatalIf(errors.New("cleanup: use either --done or --all, not both"))
+	}
+	if *doneOnly {
+		fatalIf(orch.CleanupDone(ctx))
+		return
+	}
+	if *all {
+		fatalIf(orch.CleanupAll(ctx))
+		return
+	}
+
+	rest := fs.Args()
+	if len(rest) != 1 {
+		fatalIf(errors.New("usage: ai-orchestrator cleanup <ticket-number> | --done | --all"))
+	}
+	fatalIf(orch.CleanupTicket(ctx, rest[0]))
+}
+
 func requireArgs(cmd string, args []string, min int) {
 	if len(args) < min {
 		fatalIf(fmt.Errorf("usage: ai-orchestrator %s ...", cmd))
@@ -130,7 +157,10 @@ Commands:
   ai-orchestrator feedback <ticket-number> --message "..."
   ai-orchestrator reject <ticket-number>
   ai-orchestrator resume <ticket-number>
-  ai-orchestrator pr <ticket-number>`)
+  ai-orchestrator pr <ticket-number>
+  ai-orchestrator cleanup <ticket-number>
+  ai-orchestrator cleanup --done
+  ai-orchestrator cleanup --all`)
 }
 
 func printNextSteps(orch *workflow.Orchestrator, ticket string) {
