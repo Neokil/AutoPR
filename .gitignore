@@ -1,3 +1,4 @@
 .ai-orchestrator/
 .build/
 web/node_modules/
+web/dist

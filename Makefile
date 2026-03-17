@@ -4,6 +4,10 @@ SHELL := /bin/zsh
 
 build:
 	@mkdir -p .build
+	@if [ -f web/package.json ]; then \
+		echo "building frontend (web/dist)"; \
+		cd web && npm install && npm run build; \
+	fi
 	@go build -o .build/ai-orchestrator ./cmd/ai-orchestrator
 	@go build -o .build/orchestratord ./cmd/orchestratord
 
