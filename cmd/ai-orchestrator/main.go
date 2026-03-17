@@ -43,18 +43,26 @@ func main() {
 		statusCmd(orch, os.Args[2:])
 	case "approve":
 		requireArgs("approve", os.Args[2:], 1)
-		fatalIf(orch.Approve(ctx, os.Args[2]))
+		ticket := os.Args[2]
+		fatalIf(orch.Approve(ctx, ticket))
+		printNextSteps(orch, ticket)
 	case "feedback":
 		feedbackCmd(orch, os.Args[2:])
 	case "reject":
 		requireArgs("reject", os.Args[2:], 1)
-		fatalIf(orch.Reject(os.Args[2]))
+		ticket := os.Args[2]
+		fatalIf(orch.Reject(ticket))
+		printNextSteps(orch, ticket)
 	case "resume":
 		requireArgs("resume", os.Args[2:], 1)
-		fatalIf(orch.ResumeTicket(ctx, os.Args[2]))
+		ticket := os.Args[2]
+		fatalIf(orch.ResumeTicket(ctx, ticket))
+		printNextSteps(orch, ticket)
 	case "pr":
 		requireArgs("pr", os.Args[2:], 1)
-		fatalIf(orch.GeneratePR(ctx, os.Args[2]))
+		ticket := os.Args[2]
+		fatalIf(orch.GeneratePR(ctx, ticket))
+		printNextSteps(orch, ticket)
 	default:
 		usage()
 		os.Exit(1)
@@ -64,6 +72,9 @@ func main() {
 func runCmd(ctx context.Context, orch *workflow.Orchestrator, args []string) {
 	requireArgs("run", args, 1)
 	fatalIf(orch.RunTickets(ctx, args))
+	for _, ticket := range args {
+		printNextSteps(orch, ticket)
+	}
 }
 
 func statusCmd(orch *workflow.Orchestrator, args []string) {
@@ -75,6 +86,9 @@ func statusCmd(orch *workflow.Orchestrator, args []string) {
 		ticket = args[0]
 	}
 	fatalIf(orch.Status(ticket))
+	if ticket != "" {
+		printNextSteps(orch, ticket)
+	}
 }
 
 func feedbackCmd(orch *workflow.Orchestrator, args []string) {
@@ -89,6 +103,7 @@ func feedbackCmd(orch *workflow.Orchestrator, args []string) {
 		fatalIf(errors.New("feedback requires --message"))
 	}
 	fatalIf(orch.Feedback(ticket, *message))
+	printNextSteps(orch, ticket)
 }
 
 func requireArgs(cmd string, args []string, min int) {
@@ -116,4 +131,13 @@ Commands:
   ai-orchestrator reject <ticket-number>
   ai-orchestrator resume <ticket-number>
   ai-orchestrator pr <ticket-number>`)
+}
+
+func printNextSteps(orch *workflow.Orchestrator, ticket string) {
+	msg, err := orch.NextSteps(ticket)
+	if err != nil {
+		return
+	}
+	fmt.Println()
+	fmt.Println(msg)
 }

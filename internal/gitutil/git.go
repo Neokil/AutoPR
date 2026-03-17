@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"ai-ticket-worker/internal/shell"
@@ -47,7 +48,23 @@ func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (stri
 	}
 	res, err := shell.Run(ctx, repoRoot, nil, "", "gh", args...)
 	if err != nil {
+		msg := strings.TrimSpace(res.Stderr)
+		if msg != "" {
+			return "", fmt.Errorf("%w\nstderr: %s", err, msg)
+		}
 		return "", err
 	}
 	return strings.TrimSpace(res.Stdout), nil
+}
+
+func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
+	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "rev-list", "--count", fmt.Sprintf("%s..HEAD", baseRef))
+	if err != nil {
+		return 0, err
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(res.Stdout))
+	if err != nil {
+		return 0, fmt.Errorf("parse ahead count: %w", err)
+	}
+	return n, nil
 }
