@@ -13,7 +13,14 @@ export function MarkdownView({ content, emptyText = "No content." }: Props) {
   }
   return (
     <div className="markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{trimmed}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer" />
+        }}
+      >
+        {trimmed}
+      </ReactMarkdown>
     </div>
   );
 }
