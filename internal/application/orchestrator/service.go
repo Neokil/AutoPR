@@ -17,6 +17,7 @@ type Service interface {
 	Reject(ticketNumber string) error
 	ResumeTicket(ctx context.Context, ticketNumber string) error
 	GeneratePR(ctx context.Context, ticketNumber string) error
+	ApplyPRComments(ctx context.Context, ticketNumber string) error
 	CleanupDone(ctx context.Context) error
 	CleanupAll(ctx context.Context) error
 	CleanupTicket(ctx context.Context, ticketNumber string) error
@@ -57,6 +58,10 @@ func (s *WorkflowService) ResumeTicket(ctx context.Context, ticketNumber string)
 
 func (s *WorkflowService) GeneratePR(ctx context.Context, ticketNumber string) error {
 	return s.orch.GeneratePR(ctx, ticketNumber)
+}
+
+func (s *WorkflowService) ApplyPRComments(ctx context.Context, ticketNumber string) error {
+	return s.orch.ApplyPRComments(ctx, ticketNumber)
 }
 
 func (s *WorkflowService) CleanupDone(ctx context.Context) error {

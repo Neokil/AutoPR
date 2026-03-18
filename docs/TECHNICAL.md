@@ -41,6 +41,7 @@ The project uses a layered structure to share logic across CLI, server, and web 
 - `POST /api/tickets/{id}/reject` with `{"repo_path":"..."}`
 - `POST /api/tickets/{id}/feedback` with `{"repo_path":"...","message":"..."}`
 - `POST /api/tickets/{id}/pr` with `{"repo_path":"..."}`
+- `POST /api/tickets/{id}/apply-pr-comments` with `{"repo_path":"..."}`
 - `POST /api/tickets/{id}/cleanup` with `{"repo_path":"..."}`
 - `POST /api/cleanup` with `{"repo_path":"...","scope":"done|all"}`
 

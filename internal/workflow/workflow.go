@@ -2,11 +2,13 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ai-ticket-worker/internal/config"
@@ -183,12 +185,12 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
 	case models.StatePRReady:
 		if strings.TrimSpace(st.PRURL) != "" {
-			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review PR markdown: %s\n  2. Review GitHub PR: %s", st.TicketNumber, st.PRPath, st.PRURL), nil
+			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review PR markdown: %s\n  2. Review GitHub PR: %s\n  3. Apply open review comments: auto-pr apply-pr-comments %s", st.TicketNumber, st.PRPath, st.PRURL, st.TicketNumber), nil
 		}
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Generate/create PR: auto-pr pr %s\n  2. Review PR markdown: %s", st.TicketNumber, st.TicketNumber, st.PRPath), nil
 	case models.StateDone:
 		if strings.TrimSpace(st.PRURL) != "" {
-			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Review GitHub PR: %s", st.TicketNumber, st.PRPath, st.PRURL), nil
+			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Review GitHub PR: %s\n  3. Apply open review comments: auto-pr apply-pr-comments %s", st.TicketNumber, st.PRPath, st.PRURL, st.TicketNumber), nil
 		}
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Check current state: auto-pr status %s", st.TicketNumber, st.PRPath, st.TicketNumber), nil
 	case models.StateFailed:
@@ -262,6 +264,108 @@ func (o *Orchestrator) GeneratePR(ctx context.Context, ticketNumber string) erro
 	}
 	st.Status = models.StateDone
 	if err := o.Store.SaveState(ticketNumber, st); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string) error {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(st.PRURL) == "" {
+		return fmt.Errorf("ticket %s has no PR URL; create the PR first with auto-pr pr %s", ticketNumber, ticketNumber)
+	}
+	ticket, err := o.Store.LoadTicket(ticketNumber)
+	if err != nil {
+		return err
+	}
+
+	comments, err := o.fetchOpenPRComments(ctx, st.PRURL, st.WorktreePath)
+	if err != nil {
+		return err
+	}
+	if len(comments) == 0 {
+		_ = markdown.AppendSection(st.LogPath, "PR Comments", "No open PR review comments found.")
+		fmt.Printf("ticket %s has no open PR review comments\n", ticketNumber)
+		return nil
+	}
+
+	commentContext := formatPRCommentContext(comments)
+	_ = markdown.AppendSection(st.LogPath, "PR Comments", commentContext)
+
+	prevStatus := st.Status
+	st.Status = models.StateImplementing
+	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
+		return err
+	}
+
+	impl, err := o.Provider.Implement(ctx, providers.ImplementRequest{
+		Ticket:            ticket,
+		RepoPath:          o.RepoRoot,
+		WorktreePath:      st.WorktreePath,
+		GuidelinesPath:    config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg),
+		LogPath:           st.LogPath,
+		ProposalPath:      st.ProposalPath,
+		FinalSolutionPath: st.FinalPath,
+		FailureContext: "Address the following open GitHub PR review comments.\n" +
+			"Only implement requested changes that are relevant and correct.\n\n" + commentContext,
+	}, st.ProviderDirPath)
+	if err != nil {
+		st.Status = models.StateFailed
+		st.LastError = err.Error()
+		_ = markdown.AppendSection(st.LogPath, "Apply PR Comments Failed", err.Error())
+		_ = o.Store.SaveState(st.TicketNumber, st)
+		return err
+	}
+	if err := markdown.AppendSection(st.LogPath, "Apply PR Comments", impl.RawOut); err != nil {
+		return err
+	}
+	if err := markdown.Write(st.FinalPath, impl.Summary); err != nil {
+		return err
+	}
+
+	st.Status = models.StateValidating
+	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
+		return err
+	}
+	ok, checkOutput, err := o.runChecks(ctx, st)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		st.Status = models.StateFailed
+		st.LastError = "checks failed after applying PR comments"
+		_ = markdown.AppendSection(st.LogPath, "Validation Failed", checkOutput)
+		_ = o.Store.SaveState(st.TicketNumber, st)
+		return fmt.Errorf("ticket %s: checks failed after applying PR comments", st.TicketNumber)
+	}
+	_ = markdown.AppendSection(st.LogPath, "Validation", "All checks passed after applying PR comments.")
+
+	if err := o.ensureCommitForTicket(ctx, st, ticket); err != nil {
+		st.Status = models.StateFailed
+		st.LastError = err.Error()
+		_ = markdown.AppendSection(st.LogPath, "Commit Failed", err.Error())
+		_ = o.Store.SaveState(st.TicketNumber, st)
+		return err
+	}
+	if err := gitutil.PushBranch(ctx, st.WorktreePath, st.BranchName); err != nil {
+		msg := fmt.Sprintf("failed to push updates for ticket %s: %v", st.TicketNumber, err)
+		st.Status = models.StateFailed
+		st.LastError = msg
+		_ = markdown.AppendSection(st.LogPath, "PR Update Push Failed", msg)
+		_ = o.Store.SaveState(st.TicketNumber, st)
+		return fmt.Errorf(msg)
+	}
+	_ = markdown.AppendSection(st.LogPath, "PR Updated", fmt.Sprintf("Pushed updates for %s", st.PRURL))
+
+	st.Status = prevStatus
+	st.LastError = ""
+	if st.Status == "" {
+		st.Status = models.StateDone
+	}
+	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
 		return err
 	}
 	return nil
@@ -680,6 +784,146 @@ func (o *Orchestrator) validatePRPrereqs(ctx context.Context, st models.TicketSt
 		return fmt.Errorf("ticket %s is in state %s and not ready for PR yet.\n\nNext steps:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.Status, st.TicketNumber, st.TicketNumber)
 	}
 	return nil
+}
+
+type ghReviewThreadComment struct {
+	Author struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	Body string `json:"body"`
+	Path string `json:"path"`
+}
+
+type ghReviewThread struct {
+	IsResolved bool `json:"isResolved"`
+	Comments   struct {
+		Nodes []ghReviewThreadComment `json:"nodes"`
+	} `json:"comments"`
+}
+
+type ghReviewThreadsResponse struct {
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+	Data struct {
+		Repository struct {
+			PullRequest struct {
+				ReviewThreads struct {
+					Nodes []ghReviewThread `json:"nodes"`
+				} `json:"reviewThreads"`
+			} `json:"pullRequest"`
+		} `json:"repository"`
+	} `json:"data"`
+}
+
+type prComment struct {
+	Author string
+	Path   string
+	Body   string
+}
+
+func (o *Orchestrator) fetchOpenPRComments(ctx context.Context, prURL, worktreePath string) ([]prComment, error) {
+	owner, repo, number, err := parsePRURL(prURL)
+	if err != nil {
+		return nil, err
+	}
+	query := `query($owner:String!, $repo:String!, $number:Int!) {
+  repository(owner:$owner, name:$repo) {
+    pullRequest(number:$number) {
+      reviewThreads(first:100) {
+        nodes {
+          isResolved
+          comments(first:20) {
+            nodes {
+              author { login }
+              body
+              path
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+	var payload struct {
+		Query     string                 `json:"query"`
+		Variables map[string]interface{} `json:"variables"`
+	}
+	payload.Query = query
+	payload.Variables = map[string]interface{}{
+		"owner":  owner,
+		"repo":   repo,
+		"number": number,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	res, err := shell.Run(ctx, worktreePath, nil, string(b), "gh", "api", "graphql", "--input", "-")
+	if err != nil {
+		return nil, fmt.Errorf("fetch open PR comments: %w", err)
+	}
+
+	var out ghReviewThreadsResponse
+	if err := json.Unmarshal([]byte(res.Stdout), &out); err != nil {
+		return nil, fmt.Errorf("parse PR comments response: %w", err)
+	}
+	if len(out.Errors) > 0 {
+		msg := strings.TrimSpace(out.Errors[0].Message)
+		if msg == "" {
+			msg = "unknown graphql error"
+		}
+		return nil, fmt.Errorf("fetch open PR comments: %s", msg)
+	}
+	threads := out.Data.Repository.PullRequest.ReviewThreads.Nodes
+	comments := make([]prComment, 0)
+	for _, t := range threads {
+		if t.IsResolved {
+			continue
+		}
+		for _, c := range t.Comments.Nodes {
+			body := strings.TrimSpace(c.Body)
+			if body == "" {
+				continue
+			}
+			comments = append(comments, prComment{
+				Author: strings.TrimSpace(c.Author.Login),
+				Path:   strings.TrimSpace(c.Path),
+				Body:   body,
+			})
+		}
+	}
+	return comments, nil
+}
+
+var prURLPattern = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)`)
+
+func parsePRURL(u string) (owner, repo string, number int, err error) {
+	m := prURLPattern.FindStringSubmatch(strings.TrimSpace(u))
+	if len(m) != 4 {
+		return "", "", 0, fmt.Errorf("unsupported PR URL format: %s", u)
+	}
+	n, convErr := strconv.Atoi(m[3])
+	if convErr != nil {
+		return "", "", 0, fmt.Errorf("parse PR number: %w", convErr)
+	}
+	return m[1], m[2], n, nil
+}
+
+func formatPRCommentContext(comments []prComment) string {
+	var b strings.Builder
+	for i, c := range comments {
+		fmt.Fprintf(&b, "%d. ", i+1)
+		if c.Path != "" {
+			fmt.Fprintf(&b, "[%s] ", c.Path)
+		}
+		if c.Author != "" {
+			fmt.Fprintf(&b, "@%s: ", c.Author)
+		}
+		b.WriteString(c.Body)
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func (o *Orchestrator) ensureBranchHasCommits(ctx context.Context, st models.TicketState) error {

@@ -27,15 +27,16 @@ import (
 )
 
 const (
-	jobRun         = "run"
-	jobResume      = "resume"
-	jobApprove     = "approve"
-	jobReject      = "reject"
-	jobFeedback    = "feedback"
-	jobPR          = "pr"
-	jobCleanup     = "cleanup_ticket"
-	jobCleanupDone = "cleanup_done"
-	jobCleanupAll  = "cleanup_all"
+	jobRun             = "run"
+	jobResume          = "resume"
+	jobApprove         = "approve"
+	jobReject          = "reject"
+	jobFeedback        = "feedback"
+	jobPR              = "pr"
+	jobApplyPRComments = "apply_pr_comments"
+	jobCleanup         = "cleanup_ticket"
+	jobCleanupDone     = "cleanup_done"
+	jobCleanupAll      = "cleanup_all"
 )
 
 type repoRuntime struct {
@@ -145,6 +146,7 @@ func main() {
 	mux.HandleFunc("POST /api/tickets/{id}/reject", s.handleRejectTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/feedback", s.handleFeedbackTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/pr", s.handlePRTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/apply-pr-comments", s.handleApplyPRComments)
 	mux.HandleFunc("POST /api/tickets/{id}/cleanup", s.handleCleanupTicket)
 	mux.HandleFunc("POST /api/cleanup", s.handleCleanupScope)
 	mux.HandleFunc("/", s.handleFrontend)
@@ -264,6 +266,15 @@ func (s *server) handlePRTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.enqueueAndRespond(w, jobPR, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleApplyPRComments(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobApplyPRComments, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
@@ -664,6 +675,11 @@ func (s *server) executeJob(job queuedJob) error {
 		}
 	case jobPR:
 		err = rt.svc.GeneratePR(context.Background(), ticket)
+		if err == nil {
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+		}
+	case jobApplyPRComments:
+		err = rt.svc.ApplyPRComments(context.Background(), ticket)
 		if err == nil {
 			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}

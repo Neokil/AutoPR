@@ -46,6 +46,7 @@ auto-pr feedback <ticket-number> --message "..."
 auto-pr reject <ticket-number>
 auto-pr resume <ticket-number>
 auto-pr pr <ticket-number>
+auto-pr apply-pr-comments <ticket-number>
 auto-pr cleanup <ticket-number>
 auto-pr cleanup --done
 auto-pr cleanup --all

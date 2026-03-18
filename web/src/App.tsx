@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   approveTicket,
+  applyPRComments,
   cleanupAll,
   cleanupDone,
   cleanupTicket,
@@ -22,7 +23,7 @@ function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
 }
 
-type Action = "run" | "resume" | "approve" | "reject" | "pr" | "cleanup";
+type Action = "run" | "resume" | "approve" | "reject" | "pr" | "apply_pr_comments" | "cleanup";
 
 function allowedActions(status: string): Action[] {
   switch (status) {
@@ -34,9 +35,9 @@ function allowedActions(status: string): Action[] {
     case "failed":
       return ["resume", "cleanup"];
     case "pr_ready":
-      return ["pr", "cleanup"];
+      return ["pr", "apply_pr_comments", "cleanup"];
     case "done":
-      return ["cleanup"];
+      return ["apply_pr_comments", "cleanup"];
     case "investigating":
     case "implementing":
     case "validating":
@@ -379,6 +380,16 @@ export function App() {
                 {allowedActions(selectedSummary.status).includes("pr") ? (
                   <button onClick={() => void queueAction(() => createPR(selectedSummary.repo_path, selectedSummary.ticket_number))}>
                     Create PR
+                  </button>
+                ) : null}
+                {allowedActions(selectedSummary.status).includes("apply_pr_comments") ? (
+                  <button
+                    onClick={() =>
+                      void queueAction(() => applyPRComments(selectedSummary.repo_path, selectedSummary.ticket_number))
+                    }
+                    disabled={!selectedSummary.pr_url}
+                  >
+                    Apply PR Comments
                   </button>
                 ) : null}
                 {allowedActions(selectedSummary.status).includes("cleanup") ? (

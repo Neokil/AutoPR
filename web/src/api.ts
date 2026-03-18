@@ -94,6 +94,10 @@ export function createPR(repoPath: string, ticket: string): Promise<AcceptedJob>
   return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/pr`, { repo_path: repoPath });
 }
 
+export function applyPRComments(repoPath: string, ticket: string): Promise<AcceptedJob> {
+  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/apply-pr-comments`, { repo_path: repoPath });
+}
+
 export function cleanupTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
   return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/cleanup`, { repo_path: repoPath });
 }

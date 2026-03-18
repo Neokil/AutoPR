@@ -62,6 +62,10 @@ func main() {
 		requireArgs("pr", os.Args[2:], 1)
 		ticket := os.Args[2]
 		fatalIf(svc.GeneratePR(ctx, ticket))
+	case "apply-pr-comments":
+		requireArgs("apply-pr-comments", os.Args[2:], 1)
+		ticket := os.Args[2]
+		fatalIf(svc.ApplyPRComments(ctx, ticket))
 	case "cleanup":
 		cleanupCmd(ctx, svc, os.Args[2:])
 	default:
@@ -165,6 +169,7 @@ Commands:
   auto-pr reject <ticket-number>
   auto-pr resume <ticket-number>
   auto-pr pr <ticket-number>
+  auto-pr apply-pr-comments <ticket-number>
   auto-pr cleanup <ticket-number>
   auto-pr cleanup --done
   auto-pr cleanup --all`)

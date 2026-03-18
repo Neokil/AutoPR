@@ -105,6 +105,11 @@ func (s *RemoteService) GeneratePR(_ context.Context, ticketNumber string) error
 	return err
 }
 
+func (s *RemoteService) ApplyPRComments(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/apply-pr-comments", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "apply pr comments", ticketNumber)
+	return err
+}
+
 func (s *RemoteService) CleanupDone(_ context.Context) error {
 	_, err := s.enqueueOnly(http.MethodPost, "/api/cleanup", api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"}, "cleanup done", "")
 	return err
