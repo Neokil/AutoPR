@@ -22,6 +22,7 @@ import (
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/contracts/api"
 	"ai-ticket-worker/internal/gitutil"
+	"ai-ticket-worker/internal/models"
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/shell"
@@ -591,6 +592,12 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 }
 
 func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket, message, scope string) {
+	if action == jobRun && strings.TrimSpace(ticket) != "" {
+		if err := s.ensureQueuedTicket(repoID, repoPath, ticket); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
 	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, scope)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -632,6 +639,32 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 		})
 		writeError(w, http.StatusServiceUnavailable, "job queue is full")
 	}
+}
+
+func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
+	rt, err := s.runtimeForRepo(repoRoot)
+	if err != nil {
+		return err
+	}
+	if _, err := rt.store.LoadState(ticket); err == nil {
+		return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	paths := rt.store.Paths(ticket)
+	st := models.NewTicketState(ticket)
+	st.ProposalPath = paths["proposal"]
+	st.FinalPath = paths["final"]
+	st.LogPath = paths["log"]
+	st.PRPath = paths["pr"]
+	st.ChecksLogPath = paths["checks"]
+	st.TicketJSONPath = paths["ticket"]
+	st.ProviderDirPath = paths["providerDir"]
+	if err := rt.store.SaveState(ticket, st); err != nil {
+		return err
+	}
+	return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 }
 
 func (s *server) workerLoop() {
