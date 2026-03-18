@@ -41,7 +41,7 @@ install: build
 	fi; \
 	for f in ticket.md.tmpl investigate.md.tmpl implement.md.tmpl pr.md.tmpl; do \
 		if [ ! -f "$$PROMPTS_DIR/$$f" ]; then \
-			cp "$(CURDIR)/templates/prompts/$$f" "$$PROMPTS_DIR/$$f"; \
+			cp "$(CURDIR)/internal/providers/prompts/$$f" "$$PROMPTS_DIR/$$f"; \
 			echo "scaffolded $$PROMPTS_DIR/$$f"; \
 		else \
 			echo "kept existing $$PROMPTS_DIR/$$f"; \
