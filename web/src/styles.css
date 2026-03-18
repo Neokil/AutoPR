@@ -68,6 +68,20 @@ body {
   gap: 12px;
 }
 
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.brand-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
 .repo-form {
   display: flex;
   gap: 8px;

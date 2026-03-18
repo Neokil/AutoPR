@@ -283,7 +283,10 @@ export function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>auto-pr</h1>
+        <h1 className="brand">
+          <img src="/autopr.png" alt="auto-pr" className="brand-icon" />
+          <span>auto-pr</span>
+        </h1>
         <div className="button-row">
           <button onClick={() => void refreshTickets()} disabled={loading}>
             Refresh All Tickets
