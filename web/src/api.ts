@@ -51,7 +51,11 @@ export async function getJob(jobId: string): Promise<Job> {
   return requestJSON<Job>(`/api/jobs/${encodeURIComponent(jobId)}`);
 }
 
-export function connectEvents(onEvent: (event: ServerEvent) => void, onError?: () => void): EventSource {
+export function connectEvents(
+  onEvent: (event: ServerEvent) => void,
+  onError?: () => void,
+  onOpen?: () => void
+): EventSource {
   const es = new EventSource(apiUrl("/api/events"));
   const handler = (evt: MessageEvent<string>) => {
     try {
@@ -67,6 +71,9 @@ export function connectEvents(onEvent: (event: ServerEvent) => void, onError?: (
   es.addEventListener("repo_tickets_synced", handler as EventListener);
   if (onError) {
     es.onerror = onError;
+  }
+  if (onOpen) {
+    es.onopen = onOpen;
   }
   return es;
 }

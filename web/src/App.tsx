@@ -133,6 +133,7 @@ export function App() {
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
   const activeJobIdRef = useRef<string>("");
   const fullRefreshScheduledRef = useRef(false);
+  const reconnectErrorMessage = "event stream connection lost; reconnecting";
 
   useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
@@ -150,7 +151,10 @@ export function App() {
         void handleServerEvent(evt);
       },
       () => {
-        setError("event stream connection lost; reconnecting");
+        setError(reconnectErrorMessage);
+      },
+      () => {
+        setError((current) => (current === reconnectErrorMessage ? "" : current));
       }
     );
     return () => stream.close();
