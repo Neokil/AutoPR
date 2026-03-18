@@ -1,6 +1,6 @@
 SHELL := /bin/zsh
 
-.PHONY: build clean-build register-alias unregister-alias init-config remove-config register-service unregister-service install uninstall
+.PHONY: build clean-build register-alias unregister-alias init-config remove-config register-service unregister-service refresh-service service-status service-logs install uninstall
 
 build:
 	@bash "$(CURDIR)/scripts/build.sh" "$(CURDIR)"
@@ -25,6 +25,15 @@ register-service: build init-config
 
 unregister-service:
 	@bash "$(CURDIR)/scripts/unregister_service.sh" "$(CURDIR)"
+
+refresh-service: build
+	@bash "$(CURDIR)/scripts/refresh_service.sh" "$(CURDIR)"
+
+service-status:
+	@bash "$(CURDIR)/scripts/service_status.sh" "$(CURDIR)"
+
+service-logs:
+	@bash "$(CURDIR)/scripts/service_logs.sh" "$(CURDIR)"
 
 install: build register-alias init-config register-service
 	@echo "install complete"

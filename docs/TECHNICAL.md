@@ -82,6 +82,9 @@ Install behavior:
 
 - `make install` runs `build`, `register-alias`, `init-config`, and `register-service`.
 - `make uninstall` runs `unregister-service`, `unregister-alias`, `remove-config`, and `clean-build`.
+- `make refresh-service` rebuilds `auto-prd` and restarts the registered daemon.
+- `make service-status` reports the registered daemon state through `launchctl` or `systemctl --user`.
+- `make service-logs` tails `~/.auto-pr/server/logs/stdout.log` and `stderr.log`.
 - `make init-config` scaffolds `~/.auto-pr/config.yaml` and default prompt templates if they do not exist.
 - `make remove-config` removes the `~/.auto-pr` scaffolding directory.
 - `make install` creates `~/.auto-pr/server/logs/` for daemon stdout/stderr.

@@ -133,6 +133,9 @@ Automatic cleanup behavior:
 
 Service management:
 
+- `make refresh-service`
+- `make service-status`
+- `make service-logs`
 - macOS: `launchctl kickstart -k gui/$(id -u)/com.autopr.auto-prd`
 - Linux: `systemctl --user restart auto-prd.service`
 
