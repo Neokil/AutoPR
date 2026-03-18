@@ -10,6 +10,7 @@ export interface TicketSummary {
   approved: boolean;
   updated_at: string;
   pr_url?: string;
+  jobs?: Job[];
 }
 
 export interface TicketState {

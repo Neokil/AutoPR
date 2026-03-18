@@ -24,6 +24,21 @@ function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
 }
 
+function summarizeJobAction(action: string): string {
+  switch (action) {
+    case "apply_pr_comments":
+      return "apply comments";
+    case "cleanup_ticket":
+      return "cleanup";
+    case "cleanup_done":
+      return "cleanup done";
+    case "cleanup_all":
+      return "cleanup all";
+    default:
+      return action.split("_").join(" ");
+  }
+}
+
 type Action = "run" | "resume" | "approve" | "reject" | "pr" | "apply_pr_comments" | "cleanup";
 
 function allowedActions(status: string): Action[] {
@@ -269,8 +284,39 @@ export function App() {
         }
         found = true;
         if (evt.type === "job") {
-          const isBusy = evt.status === "queued" || evt.status === "running";
-          return { ...t, busy: isBusy };
+          const nextJobs = [...(t.jobs ?? [])];
+          const jobIndex = evt.job_id ? nextJobs.findIndex((job) => job.id === evt.job_id) : -1;
+          const nextJob: Job = jobIndex >= 0
+            ? {
+                ...nextJobs[jobIndex],
+                status: evt.status === "queued" || evt.status === "running" || evt.status === "done" || evt.status === "failed"
+                  ? evt.status
+                  : nextJobs[jobIndex].status,
+                action: evt.action ?? nextJobs[jobIndex].action,
+                error: evt.error ?? nextJobs[jobIndex].error
+              }
+            : {
+                id: evt.job_id ?? "",
+                action: evt.action ?? "",
+                repo_id: evt.repo_id ?? t.repo_id,
+                repo_path: evt.repo_path ?? t.repo_path,
+                ticket_number: evt.ticket_number ?? t.ticket_number,
+                status:
+                  evt.status === "queued" || evt.status === "running" || evt.status === "done" || evt.status === "failed"
+                    ? evt.status
+                    : "queued",
+                scope: evt.scope,
+                error: evt.error,
+                created_at: new Date().toISOString()
+              };
+          if (jobIndex >= 0) {
+            nextJobs[jobIndex] = nextJob;
+          } else if (nextJob.id) {
+            nextJobs.unshift(nextJob);
+          }
+          nextJobs.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+          const isBusy = nextJobs.some((job) => job.status === "queued" || job.status === "running");
+          return { ...t, busy: isBusy, jobs: nextJobs };
         }
         if (evt.type === "ticket_updated") {
           return {
@@ -381,6 +427,15 @@ export function App() {
                       {t.status} {t.approved ? "· approved" : ""}
                     </span>
                   </div>
+                  {t.jobs && t.jobs.length > 0 ? (
+                    <div className="ticket-jobs-row">
+                      {t.jobs.map((job) => (
+                        <span key={job.id} className={`job-chip job-${job.status}`}>
+                          {summarizeJobAction(job.action)} · {job.status}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <span className="meta">{t.repo_path}</span>
                 </button>
               </li>

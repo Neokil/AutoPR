@@ -184,6 +184,44 @@ button:disabled {
   gap: 6px;
 }
 
+.ticket-jobs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.job-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--soft-border);
+  background: var(--soft-bg);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.job-chip.job-queued {
+  border-color: #d7b768;
+  color: #8a670f;
+}
+
+.job-chip.job-running {
+  border-color: #6ca8d9;
+  color: #1b5f97;
+}
+
+.job-chip.job-done {
+  border-color: #7fbe7a;
+  color: #2d7330;
+}
+
+.job-chip.job-failed {
+  border-color: #dc9b84;
+  color: #9b3d1e;
+}
+
 .spinner {
   width: 12px;
   height: 12px;

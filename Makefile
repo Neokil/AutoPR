@@ -1,9 +1,12 @@
 SHELL := /bin/zsh
 
-.PHONY: build clean-build register-alias unregister-alias init-config remove-config register-service unregister-service refresh-service service-status service-logs install uninstall
+.PHONY: build start clean-build register-alias unregister-alias init-config remove-config register-service unregister-service refresh-service service-status service-logs install uninstall
 
 build:
 	@bash "$(CURDIR)/scripts/build.sh" "$(CURDIR)"
+
+start: build
+	@bash "$(CURDIR)/scripts/start.sh" "$(CURDIR)"
 
 clean-build:
 	@bash "$(CURDIR)/scripts/clean_build.sh" "$(CURDIR)"

@@ -15,6 +15,7 @@ source ~/.zshrc
 
 `make install` is composed of these steps:
 
+- `make start`
 - `make build`
 - `make register-alias`
 - `make init-config`
@@ -42,7 +43,7 @@ On supported systems, `make install` also installs and starts the background dae
 2. If your platform is unsupported or service setup was skipped, start the server manually:
 
 ```bash
-auto-prd
+make start
 ```
 
 3. In your repository, schedule a run:

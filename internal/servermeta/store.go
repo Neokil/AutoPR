@@ -30,6 +30,7 @@ type TicketRecord struct {
 	Approved     bool      `json:"approved"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	PRURL        string    `json:"pr_url,omitempty"`
+	Jobs         []JobRecord `json:"jobs,omitempty"`
 }
 
 type Data struct {
@@ -161,16 +162,18 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	latestJobByTicket := map[string]JobRecord{}
+	jobsByTicket := map[string][]JobRecord{}
 	for _, job := range s.data.Jobs {
 		if job.RepoID == "" || job.TicketNumber == "" {
 			continue
 		}
 		key := ticketKey(job.RepoID, job.TicketNumber)
-		current, ok := latestJobByTicket[key]
-		if !ok || job.CreatedAt.After(current.CreatedAt) {
-			latestJobByTicket[key] = job
-		}
+		jobsByTicket[key] = append(jobsByTicket[key], job)
+	}
+	for key := range jobsByTicket {
+		sort.Slice(jobsByTicket[key], func(i, j int) bool {
+			return jobsByTicket[key][i].CreatedAt.After(jobsByTicket[key][j].CreatedAt)
+		})
 	}
 
 	out := make([]TicketRecord, 0, len(s.data.Tickets))
@@ -178,10 +181,13 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 		if repoID != "" && t.RepoID != repoID {
 			continue
 		}
-		if job, ok := latestJobByTicket[ticketKey(t.RepoID, t.TicketNumber)]; ok {
-			t.Busy = job.Status == "queued" || job.Status == "running"
-		} else {
-			t.Busy = false
+		t.Jobs = append([]JobRecord(nil), jobsByTicket[ticketKey(t.RepoID, t.TicketNumber)]...)
+		t.Busy = false
+		for _, job := range t.Jobs {
+			if job.Status == "queued" || job.Status == "running" {
+				t.Busy = true
+				break
+			}
 		}
 		out = append(out, t)
 	}
@@ -233,8 +239,11 @@ func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
 	switch status {
 	case "running":
 		rec.StartedAt = &now
-	case "done", "failed":
+	case "failed":
 		rec.FinishedAt = &now
+	case "done":
+		delete(s.data.Jobs, id)
+		return s.saveLocked()
 	}
 	rec.Status = status
 	rec.Error = strings.TrimSpace(errMsg)
