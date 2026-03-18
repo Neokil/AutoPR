@@ -17,6 +17,7 @@ type Config struct {
 	Provider       string                     `yaml:"provider"`
 	GuidelinesFile string                     `yaml:"guidelines_file"`
 	StateDirName   string                     `yaml:"state_dir_name"`
+	RepositoryDirs []string                   `yaml:"repository_directories"`
 	ServerPort     int                        `yaml:"server_port"`
 	ServerWorkers  int                        `yaml:"server_workers"`
 	CreatePR       bool                       `yaml:"create_pr"`
@@ -32,6 +33,7 @@ func Default() Config {
 	return Config{
 		Provider:       "codex",
 		StateDirName:   ".auto-pr",
+		RepositoryDirs: []string{},
 		ServerPort:     8080,
 		ServerWorkers:  4,
 		CreatePR:       true,
@@ -86,6 +88,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Providers == nil {
 		cfg.Providers = Default().Providers
+	}
+	if cfg.RepositoryDirs == nil {
+		cfg.RepositoryDirs = []string{}
 	}
 	return cfg, nil
 }

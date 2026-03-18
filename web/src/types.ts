@@ -84,3 +84,7 @@ export interface ServerEvent {
   scope?: string;
   error?: string;
 }
+
+export interface RepositoryListResponse {
+  repositories: string[];
+}

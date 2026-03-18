@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -134,6 +135,7 @@ func main() {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/repositories", s.handleListRepositories)
 	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
 	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
 	mux.HandleFunc("GET /api/tickets/{id}/events", s.handleTicketEvents)
@@ -374,6 +376,43 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 		"repo_id":   repoID,
 		"repo_path": repoRoot,
 		"tickets":   s.meta.ListTickets(repoID),
+	})
+}
+
+func (s *server) handleListRepositories(w http.ResponseWriter, r *http.Request) {
+	configured := discoverRepositoriesFromConfig(s.cfg.RepositoryDirs)
+	seen := s.meta.ListRepos()
+	paths := make([]string, 0, len(configured)+len(seen))
+	seenPaths := map[string]struct{}{}
+	for _, p := range configured {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		if _, ok := seenPaths[abs]; ok {
+			continue
+		}
+		seenPaths[abs] = struct{}{}
+		paths = append(paths, abs)
+	}
+	for _, rec := range seen {
+		p := strings.TrimSpace(rec.Path)
+		if p == "" {
+			continue
+		}
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		if _, ok := seenPaths[abs]; ok {
+			continue
+		}
+		seenPaths[abs] = struct{}{}
+		paths = append(paths, abs)
+	}
+	sort.Strings(paths)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"repositories": paths,
 	})
 }
 
@@ -928,6 +967,72 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rec, r)
 		fmt.Printf("%s %s -> %d (%s)\n", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
 	})
+}
+
+func discoverRepositoriesFromConfig(entries []string) []string {
+	out := []string{}
+	seen := map[string]struct{}{}
+	for _, raw := range entries {
+		root := strings.TrimSpace(raw)
+		if root == "" {
+			continue
+		}
+		root = expandHome(root)
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		if isGitRepositoryDir(absRoot) {
+			if _, ok := seen[absRoot]; !ok {
+				seen[absRoot] = struct{}{}
+				out = append(out, absRoot)
+			}
+			continue
+		}
+		children, err := os.ReadDir(absRoot)
+		if err != nil {
+			continue
+		}
+		for _, child := range children {
+			if !child.IsDir() {
+				continue
+			}
+			candidate := filepath.Join(absRoot, child.Name())
+			if !isGitRepositoryDir(candidate) {
+				continue
+			}
+			if _, ok := seen[candidate]; ok {
+				continue
+			}
+			seen[candidate] = struct{}{}
+			out = append(out, candidate)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func expandHome(path string) string {
+	if path == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			return home
+		}
+		return path
+	}
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(path, "~/"))
+		}
+	}
+	return path
+}
+
+func isGitRepositoryDir(path string) bool {
+	st, err := os.Stat(filepath.Join(path, ".git"))
+	if err != nil {
+		return false
+	}
+	return st.IsDir() || st.Mode().IsRegular()
 }
 
 func (s *server) addSubscriber() (string, chan serverEvent) {

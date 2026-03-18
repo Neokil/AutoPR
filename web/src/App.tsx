@@ -12,6 +12,7 @@ import {
   getJob,
   getTicket,
   listTickets,
+  listRepositories,
   rejectTicket,
   resumeTicket,
   runTicket
@@ -86,6 +87,7 @@ export function App() {
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
+  const [repositoryOptions, setRepositoryOptions] = useState<string[]>([]);
   const [showAddTicketDialog, setShowAddTicketDialog] = useState(false);
   const [newTicketRepoPath, setNewTicketRepoPath] = useState("");
   const [newTicketNumber, setNewTicketNumber] = useState("");
@@ -93,7 +95,10 @@ export function App() {
   const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
   const knownRepoPaths = useMemo(() => {
     const seen = new Set<string>();
-    const paths: string[] = [];
+    const paths: string[] = [...repositoryOptions];
+    for (const p of repositoryOptions) {
+      seen.add(p);
+    }
     for (const t of tickets) {
       if (!seen.has(t.repo_path)) {
         seen.add(t.repo_path);
@@ -124,6 +129,7 @@ export function App() {
 
   useEffect(() => {
     void refreshTickets();
+    void refreshRepositories();
     const stream = connectEvents(
       (evt) => {
         void handleServerEvent(evt);
@@ -168,6 +174,15 @@ export function App() {
       if (showLoader) {
         setLoading(false);
       }
+    }
+  }
+
+  async function refreshRepositories() {
+    try {
+      const repos = await listRepositories();
+      setRepositoryOptions(repos);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to load repositories");
     }
   }
 
@@ -378,6 +393,7 @@ export function App() {
                 setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
                 setNewTicketNumber("");
                 setShowAddTicketDialog(true);
+                void refreshRepositories();
               }}
             >
               Add Ticket

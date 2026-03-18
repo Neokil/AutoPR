@@ -219,6 +219,22 @@ func (s *Store) GetJob(id string) (JobRecord, bool) {
 	return rec, ok
 }
 
+func (s *Store) ListRepos() []RepoRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]RepoRecord, 0, len(s.data.Repos))
+	for _, rec := range s.data.Repos {
+		out = append(out, rec)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].Path < out[j].Path
+		}
+		return out[i].UpdatedAt.After(out[j].UpdatedAt)
+	})
+	return out
+}
+
 func (s *Store) load() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err

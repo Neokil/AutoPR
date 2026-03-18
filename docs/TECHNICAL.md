@@ -29,6 +29,7 @@ The project uses a layered structure to share logic across CLI, server, and web 
 ## API Endpoints
 
 - `GET /api/health`
+- `GET /api/repositories`
 - `GET /api/events` (SSE stream)
 - `GET /api/tickets` (optional `repo_path`)
 - `GET /api/tickets/{id}?repo_path=/abs/path/to/repo`
@@ -62,6 +63,13 @@ Concurrency guarantees:
 Primary config:
 
 - `~/.auto-pr/config.yaml`
+
+Repository discovery config:
+
+- `repository_directories: []`
+- each entry may be:
+  - a git repository folder
+  - a folder containing git repository folders (direct children)
 
 ## Server Metadata
 
