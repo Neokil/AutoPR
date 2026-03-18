@@ -131,12 +131,16 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	activeByTicket := map[string]bool{}
+	latestJobByTicket := map[string]JobRecord{}
 	for _, job := range s.data.Jobs {
-		if (job.Status != "queued" && job.Status != "running") || job.RepoID == "" || job.TicketNumber == "" {
+		if job.RepoID == "" || job.TicketNumber == "" {
 			continue
 		}
-		activeByTicket[ticketKey(job.RepoID, job.TicketNumber)] = true
+		key := ticketKey(job.RepoID, job.TicketNumber)
+		current, ok := latestJobByTicket[key]
+		if !ok || job.CreatedAt.After(current.CreatedAt) {
+			latestJobByTicket[key] = job
+		}
 	}
 
 	out := make([]TicketRecord, 0, len(s.data.Tickets))
@@ -144,7 +148,11 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 		if repoID != "" && t.RepoID != repoID {
 			continue
 		}
-		t.Busy = activeByTicket[ticketKey(t.RepoID, t.TicketNumber)]
+		if job, ok := latestJobByTicket[ticketKey(t.RepoID, t.TicketNumber)]; ok {
+			t.Busy = job.Status == "queued" || job.Status == "running"
+		} else {
+			t.Busy = false
+		}
 		out = append(out, t)
 	}
 	sort.Slice(out, func(i, j int) bool {
