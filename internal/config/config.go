@@ -52,22 +52,6 @@ func ConfigPath() (string, error) {
 	return filepath.Join(home, ".auto-pr", "config.yaml"), nil
 }
 
-func legacyConfigPaths() ([]string, error) {
-	paths := []string{}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("resolve home dir: %w", err)
-	}
-	paths = append(paths, filepath.Join(home, ".ai-orchestrator", "config.yaml"))
-
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		base = filepath.Join(home, ".config")
-	}
-	paths = append(paths, filepath.Join(base, "ai-orchestrator", "config.yaml"))
-	return paths, nil
-}
-
 func Load() (Config, error) {
 	cfg := Default()
 	path, err := ConfigPath()
@@ -77,26 +61,7 @@ func Load() (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			legacyPaths, lerr := legacyConfigPaths()
-			if lerr != nil {
-				return cfg, lerr
-			}
-			found := false
-			for _, legacyPath := range legacyPaths {
-				legacyData, lerr := os.ReadFile(legacyPath)
-				if lerr != nil {
-					if os.IsNotExist(lerr) {
-						continue
-					}
-					return cfg, fmt.Errorf("read legacy config file %s: %w", legacyPath, lerr)
-				}
-				data = legacyData
-				found = true
-				break
-			}
-			if !found {
-				return cfg, nil
-			}
+			return cfg, nil
 		} else {
 			return cfg, fmt.Errorf("read config file %s: %w", path, err)
 		}

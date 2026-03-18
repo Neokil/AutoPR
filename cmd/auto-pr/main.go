@@ -19,10 +19,6 @@ func resolveServerURL() string {
 	if serverURL != "" {
 		return serverURL
 	}
-	serverURL = strings.TrimSpace(os.Getenv("AI_ORCHESTRATOR_SERVER_URL"))
-	if serverURL != "" {
-		return serverURL
-	}
 	return defaultServerURL
 }
 

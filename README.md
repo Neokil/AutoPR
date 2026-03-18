@@ -89,12 +89,6 @@ Add to `.gitignore`:
 .auto-pr/
 ```
 
-## Legacy Compatibility
-
-- Legacy binary names are still produced: `.build/ai-orchestrator`, `.build/orchestratord`
-- Legacy env var still works: `AI_ORCHESTRATOR_SERVER_URL`
-- Legacy config/state paths are still read when present
-
 ## More Details
 
 For API endpoints, architecture, runtime files, and implementation details, see:

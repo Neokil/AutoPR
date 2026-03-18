@@ -63,15 +63,7 @@ func DefaultPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
-	newPath := filepath.Join(home, ".auto-pr", "server", "state.json")
-	legacyPath := filepath.Join(home, ".ai-orchestrator", "server", "state.json")
-	if _, err := os.Stat(newPath); err == nil {
-		return newPath, nil
-	}
-	if _, err := os.Stat(legacyPath); err == nil {
-		return legacyPath, nil
-	}
-	return newPath, nil
+	return filepath.Join(home, ".auto-pr", "server", "state.json"), nil
 }
 
 func NewStore(path string) (*Store, error) {

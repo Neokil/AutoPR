@@ -19,11 +19,6 @@ The project uses a layered structure to share logic across CLI, server, and web 
 - `.build/auto-pr`
 - `.build/auto-prd`
 
-Compatibility copies:
-
-- `.build/ai-orchestrator`
-- `.build/orchestratord`
-
 ## Frontend
 
 - React app source: `web/`
@@ -67,20 +62,11 @@ Primary config:
 
 - `~/.auto-pr/config.yaml`
 
-Legacy config fallbacks:
-
-- `~/.ai-orchestrator/config.yaml`
-- `~/.config/ai-orchestrator/config.yaml`
-
 ## Server Metadata
 
 Primary path:
 
 - `~/.auto-pr/server/state.json`
-
-Legacy fallback:
-
-- `~/.ai-orchestrator/server/state.json`
 
 ## Ticket Artifacts
 
@@ -104,7 +90,3 @@ Common files:
 Preferred:
 
 - `AUTO_PR_SERVER_URL`
-
-Legacy compatibility:
-
-- `AI_ORCHESTRATOR_SERVER_URL`

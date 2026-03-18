@@ -10,8 +10,6 @@ build:
 	fi
 	@go build -o .build/auto-pr ./cmd/auto-pr
 	@go build -o .build/auto-prd ./cmd/auto-prd
-	@cp .build/auto-pr .build/ai-orchestrator
-	@cp .build/auto-prd .build/orchestratord
 
 install: build
 	@ZSHRC="$$HOME/.zshrc"; \
@@ -33,6 +31,6 @@ install: build
 		echo "$$END"; \
 	} > "$$ZSHRC"; \
 	rm -f "$$TMP"; \
-	echo "built .build/auto-pr and .build/auto-prd (plus legacy names)"; \
+	echo "built .build/auto-pr and .build/auto-prd"; \
 	echo "updated PATH in $$ZSHRC"; \
 	echo "run: source $$ZSHRC"
