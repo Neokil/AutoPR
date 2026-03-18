@@ -438,6 +438,11 @@ export function App() {
                       <span className="field-label">Priority</span>
                       <span>{priority || "-"}</span>
                     </section>
+
+                    <section className="ticket-section">
+                      <span className="field-label">Next Steps</span>
+                      <MarkdownView content={details?.next_steps ?? ""} emptyText="No next steps available." />
+                    </section>
                   </div>
                 </article>
               ) : null}
