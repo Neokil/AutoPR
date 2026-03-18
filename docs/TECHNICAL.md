@@ -80,8 +80,12 @@ Prompt template directory:
 
 Install behavior:
 
-- `make install` scaffolds `~/.auto-pr/config.yaml` and default prompt templates if they do not exist.
+- `make install` runs `build`, `register-alias`, `init-config`, and `register-service`.
+- `make init-config` scaffolds `~/.auto-pr/config.yaml` and default prompt templates if they do not exist.
+- `make install` creates `~/.auto-pr/server/logs/` for daemon stdout/stderr.
 - Existing files are kept as-is (non-destructive).
+- On macOS, `make install` writes `~/Library/LaunchAgents/com.autopr.auto-prd.plist` and starts it with `launchctl`.
+- On Linux with `systemd --user` available, `make install` writes `~/.config/systemd/user/auto-prd.service` and enables it.
 
 Repository discovery config:
 

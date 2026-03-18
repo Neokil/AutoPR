@@ -13,12 +13,25 @@ make install
 source ~/.zshrc
 ```
 
-`make install` also scaffolds (without overwriting existing files):
+`make install` is composed of these steps:
+
+- `make build`
+- `make register-alias`
+- `make init-config`
+- `make register-service`
+
+It also scaffolds (without overwriting existing files):
 
 - `~/.auto-pr/config.yaml` (from `config.example.yaml`)
 - `~/.auto-pr/prompts/*.md.tmpl` (default prompt templates)
+- `~/.auto-pr/server/logs/` for daemon stdout/stderr
 
-2. Start the server:
+On supported systems, `make install` also installs and starts the background daemon for the current user:
+
+- macOS: `~/Library/LaunchAgents/com.autopr.auto-prd.plist`
+- Linux with `systemd --user`: `~/.config/systemd/user/auto-prd.service`
+
+2. If your platform is unsupported or service setup was skipped, start the server manually:
 
 ```bash
 auto-prd
@@ -109,6 +122,11 @@ Automatic cleanup behavior:
 
 - For tickets with an open PR URL, the server periodically checks whether the PR is still open.
 - If the PR is closed or merged, the ticket is automatically cleaned up.
+
+Service management:
+
+- macOS: `launchctl kickstart -k gui/$(id -u)/com.autopr.auto-prd`
+- Linux: `systemctl --user restart auto-prd.service`
 
 ## More Details
 
