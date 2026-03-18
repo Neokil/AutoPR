@@ -1,48 +1,48 @@
 :root {
   font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   color-scheme: light dark;
-  --bg: radial-gradient(circle at top left, #f2f7ff, #f7f9fc 45%, #f0f2f5 100%);
-  --text: #101828;
-  --muted: #667085;
-  --panel-bg: #ffffffcc;
-  --panel-border: #d0d5dd;
+  --bg: radial-gradient(circle at top left, #f3fbe8, #f8fbf2 45%, #eef5e2 100%);
+  --text: #0f2f1b;
+  --muted: #486750;
+  --panel-bg: #f8fdf2d6;
+  --panel-border: #b8d39f;
   --input-bg: #ffffff;
-  --input-border: #d0d5dd;
-  --button-bg: #155eef;
-  --button-border: #155eef;
+  --input-border: #b8d39f;
+  --button-bg: #2f8f2a;
+  --button-border: #2f8f2a;
   --button-text: #ffffff;
-  --selected-ring: #cfe0ff;
+  --selected-ring: #c7e6ad;
   --card-bg: #ffffff;
-  --soft-bg: #f8f9fc;
-  --soft-border: #eaecf0;
-  --banner-info-bg: #eef4ff;
-  --banner-info-border: #b2ccff;
-  --banner-error-bg: #fff1f1;
-  --banner-error-border: #f4b5b5;
+  --soft-bg: #f3fbe8;
+  --soft-border: #d8e8c5;
+  --banner-info-bg: #eef9df;
+  --banner-info-border: #b3d98a;
+  --banner-error-bg: #fff3eb;
+  --banner-error-border: #f2c9ae;
   color: var(--text);
   background: var(--bg);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: radial-gradient(circle at top left, #172036, #101827 45%, #0a1020 100%);
-    --text: #e5ecf6;
-    --muted: #a4b0c2;
-    --panel-bg: #101a2dd6;
-    --panel-border: #2a3c5b;
-    --input-bg: #111f35;
-    --input-border: #2e466e;
-    --button-bg: #3b82f6;
-    --button-border: #3b82f6;
+    --bg: radial-gradient(circle at top left, #122314, #0e1b10 45%, #0b130c 100%);
+    --text: #e9f5de;
+    --muted: #acc8a2;
+    --panel-bg: #142517d8;
+    --panel-border: #355835;
+    --input-bg: #132815;
+    --input-border: #3b5f38;
+    --button-bg: #5ba92f;
+    --button-border: #5ba92f;
     --button-text: #f7fbff;
-    --selected-ring: #294f8f;
-    --card-bg: #111f35;
-    --soft-bg: #0d1a2f;
-    --soft-border: #273955;
-    --banner-info-bg: #10223f;
-    --banner-info-border: #2f4f85;
-    --banner-error-bg: #3a1318;
-    --banner-error-border: #7f2c36;
+    --selected-ring: #406b34;
+    --card-bg: #132815;
+    --soft-bg: #102110;
+    --soft-border: #2d4e2d;
+    --banner-info-bg: #1c3419;
+    --banner-info-border: #4d7d43;
+    --banner-error-bg: #3e2818;
+    --banner-error-border: #7c4d2b;
   }
 }
 
