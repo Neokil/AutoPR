@@ -63,9 +63,7 @@ export function App() {
   const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
   const activeJobIdRef = useRef<string>("");
-  const refreshInFlightRef = useRef(false);
-  const refreshQueuedRef = useRef(false);
-  const detailsRefreshNeededRef = useRef(false);
+  const fullRefreshScheduledRef = useRef(false);
 
   useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
@@ -178,41 +176,67 @@ export function App() {
       }
     }
 
-    const shouldRefreshDetails =
-      !!selected &&
-      ((evt.type === "repo_tickets_synced" && evt.repo_path === selected.repo_path) ||
-        (evt.repo_path === selected.repo_path && evt.ticket_number === selected.ticket_number));
-    requestRefresh(shouldRefreshDetails);
+    applyTicketEvent(evt);
+
+    if (evt.type === "repo_tickets_synced") {
+      scheduleFullRefresh();
+    }
+
+    if (
+      selected &&
+      evt.type === "ticket_updated" &&
+      evt.repo_path === selected.repo_path &&
+      evt.ticket_number === selected.ticket_number
+    ) {
+      await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
+    }
   }
 
-  function requestRefresh(withDetails: boolean) {
-    refreshQueuedRef.current = true;
-    if (withDetails) {
-      detailsRefreshNeededRef.current = true;
-    }
-    if (refreshInFlightRef.current) {
+  function applyTicketEvent(evt: ServerEvent) {
+    if (!evt.repo_id || !evt.ticket_number) {
       return;
     }
-    void runRefreshQueue();
+    const key = `${evt.repo_id}::${evt.ticket_number}`;
+    if (evt.type === "ticket_deleted") {
+      setTickets((current) => current.filter((t) => ticketKey(t) !== key));
+      return;
+    }
+    setTickets((current) => {
+      let found = false;
+      const next = current.map((t) => {
+        if (ticketKey(t) !== key) {
+          return t;
+        }
+        found = true;
+        if (evt.type === "job") {
+          const isBusy = evt.status === "queued" || evt.status === "running";
+          return { ...t, busy: isBusy };
+        }
+        if (evt.type === "ticket_updated") {
+          return {
+            ...t,
+            status: evt.status ?? t.status,
+            updated_at: new Date().toISOString()
+          };
+        }
+        return t;
+      });
+      if (!found && evt.type === "ticket_updated") {
+        scheduleFullRefresh();
+      }
+      return next;
+    });
   }
 
-  async function runRefreshQueue() {
-    refreshInFlightRef.current = true;
-    try {
-      while (refreshQueuedRef.current) {
-        refreshQueuedRef.current = false;
-        await refreshTickets(false);
-        if (detailsRefreshNeededRef.current) {
-          detailsRefreshNeededRef.current = false;
-          const selected = selectedSummaryRef.current;
-          if (selected) {
-            await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
-          }
-        }
-      }
-    } finally {
-      refreshInFlightRef.current = false;
+  function scheduleFullRefresh() {
+    if (fullRefreshScheduledRef.current) {
+      return;
     }
+    fullRefreshScheduledRef.current = true;
+    window.setTimeout(() => {
+      fullRefreshScheduledRef.current = false;
+      void refreshTickets(false);
+    }, 250);
   }
 
   async function queueAction(fn: () => Promise<{ job_id: string }>) {
