@@ -52,7 +52,7 @@ func PushBranch(ctx context.Context, repoRoot, branch string) error {
 }
 
 func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (string, error) {
-	args := []string{"pr", "create", "--title", title, "--body-file", bodyFile}
+	args := []string{"pr", "create", "--draft", "--assignee", "@me", "--title", title, "--body-file", bodyFile}
 	if base != "" {
 		args = append(args, "--base", base)
 	}
