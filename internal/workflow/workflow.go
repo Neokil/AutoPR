@@ -179,7 +179,9 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 		return "", err
 	}
 	switch st.Status {
-	case models.StateQueued, models.StateInvestigating, models.StateProposalReady, models.StateWaitingForHuman:
+	case models.StateQueued:
+		return "", nil
+	case models.StateInvestigating, models.StateProposalReady, models.StateWaitingForHuman:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review proposal: %s\n  2. Approve: auto-pr approve %s\n  3. Provide feedback: auto-pr feedback %s --message \"...\"\n  4. Reject: auto-pr reject %s", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
 	case models.StateImplementing, models.StateValidating:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
