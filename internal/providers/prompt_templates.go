@@ -18,20 +18,44 @@ const (
 	tplPR          = "pr.md.tmpl"
 )
 
+var promptTemplateNames = []string{
+	tplTicket,
+	tplInvestigate,
+	tplImplement,
+	tplPR,
+}
+
 //go:embed prompts/*.md.tmpl
 var embeddedPromptFS embed.FS
 
+func initializePromptTemplates(promptsDir string) error {
+	for _, name := range promptTemplateNames {
+		source, err := ensurePromptTemplate(promptsDir, name)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("prompt template %s: %s\n", name, source)
+	}
+	return nil
+}
+
 func renderPromptTemplate(promptsDir, name string, data interface{}) (string, error) {
-	defaultTemplate, err := defaultPromptTemplate(name)
-	if err != nil {
-		return "", err
-	}
 	templatePath := filepath.Join(promptsDir, name)
-	templateContent, err := readOrCreatePromptTemplate(templatePath, defaultTemplate)
+	templateContent, err := os.ReadFile(templatePath)
 	if err != nil {
-		return "", err
+		if os.IsNotExist(err) {
+			if _, ensureErr := ensurePromptTemplate(promptsDir, name); ensureErr != nil {
+				return "", ensureErr
+			}
+			templateContent, err = os.ReadFile(templatePath)
+			if err != nil {
+				return "", fmt.Errorf("read prompt template %s: %w", templatePath, err)
+			}
+		} else {
+			return "", fmt.Errorf("read prompt template %s: %w", templatePath, err)
+		}
 	}
-	tpl, err := template.New(name).Parse(templateContent)
+	tpl, err := template.New(name).Parse(string(templateContent))
 	if err != nil {
 		return "", fmt.Errorf("parse prompt template %s: %w", templatePath, err)
 	}
@@ -54,10 +78,25 @@ func defaultPromptTemplate(name string) (string, error) {
 	return string(data), nil
 }
 
-func readOrCreatePromptTemplate(path, fallback string) (string, error) {
+func ensurePromptTemplate(promptsDir, name string) (string, error) {
+	path := filepath.Join(promptsDir, name)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", fmt.Errorf("create prompts dir: %w", err)
 	}
+	if _, err := os.Stat(path); err == nil {
+		return "loaded from file", nil
+	}
+	fallback, err := defaultPromptTemplate(name)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, []byte(fallback), 0o644); err != nil {
+		return "", fmt.Errorf("write default prompt template %s: %w", path, err)
+	}
+	return "loaded from embedded template", nil
+}
+
+func readOrCreatePromptTemplate(path, fallback string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err == nil {
 		return string(data), nil

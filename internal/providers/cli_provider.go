@@ -36,6 +36,9 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := initializePromptTemplates(promptsDir); err != nil {
+		return nil, err
+	}
 	switch cfg.Provider {
 	case "gemini":
 		return &GeminiProvider{CLIProvider{name: "gemini", command: pc.Command, args: pc.Args, promptsDir: promptsDir}}, nil
