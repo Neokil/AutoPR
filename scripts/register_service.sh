@@ -4,6 +4,9 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh" "$@"
 
+echo "launchd / systemd related operations are currently disabled"
+exit 0
+
 launchd_label="com.autopr.auto-prd"
 systemd_unit="auto-prd.service"
 os_name="$(uname -s)"

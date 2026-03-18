@@ -4,6 +4,9 @@ set -euo pipefail
 
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh" "$@"
 
+echo "launchd / systemd related operations are currently disabled"
+exit 0
+
 stdout_log="${LOG_DIR}/stdout.log"
 stderr_log="${LOG_DIR}/stderr.log"
 

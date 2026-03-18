@@ -676,6 +676,9 @@ func (s *server) workerLoop() {
 			continue
 		}
 		s.setJobStatus(job.record, "done", "")
+		if job.record.Action == jobCleanup && strings.TrimSpace(job.record.TicketNumber) != "" {
+			_ = s.meta.DeleteJobs(job.record.RepoID, job.record.TicketNumber)
+		}
 	}
 }
 
@@ -867,6 +870,9 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 		})
 	}
 	if err := s.meta.ReplaceRepoTickets(repoID, records); err != nil {
+		return err
+	}
+	if err := s.meta.PruneTicketJobs(repoID, tickets); err != nil {
 		return err
 	}
 	if emitEvent {
@@ -1083,6 +1089,9 @@ func (s *server) autoCleanupTicket(rec servermeta.TicketRecord) error {
 		return err
 	}
 	if err := s.meta.DeleteTicket(rec.RepoID, rec.TicketNumber); err != nil {
+		return err
+	}
+	if err := s.meta.DeleteJobs(rec.RepoID, rec.TicketNumber); err != nil {
 		return err
 	}
 	s.broadcast(serverEvent{

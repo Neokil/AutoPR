@@ -112,6 +112,36 @@ func (s *Store) DeleteTicket(repoID, ticketNumber string) error {
 	return s.saveLocked()
 }
 
+func (s *Store) DeleteJobs(repoID, ticketNumber string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, job := range s.data.Jobs {
+		if job.RepoID == repoID && job.TicketNumber == ticketNumber {
+			delete(s.data.Jobs, id)
+		}
+	}
+	return s.saveLocked()
+}
+
+func (s *Store) PruneTicketJobs(repoID string, keepTickets []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keep := make(map[string]struct{}, len(keepTickets))
+	for _, ticket := range keepTickets {
+		keep[ticket] = struct{}{}
+	}
+	for id, job := range s.data.Jobs {
+		if job.RepoID != repoID || job.TicketNumber == "" {
+			continue
+		}
+		if _, ok := keep[job.TicketNumber]; ok {
+			continue
+		}
+		delete(s.data.Jobs, id)
+	}
+	return s.saveLocked()
+}
+
 func (s *Store) ReplaceRepoTickets(repoID string, tickets []TicketRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
