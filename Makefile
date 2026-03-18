@@ -8,8 +8,8 @@ build:
 		echo "building frontend (web/dist)"; \
 		cd web && npm install && npm run build; \
 	fi
-	@go build -o .build/auto-pr ./cmd/ai-orchestrator
-	@go build -o .build/auto-prd ./cmd/orchestratord
+	@go build -o .build/auto-pr ./cmd/auto-pr
+	@go build -o .build/auto-prd ./cmd/auto-prd
 	@cp .build/auto-pr .build/ai-orchestrator
 	@cp .build/auto-prd .build/orchestratord
 
