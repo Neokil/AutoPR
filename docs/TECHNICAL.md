@@ -64,6 +64,15 @@ Primary config:
 
 - `~/.auto-pr/config.yaml`
 
+Prompt template directory:
+
+- `~/.auto-pr/prompts/`
+- templates:
+  - `ticket.md.tmpl`
+  - `investigate.md.tmpl`
+  - `implement.md.tmpl`
+  - `pr.md.tmpl`
+
 Repository discovery config:
 
 - `repository_directories: []`

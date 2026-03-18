@@ -80,6 +80,15 @@ Server URL override for CLI:
 export AUTO_PR_SERVER_URL=http://127.0.0.1:8080
 ```
 
+Prompt templates (editable):
+
+- `~/.auto-pr/prompts/ticket.md.tmpl`
+- `~/.auto-pr/prompts/investigate.md.tmpl`
+- `~/.auto-pr/prompts/implement.md.tmpl`
+- `~/.auto-pr/prompts/pr.md.tmpl`
+
+These files are auto-created with defaults on first use and can be edited to tune agent queries.
+
 ## Storage
 
 - Global settings and server metadata: `~/.auto-pr/`

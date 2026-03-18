@@ -14,9 +14,10 @@ import (
 )
 
 type CLIProvider struct {
-	name    string
-	command string
-	args    []string
+	name       string
+	command    string
+	args       []string
+	promptsDir string
 }
 
 func NewFromConfig(cfg config.Config) (AIProvider, error) {
@@ -31,11 +32,15 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	if pc.Command == "" {
 		return nil, fmt.Errorf("provider %q command is empty", cfg.Provider)
 	}
+	promptsDir, err := config.PromptsDirPath()
+	if err != nil {
+		return nil, err
+	}
 	switch cfg.Provider {
 	case "gemini":
-		return &GeminiProvider{CLIProvider{name: "gemini", command: pc.Command, args: pc.Args}}, nil
+		return &GeminiProvider{CLIProvider{name: "gemini", command: pc.Command, args: pc.Args, promptsDir: promptsDir}}, nil
 	case "codex":
-		return &CodexProvider{CLIProvider{name: "codex", command: pc.Command, args: pc.Args}}, nil
+		return &CodexProvider{CLIProvider{name: "codex", command: pc.Command, args: pc.Args, promptsDir: promptsDir}}, nil
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", cfg.Provider)
 	}
@@ -44,37 +49,12 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 func (p *CLIProvider) Name() string { return p.name }
 
 func (p *CLIProvider) getTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error) {
-	prompt := fmt.Sprintf(`Fetch Shortcut ticket details for story/ticket number %s using your configured MCP integration.
-
-Return ONLY valid JSON (no markdown fences, no extra text) with this shape:
-{
-  "number": "%s",
-  "id": "string",
-  "title": "string",
-  "description": "string",
-  "acceptance_criteria": "string",
-  "priority": "string",
-  "url": "string",
-  "labels": ["string"],
-  "workflow_fields": {"key":"value"},
-  "parent_ticket": {
-    "id": "string",
-    "number": "string",
-    "title": "string",
-    "description": "string",
-    "url": "string"
-  },
-  "epic": {
-    "id": "string",
-    "title": "string",
-    "description": "string",
-    "url": "string"
-  }
-}
-
-Also fetch parent ticket and epic context if available in Shortcut.
-If unavailable, use null for parent_ticket/epic and empty values for unknown primitive fields.
-`, ticketNumber, ticketNumber)
+	prompt, err := renderPromptTemplate(p.promptsDir, tplTicket, map[string]string{
+		"TicketNumber": ticketNumber,
+	})
+	if err != nil {
+		return models.Ticket{}, "", err
+	}
 	out, err := p.runPrompt(ctx, repoPath, runtimeDir, "ticket", prompt)
 	if err != nil {
 		return models.Ticket{}, "", err
@@ -111,95 +91,6 @@ func (p *CLIProvider) runPrompt(ctx context.Context, worktreePath, runtimeDir, p
 	return res.Stdout, nil
 }
 
-func buildInvestigatePrompt(req InvestigateRequest) string {
-	return fmt.Sprintf(`You are assisting with software ticket investigation.
-
-Ticket #%s: %s
-URL: %s
-
-Description:
-%s
-
-Acceptance Criteria:
-%s
-
-Related Context:
-%s
-
-Repo path: %s
-Worktree path: %s
-Guidelines file: %s
-Existing log path: %s
-Existing proposal path: %s
-Human feedback: %s
-
-Return markdown with sections:
-- Problem Summary
-- Suggested Solution
-- Likely Files To Change
-- Risks
-- Test Plan
-- Open Questions
-`, req.Ticket.Number, req.Ticket.Title, req.Ticket.URL, req.Ticket.Description, req.Ticket.AcceptanceCriteria, renderTicketContext(req.Ticket), req.RepoPath, req.WorktreePath, req.GuidelinesPath, req.LogPath, req.ProposalPath, req.Feedback)
-}
-
-func buildImplementPrompt(req ImplementRequest) string {
-	return fmt.Sprintf(`Implement the approved solution for the following ticket in this worktree.
-
-Ticket #%s: %s
-Description:
-%s
-
-Related Context:
-%s
-
-Use proposal at: %s
-Use log at: %s
-Guidelines file: %s
-
-If validation failed previously, address these failures:
-%s
-
-Before you finish, automatically detect and run this project's formatting and linting commands directly in the worktree.
-Do not rely on preconfigured command lists.
-Discover commands from the repository itself (for example package scripts, Makefile targets, tool config files, or language-native defaults).
-Prefer project-defined commands when available, and only fall back to sensible language defaults if no project command is defined.
-If a command fails, fix the code and re-run until it passes or clearly report blockers.
-
-After making changes, return markdown with sections:
-- Changes Made
-- Notable Files Changed
-- Remaining Risks
-- Tests To Run
-`, req.Ticket.Number, req.Ticket.Title, req.Ticket.Description, renderTicketContext(req.Ticket), req.ProposalPath, req.LogPath, req.GuidelinesPath, req.FailureContext)
-}
-
-func buildPRPrompt(req PRRequest) string {
-	return fmt.Sprintf(`Generate a PR description in markdown.
-
-Ticket #%s: %s
-Description:
-%s
-
-Related Context:
-%s
-
-Use these files as source of truth:
-- worktree: %s
-- log: %s
-- proposal: %s
-- final solution: %s
-- checks: %s
-
-Include sections:
-- Summary
-- Problem Being Solved
-- Implementation Overview
-- Risks / Follow-ups
-- Test Failures / Blockers (only when checks/tests failed)
-`, req.Ticket.Number, req.Ticket.Title, req.Ticket.Description, renderTicketContext(req.Ticket), req.WorktreePath, req.LogPath, req.ProposalPath, req.FinalSolutionPath, req.ChecksLogPath)
-}
-
 func renderTicketContext(ticket models.Ticket) string {
 	var b strings.Builder
 	if ticket.ParentTicket != nil {
@@ -225,7 +116,24 @@ func (p *GeminiProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, 
 }
 
 func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", buildInvestigatePrompt(req))
+	prompt, err := renderPromptTemplate(p.promptsDir, tplInvestigate, map[string]string{
+		"TicketNumber":             req.Ticket.Number,
+		"TicketTitle":              req.Ticket.Title,
+		"TicketURL":                req.Ticket.URL,
+		"TicketDescription":        req.Ticket.Description,
+		"TicketAcceptanceCriteria": req.Ticket.AcceptanceCriteria,
+		"RelatedContext":           renderTicketContext(req.Ticket),
+		"RepoPath":                 req.RepoPath,
+		"WorktreePath":             req.WorktreePath,
+		"GuidelinesPath":           req.GuidelinesPath,
+		"LogPath":                  req.LogPath,
+		"ProposalPath":             req.ProposalPath,
+		"Feedback":                 req.Feedback,
+	})
+	if err != nil {
+		return InvestigateResult{}, err
+	}
+	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", prompt)
 	if err != nil {
 		return InvestigateResult{}, err
 	}
@@ -233,7 +141,20 @@ func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest
 }
 
 func (p *GeminiProvider) Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error) {
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "implement", buildImplementPrompt(req))
+	prompt, err := renderPromptTemplate(p.promptsDir, tplImplement, map[string]string{
+		"TicketNumber":      req.Ticket.Number,
+		"TicketTitle":       req.Ticket.Title,
+		"TicketDescription": req.Ticket.Description,
+		"RelatedContext":    renderTicketContext(req.Ticket),
+		"ProposalPath":      req.ProposalPath,
+		"LogPath":           req.LogPath,
+		"GuidelinesPath":    req.GuidelinesPath,
+		"FailureContext":    req.FailureContext,
+	})
+	if err != nil {
+		return ImplementResult{}, err
+	}
+	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "implement", prompt)
 	if err != nil {
 		return ImplementResult{}, err
 	}
@@ -241,7 +162,21 @@ func (p *GeminiProvider) Implement(ctx context.Context, req ImplementRequest, ru
 }
 
 func (p *GeminiProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error) {
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "pr", buildPRPrompt(req))
+	prompt, err := renderPromptTemplate(p.promptsDir, tplPR, map[string]string{
+		"TicketNumber":      req.Ticket.Number,
+		"TicketTitle":       req.Ticket.Title,
+		"TicketDescription": req.Ticket.Description,
+		"RelatedContext":    renderTicketContext(req.Ticket),
+		"WorktreePath":      req.WorktreePath,
+		"LogPath":           req.LogPath,
+		"ProposalPath":      req.ProposalPath,
+		"FinalSolutionPath": req.FinalSolutionPath,
+		"ChecksLogPath":     req.ChecksLogPath,
+	})
+	if err != nil {
+		return PRResult{}, err
+	}
+	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "pr", prompt)
 	if err != nil {
 		return PRResult{}, err
 	}
@@ -253,7 +188,24 @@ func (p *CodexProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, r
 }
 
 func (p *CodexProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", buildInvestigatePrompt(req))
+	prompt, err := renderPromptTemplate(p.promptsDir, tplInvestigate, map[string]string{
+		"TicketNumber":             req.Ticket.Number,
+		"TicketTitle":              req.Ticket.Title,
+		"TicketURL":                req.Ticket.URL,
+		"TicketDescription":        req.Ticket.Description,
+		"TicketAcceptanceCriteria": req.Ticket.AcceptanceCriteria,
+		"RelatedContext":           renderTicketContext(req.Ticket),
+		"RepoPath":                 req.RepoPath,
+		"WorktreePath":             req.WorktreePath,
+		"GuidelinesPath":           req.GuidelinesPath,
+		"LogPath":                  req.LogPath,
+		"ProposalPath":             req.ProposalPath,
+		"Feedback":                 req.Feedback,
+	})
+	if err != nil {
+		return InvestigateResult{}, err
+	}
+	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", prompt)
 	if err != nil {
 		return InvestigateResult{}, err
 	}
@@ -261,7 +213,20 @@ func (p *CodexProvider) Investigate(ctx context.Context, req InvestigateRequest,
 }
 
 func (p *CodexProvider) Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error) {
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "implement", buildImplementPrompt(req))
+	prompt, err := renderPromptTemplate(p.promptsDir, tplImplement, map[string]string{
+		"TicketNumber":      req.Ticket.Number,
+		"TicketTitle":       req.Ticket.Title,
+		"TicketDescription": req.Ticket.Description,
+		"RelatedContext":    renderTicketContext(req.Ticket),
+		"ProposalPath":      req.ProposalPath,
+		"LogPath":           req.LogPath,
+		"GuidelinesPath":    req.GuidelinesPath,
+		"FailureContext":    req.FailureContext,
+	})
+	if err != nil {
+		return ImplementResult{}, err
+	}
+	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "implement", prompt)
 	if err != nil {
 		return ImplementResult{}, err
 	}
@@ -269,7 +234,21 @@ func (p *CodexProvider) Implement(ctx context.Context, req ImplementRequest, run
 }
 
 func (p *CodexProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error) {
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "pr", buildPRPrompt(req))
+	prompt, err := renderPromptTemplate(p.promptsDir, tplPR, map[string]string{
+		"TicketNumber":      req.Ticket.Number,
+		"TicketTitle":       req.Ticket.Title,
+		"TicketDescription": req.Ticket.Description,
+		"RelatedContext":    renderTicketContext(req.Ticket),
+		"WorktreePath":      req.WorktreePath,
+		"LogPath":           req.LogPath,
+		"ProposalPath":      req.ProposalPath,
+		"FinalSolutionPath": req.FinalSolutionPath,
+		"ChecksLogPath":     req.ChecksLogPath,
+	})
+	if err != nil {
+		return PRResult{}, err
+	}
+	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "pr", prompt)
 	if err != nil {
 		return PRResult{}, err
 	}

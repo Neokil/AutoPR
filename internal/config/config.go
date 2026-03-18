@@ -54,6 +54,14 @@ func ConfigPath() (string, error) {
 	return filepath.Join(home, ".auto-pr", "config.yaml"), nil
 }
 
+func PromptsDirPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	return filepath.Join(home, ".auto-pr", "prompts"), nil
+}
+
 func Load() (Config, error) {
 	cfg := Default()
 	path, err := ConfigPath()
