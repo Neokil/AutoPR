@@ -86,8 +86,22 @@ export function App() {
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
+  const [showAddTicketDialog, setShowAddTicketDialog] = useState(false);
+  const [newTicketRepoPath, setNewTicketRepoPath] = useState("");
+  const [newTicketNumber, setNewTicketNumber] = useState("");
 
   const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
+  const knownRepoPaths = useMemo(() => {
+    const seen = new Set<string>();
+    const paths: string[] = [];
+    for (const t of tickets) {
+      if (!seen.has(t.repo_path)) {
+        seen.add(t.repo_path);
+        paths.push(t.repo_path);
+      }
+    }
+    return paths;
+  }, [tickets]);
   const ticketRecord = asRecord(details?.ticket);
   const ticketTitle = readString(ticketRecord, "title") || selectedSummary?.title || "(no title)";
   const ticketURL = readString(ticketRecord, "url");
@@ -270,14 +284,32 @@ export function App() {
     }, 250);
   }
 
-  async function queueAction(fn: () => Promise<{ job_id: string }>) {
+  async function queueAction(fn: () => Promise<{ job_id: string }>): Promise<boolean> {
     setError("");
     try {
       const accepted = await fn();
       setActiveJobId(accepted.job_id);
       setActiveJob(null);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "action failed");
+      return false;
+    }
+  }
+
+  async function submitAddTicket() {
+    const repoPath = newTicketRepoPath.trim();
+    const ticketNumber = newTicketNumber.trim();
+    if (!repoPath || !ticketNumber) {
+      setError("repo folder path and ticket number are required");
+      return;
+    }
+    const ok = await queueAction(() => runTicket(repoPath, ticketNumber));
+    if (ok) {
+      setShowAddTicketDialog(false);
+      setNewTicketRepoPath("");
+      setNewTicketNumber("");
+      scheduleFullRefresh();
     }
   }
 
@@ -339,6 +371,18 @@ export function App() {
               </li>
             ))}
           </ul>
+          <div className="ticket-list-footer">
+            <button
+              onClick={() => {
+                setError("");
+                setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
+                setNewTicketNumber("");
+                setShowAddTicketDialog(true);
+              }}
+            >
+              Add Ticket
+            </button>
+          </div>
         </section>
 
         <section className="panel right">
@@ -504,6 +548,62 @@ export function App() {
           )}
         </section>
       </main>
+
+      {showAddTicketDialog ? (
+        <div className="modal-backdrop" onClick={() => setShowAddTicketDialog(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Add Ticket</h3>
+            <p className="meta">Schedule a ticket run for a repository.</p>
+
+            <label className="field-label" htmlFor="repo-path-input">
+              Repository Folder
+            </label>
+            <input
+              id="repo-path-input"
+              list="repo-path-options"
+              value={newTicketRepoPath}
+              onChange={(e) => setNewTicketRepoPath(e.target.value)}
+              placeholder="/absolute/path/to/repo"
+            />
+            <datalist id="repo-path-options">
+              {knownRepoPaths.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+
+            <label className="field-label" htmlFor="ticket-number-input">
+              Ticket Number
+            </label>
+            <input
+              id="ticket-number-input"
+              value={newTicketNumber}
+              onChange={(e) => setNewTicketNumber(e.target.value)}
+              placeholder="e.g. 66825"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void submitAddTicket();
+                }
+              }}
+            />
+
+            <div className="button-row modal-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setShowAddTicketDialog(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button type="button" onClick={() => void submitAddTicket()}>
+                Schedule Run
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
