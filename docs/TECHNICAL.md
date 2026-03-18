@@ -58,6 +58,11 @@ Concurrency guarantees:
 - Per-ticket serialization
 - Repo-wide cleanup (`done/all`) runs exclusively in that repo
 
+Background PR monitor:
+
+- `auto-prd` periodically (every 2 minutes) checks tickets that have a `pr_url`.
+- If the linked GitHub PR state is no longer `open` (closed or merged), the server auto-runs ticket cleanup.
+
 ## Config Paths
 
 Primary config:

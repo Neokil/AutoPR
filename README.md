@@ -105,6 +105,11 @@ Add to `.gitignore`:
 .auto-pr/
 ```
 
+Automatic cleanup behavior:
+
+- For tickets with an open PR URL, the server periodically checks whether the PR is still open.
+- If the PR is closed or merged, the ticket is automatically cleaned up.
+
 ## More Details
 
 For API endpoints, architecture, runtime files, and implementation details, see:
