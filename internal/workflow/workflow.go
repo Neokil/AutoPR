@@ -373,7 +373,11 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 
 func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*models.TicketState, error) {
 	if st, err := o.Store.LoadState(ticketNumber); err == nil {
-		return &st, nil
+		if _, ticketErr := o.Store.LoadTicket(ticketNumber); ticketErr == nil {
+			return &st, nil
+		} else if !os.IsNotExist(ticketErr) {
+			return nil, ticketErr
+		}
 	}
 
 	paths := o.Store.Paths(ticketNumber)

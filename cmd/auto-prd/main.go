@@ -522,7 +522,14 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeError(w, http.StatusNotFound, "artifact not found")
+			writeJSON(w, http.StatusOK, map[string]string{
+				"repo_id":       repoID,
+				"repo_path":     repoRoot,
+				"ticket_number": ticket,
+				"name":          name,
+				"path":          path,
+				"content":       "",
+			})
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())

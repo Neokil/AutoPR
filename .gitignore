@@ -2,4 +2,4 @@
 .build/
 web/node_modules/
 web/dist
-.DSStore
+.DS_Store
