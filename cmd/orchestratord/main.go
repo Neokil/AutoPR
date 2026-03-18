@@ -355,7 +355,7 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.syncRepoTickets(repoID, repoRoot, rt); err != nil {
+	if err := s.syncRepoTickets(repoID, repoRoot, rt, false); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -378,7 +378,7 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.syncTicketFromRepo(repoID, repoRoot, ticket, rt); err != nil {
+	if err := s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, false); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeError(w, http.StatusNotFound, "ticket not found")
 			return
@@ -635,27 +635,27 @@ func (s *server) executeJob(job queuedJob) error {
 	case jobRun:
 		err = rt.svc.RunTickets(context.Background(), []string{ticket})
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
 	case jobResume:
 		err = rt.svc.ResumeTicket(context.Background(), ticket)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
 	case jobApprove:
 		err = rt.svc.Approve(context.Background(), ticket)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
 	case jobReject:
 		err = rt.svc.Reject(ticket)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
 	case jobFeedback:
 		err = rt.svc.Feedback(ticket, job.message)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
 	case jobCleanup:
 		err = rt.svc.CleanupTicket(context.Background(), ticket)
@@ -665,17 +665,17 @@ func (s *server) executeJob(job queuedJob) error {
 	case jobPR:
 		err = rt.svc.GeneratePR(context.Background(), ticket)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
 	case jobCleanupDone:
 		err = rt.svc.CleanupDone(context.Background())
 		if err == nil {
-			err = s.syncRepoTickets(repoID, repoRoot, rt)
+			err = s.syncRepoTickets(repoID, repoRoot, rt, true)
 		}
 	case jobCleanupAll:
 		err = rt.svc.CleanupAll(context.Background())
 		if err == nil {
-			err = s.syncRepoTickets(repoID, repoRoot, rt)
+			err = s.syncRepoTickets(repoID, repoRoot, rt, true)
 		}
 	default:
 		err = fmt.Errorf("unsupported job action: %s", job.record.Action)
@@ -706,19 +706,21 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 	return m
 }
 
-func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime) error {
+func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime, emitEvent bool) error {
 	st, err := rt.store.LoadState(ticket)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if err := s.meta.DeleteTicket(repoID, ticket); err != nil {
 				return err
 			}
-			s.broadcast(serverEvent{
-				Type:         "ticket_deleted",
-				RepoID:       repoID,
-				RepoPath:     repoRoot,
-				TicketNumber: ticket,
-			})
+			if emitEvent {
+				s.broadcast(serverEvent{
+					Type:         "ticket_deleted",
+					RepoID:       repoID,
+					RepoPath:     repoRoot,
+					TicketNumber: ticket,
+				})
+			}
 			return nil
 		}
 		return err
@@ -737,17 +739,19 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 	if err := s.meta.UpsertTicket(rec); err != nil {
 		return err
 	}
-	s.broadcast(serverEvent{
-		Type:         "ticket_updated",
-		RepoID:       repoID,
-		RepoPath:     repoRoot,
-		TicketNumber: ticket,
-		Status:       rec.Status,
-	})
+	if emitEvent {
+		s.broadcast(serverEvent{
+			Type:         "ticket_updated",
+			RepoID:       repoID,
+			RepoPath:     repoRoot,
+			TicketNumber: ticket,
+			Status:       rec.Status,
+		})
+	}
 	return nil
 }
 
-func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime) error {
+func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitEvent bool) error {
 	tickets, err := rt.store.ListTicketDirs()
 	if err != nil {
 		return err
@@ -773,11 +777,13 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime) error
 	if err := s.meta.ReplaceRepoTickets(repoID, records); err != nil {
 		return err
 	}
-	s.broadcast(serverEvent{
-		Type:     "repo_tickets_synced",
-		RepoID:   repoID,
-		RepoPath: repoRoot,
-	})
+	if emitEvent {
+		s.broadcast(serverEvent{
+			Type:     "repo_tickets_synced",
+			RepoID:   repoID,
+			RepoPath: repoRoot,
+		})
+	}
 	return nil
 }
 
