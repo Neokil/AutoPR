@@ -158,7 +158,7 @@ func main() {
 	mux.HandleFunc("/", s.handleFrontend)
 
 	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("auto-prd listening on %s\n", addr)
+	fmt.Printf("AutoPR daemon listening on %s\n", addr)
 	fatalIf(http.ListenAndServe(addr, loggingMiddleware(mux)))
 }
 

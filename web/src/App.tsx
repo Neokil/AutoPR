@@ -332,7 +332,7 @@ export function App() {
     <div className="app">
       <header className="header">
         <h1 className="brand">
-          <img src="/autopr-logo-with-text.png" alt="auto-pr" className="brand-logo-text" />
+          <img src="/autopr-logo-with-text.png" alt="AutoPR" className="brand-logo-text" />
         </h1>
         <div className="button-row">
           <button onClick={() => void refreshTickets()} disabled={loading}>

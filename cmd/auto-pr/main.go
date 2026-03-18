@@ -158,7 +158,7 @@ func fatalIf(err error) {
 }
 
 func usage() {
-	fmt.Println(`auto-pr
+	fmt.Println(`AutoPR
 
 Commands:
   auto-pr run <ticket-number> [<ticket-number>...]

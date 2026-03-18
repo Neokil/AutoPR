@@ -1,8 +1,8 @@
-# auto-pr
+# AutoPR
 
 From issue to PR in one loop.
 
-`auto-pr` helps you run ticket-to-PR workflows with a local server, CLI, and web UI.
+`AutoPR` helps you run ticket-to-PR workflows with a local server, CLI, and web UI.
 
 ## Quick Start
 
