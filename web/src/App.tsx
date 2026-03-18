@@ -45,63 +45,32 @@ function allowedActions(status: string): Action[] {
   }
 }
 
-function formatValue(value: unknown): string {
-  if (value === null) {
-    return "null";
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
   }
-  if (value === undefined) {
-    return "";
-  }
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-  return String(value);
+  return value as Record<string, unknown>;
 }
 
-function renderTicketObject(obj: Record<string, unknown>, prefix = ""): JSX.Element[] {
-  return Object.entries(obj).map(([key, value]) => {
-    const path = prefix ? `${prefix}.${key}` : key;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      return (
-        <div key={path} className="ticket-section">
-          <h4>{key.replace(/_/g, " ")}</h4>
-          <div className="ticket-fields">{renderTicketObject(value as Record<string, unknown>, path)}</div>
-        </div>
-      );
+function readString(record: Record<string, unknown> | null, key: string): string {
+  if (!record) {
+    return "";
+  }
+  const value = record[key];
+  return typeof value === "string" ? value : "";
+}
+
+function firstLinkedItem(ticket: Record<string, unknown> | null, keys: string[]): Record<string, unknown> | null {
+  if (!ticket) {
+    return null;
+  }
+  for (const key of keys) {
+    const candidate = asRecord(ticket[key]);
+    if (candidate) {
+      return candidate;
     }
-    if (Array.isArray(value)) {
-      return (
-        <div key={path} className="ticket-field">
-          <span className="meta">{key.replace(/_/g, " ")}</span>
-          <pre>{JSON.stringify(value, null, 2)}</pre>
-        </div>
-      );
-    }
-    if ((key === "description" || key === "acceptance_criteria") && typeof value === "string") {
-      return (
-        <div key={path} className="ticket-field">
-          <span className="meta">{key.replace(/_/g, " ")}</span>
-          <MarkdownView content={value} emptyText="No content." />
-        </div>
-      );
-    }
-    if (key === "url" && typeof value === "string" && value.trim()) {
-      return (
-        <div key={path} className="ticket-field">
-          <span className="meta">{key}</span>
-          <a href={value} target="_blank" rel="noreferrer">
-            {value}
-          </a>
-        </div>
-      );
-    }
-    return (
-      <div key={path} className="ticket-field">
-        <span className="meta">{key.replace(/_/g, " ")}</span>
-        <span>{formatValue(value)}</span>
-      </div>
-    );
-  });
+  }
+  return null;
 }
 
 export function App() {
@@ -118,6 +87,14 @@ export function App() {
   const [error, setError] = useState<string>("");
 
   const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
+  const ticketRecord = asRecord(details?.ticket);
+  const ticketTitle = readString(ticketRecord, "title") || selectedSummary?.title || "(no title)";
+  const ticketURL = readString(ticketRecord, "url");
+  const ticketDescription = readString(ticketRecord, "description");
+  const acceptanceCriteria = readString(ticketRecord, "acceptance_criteria");
+  const priority = readString(ticketRecord, "priority");
+  const parentTicket = firstLinkedItem(ticketRecord, ["parent_ticket"]);
+  const epicTicket = firstLinkedItem(ticketRecord, ["epic", "epic_ticket", "parent_epic", "epic_story"]);
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
   const activeJobIdRef = useRef<string>("");
   const fullRefreshScheduledRef = useRef(false);
@@ -362,18 +339,21 @@ export function App() {
         </section>
 
         <section className="panel right">
-          <div className="panel-header">
-            <h2>Ticket Details</h2>
-            {selectedSummary ? (
-              <span className="meta">
-                {selectedSummary.ticket_number} · {selectedSummary.status}
-              </span>
-            ) : null}
-          </div>
-
           {selectedSummary ? (
             <>
-              <div className="button-row">
+              <div className="detail-top-row">
+                <h2 className="detail-main-title">
+                  {ticketURL ? (
+                    <a href={ticketURL} target="_blank" rel="noreferrer">
+                      {selectedSummary.ticket_number} - {ticketTitle} ({selectedSummary.status})
+                    </a>
+                  ) : (
+                    <>
+                      {selectedSummary.ticket_number} - {ticketTitle} ({selectedSummary.status})
+                    </>
+                  )}
+                </h2>
+                <div className="button-row detail-actions">
                 {allowedActions(selectedSummary.status).includes("run") ? (
                   <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
                     Run
@@ -404,6 +384,7 @@ export function App() {
                     Cleanup
                   </button>
                 ) : null}
+                </div>
               </div>
 
               <div className="tabs">
@@ -420,15 +401,44 @@ export function App() {
 
               {activeTab === "details" ? (
                 <article className="card">
-                  <h3>{details?.ticket?.title || "(no title)"}</h3>
-                  <p className="meta">{selectedSummary.repo_path}</p>
-                  {details?.ticket ? <div className="ticket-fields">{renderTicketObject(details.ticket as Record<string, unknown>)}</div> : null}
-                  {details?.next_steps ? (
-                    <>
-                      <h4>Next Steps</h4>
-                      <MarkdownView content={details.next_steps} />
-                    </>
-                  ) : null}
+                  <div className="ticket-fields">
+                    <section className="ticket-section">
+                      <span className="field-label">Epic</span>
+                      {epicTicket && readString(epicTicket, "url") ? (
+                        <a href={readString(epicTicket, "url")} target="_blank" rel="noreferrer">
+                          {readString(epicTicket, "title") || "(no title)"}
+                        </a>
+                      ) : (
+                        <span className="meta">No epic ticket</span>
+                      )}
+                    </section>
+
+                    <section className="ticket-section">
+                      <span className="field-label">Parent Ticket</span>
+                      {parentTicket && readString(parentTicket, "url") ? (
+                        <a href={readString(parentTicket, "url")} target="_blank" rel="noreferrer">
+                          {readString(parentTicket, "title") || "(no title)"}
+                        </a>
+                      ) : (
+                        <span className="meta">No parent ticket</span>
+                      )}
+                    </section>
+
+                    <section className="ticket-section">
+                      <span className="field-label">Description</span>
+                      <MarkdownView content={ticketDescription} emptyText="No description." />
+                    </section>
+
+                    <section className="ticket-section">
+                      <span className="field-label">Acceptance Criteria</span>
+                      <MarkdownView content={acceptanceCriteria} emptyText="No acceptance criteria." />
+                    </section>
+
+                    <section className="ticket-section">
+                      <span className="field-label">Priority</span>
+                      <span>{priority || "-"}</span>
+                    </section>
+                  </div>
                 </article>
               ) : null}
 

@@ -193,6 +193,29 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.detail-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-main-title {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.4;
+}
+
+.detail-main-title a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.detail-actions {
+  margin-bottom: 0;
+  justify-content: flex-end;
+}
+
 .tab {
   background: var(--input-bg);
   color: var(--text);
@@ -229,6 +252,15 @@ button:disabled {
   border-radius: 8px;
   padding: 10px;
   background: var(--soft-bg);
+}
+
+.field-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 pre {
@@ -281,6 +313,10 @@ pre {
   .header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .detail-top-row {
+    flex-direction: column;
   }
 
   .main {
