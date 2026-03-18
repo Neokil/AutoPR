@@ -232,7 +232,7 @@ export function App() {
     const trackedJobID = activeJobIdRef.current;
     if (evt.type === "job" && evt.job_id && trackedJobID && evt.job_id === trackedJobID) {
       const status = evt.status ?? "";
-      if (status === "done" || status === "failed") {
+      if (status === "failed") {
         try {
           const job = await getJob(evt.job_id);
           setActiveJob(job);
@@ -241,6 +241,9 @@ export function App() {
         } finally {
           setActiveJobId("");
         }
+      } else if (status === "done") {
+        setActiveJob(null);
+        setActiveJobId("");
       } else if (status === "queued" || status === "running") {
         setActiveJob((current) => {
           if (!current) {
