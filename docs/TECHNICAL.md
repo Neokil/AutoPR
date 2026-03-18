@@ -81,7 +81,9 @@ Prompt template directory:
 Install behavior:
 
 - `make install` runs `build`, `register-alias`, `init-config`, and `register-service`.
+- `make uninstall` runs `unregister-service`, `unregister-alias`, `remove-config`, and `clean-build`.
 - `make init-config` scaffolds `~/.auto-pr/config.yaml` and default prompt templates if they do not exist.
+- `make remove-config` removes the `~/.auto-pr` scaffolding directory.
 - `make install` creates `~/.auto-pr/server/logs/` for daemon stdout/stderr.
 - Existing files are kept as-is (non-destructive).
 - On macOS, `make install` writes `~/Library/LaunchAgents/com.autopr.auto-prd.plist` and starts it with `launchctl`.

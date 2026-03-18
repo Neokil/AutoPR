@@ -20,6 +20,14 @@ source ~/.zshrc
 - `make init-config`
 - `make register-service`
 
+The reverse flow is available too:
+
+- `make clean-build`
+- `make unregister-alias`
+- `make remove-config`
+- `make unregister-service`
+- `make uninstall`
+
 It also scaffolds (without overwriting existing files):
 
 - `~/.auto-pr/config.yaml` (from `config.example.yaml`)
@@ -127,6 +135,10 @@ Service management:
 
 - macOS: `launchctl kickstart -k gui/$(id -u)/com.autopr.auto-prd`
 - Linux: `systemctl --user restart auto-prd.service`
+
+Removal:
+
+- `make uninstall` removes the user service, the PATH block in `~/.zshrc`, the `~/.auto-pr` scaffolding directory, and `.build/`
 
 ## More Details
 
