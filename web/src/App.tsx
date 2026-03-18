@@ -321,6 +321,7 @@ export function App() {
         if (evt.type === "ticket_updated") {
           return {
             ...t,
+            title: evt.title ?? t.title,
             status: evt.status ?? t.status,
             updated_at: new Date().toISOString()
           };

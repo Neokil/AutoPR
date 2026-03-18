@@ -79,6 +79,7 @@ export interface ServerEvent {
   repo_id?: string;
   repo_path?: string;
   ticket_number?: string;
+  title?: string;
   status?: string;
   job_id?: string;
   action?: string;

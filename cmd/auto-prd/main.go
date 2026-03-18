@@ -92,6 +92,7 @@ type serverEvent struct {
 	RepoID       string `json:"repo_id,omitempty"`
 	RepoPath     string `json:"repo_path,omitempty"`
 	TicketNumber string `json:"ticket_number,omitempty"`
+	Title        string `json:"title,omitempty"`
 	Status       string `json:"status,omitempty"`
 	JobID        string `json:"job_id,omitempty"`
 	Action       string `json:"action,omitempty"`
@@ -847,6 +848,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 			RepoID:       repoID,
 			RepoPath:     repoRoot,
 			TicketNumber: ticket,
+			Title:        rec.Title,
 			Status:       rec.Status,
 		})
 	}
