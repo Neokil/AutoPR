@@ -13,6 +13,8 @@ build:
 
 install: build
 	@ZSHRC="$$HOME/.zshrc"; \
+	CONF_DIR="$$HOME/.auto-pr"; \
+	PROMPTS_DIR="$$CONF_DIR/prompts"; \
 	ALIAS_START="# >>> auto-pr alias >>>"; \
 	ALIAS_END="# <<< auto-pr alias <<<"; \
 	START="# >>> auto-pr build-path >>>"; \
@@ -30,6 +32,21 @@ install: build
 		echo "export PATH=\"$(CURDIR)/.build:\$$PATH\""; \
 		echo "$$END"; \
 	} > "$$ZSHRC"; \
+	mkdir -p "$$CONF_DIR" "$$PROMPTS_DIR"; \
+	if [ ! -f "$$CONF_DIR/config.yaml" ]; then \
+		cp "$(CURDIR)/config.example.yaml" "$$CONF_DIR/config.yaml"; \
+		echo "scaffolded $$CONF_DIR/config.yaml"; \
+	else \
+		echo "kept existing $$CONF_DIR/config.yaml"; \
+	fi; \
+	for f in ticket.md.tmpl investigate.md.tmpl implement.md.tmpl pr.md.tmpl; do \
+		if [ ! -f "$$PROMPTS_DIR/$$f" ]; then \
+			cp "$(CURDIR)/templates/prompts/$$f" "$$PROMPTS_DIR/$$f"; \
+			echo "scaffolded $$PROMPTS_DIR/$$f"; \
+		else \
+			echo "kept existing $$PROMPTS_DIR/$$f"; \
+		fi; \
+	done; \
 	rm -f "$$TMP"; \
 	echo "built .build/auto-pr and .build/auto-prd"; \
 	echo "updated PATH in $$ZSHRC"; \

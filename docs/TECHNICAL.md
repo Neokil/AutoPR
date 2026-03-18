@@ -73,6 +73,11 @@ Prompt template directory:
   - `implement.md.tmpl`
   - `pr.md.tmpl`
 
+Install behavior:
+
+- `make install` scaffolds `~/.auto-pr/config.yaml` and default prompt templates if they do not exist.
+- Existing files are kept as-is (non-destructive).
+
 Repository discovery config:
 
 - `repository_directories: []`

@@ -13,6 +13,11 @@ make install
 source ~/.zshrc
 ```
 
+`make install` also scaffolds (without overwriting existing files):
+
+- `~/.auto-pr/config.yaml` (from `config.example.yaml`)
+- `~/.auto-pr/prompts/*.md.tmpl` (default prompt templates)
+
 2. Start the server:
 
 ```bash
