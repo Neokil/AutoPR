@@ -150,14 +150,14 @@ func main() {
 	mux.HandleFunc("/", s.handleFrontend)
 
 	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("orchestratord listening on %s\n", addr)
+	fmt.Printf("auto-prd listening on %s\n", addr)
 	fatalIf(http.ListenAndServe(addr, loggingMiddleware(mux)))
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":       "ok",
-		"server_state": "~/.ai-orchestrator/server/state.json",
+		"server_state": "~/.auto-pr/server/state.json",
 		"queue_depth":  len(s.jobs),
 		"frontend":     "embedded",
 	})

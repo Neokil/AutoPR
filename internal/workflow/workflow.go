@@ -178,23 +178,23 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	}
 	switch st.Status {
 	case models.StateQueued, models.StateInvestigating, models.StateProposalReady, models.StateWaitingForHuman:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review proposal: %s\n  2. Approve: ai-orchestrator approve %s\n  3. Provide feedback: ai-orchestrator feedback %s --message \"...\"\n  4. Reject: ai-orchestrator reject %s", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
+		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review proposal: %s\n  2. Approve: auto-pr approve %s\n  3. Provide feedback: auto-pr feedback %s --message \"...\"\n  4. Reject: auto-pr reject %s", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
 	case models.StateImplementing, models.StateValidating:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Continue workflow: ai-orchestrator resume %s\n  2. Check progress: ai-orchestrator status %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
+		return fmt.Sprintf("Next steps for ticket %s:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
 	case models.StatePRReady:
 		if strings.TrimSpace(st.PRURL) != "" {
 			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review PR markdown: %s\n  2. Review GitHub PR: %s", st.TicketNumber, st.PRPath, st.PRURL), nil
 		}
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Generate/create PR: ai-orchestrator pr %s\n  2. Review PR markdown: %s", st.TicketNumber, st.TicketNumber, st.PRPath), nil
+		return fmt.Sprintf("Next steps for ticket %s:\n  1. Generate/create PR: auto-pr pr %s\n  2. Review PR markdown: %s", st.TicketNumber, st.TicketNumber, st.PRPath), nil
 	case models.StateDone:
 		if strings.TrimSpace(st.PRURL) != "" {
 			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Review GitHub PR: %s", st.TicketNumber, st.PRPath, st.PRURL), nil
 		}
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Check current state: ai-orchestrator status %s", st.TicketNumber, st.PRPath, st.TicketNumber), nil
+		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Check current state: auto-pr status %s", st.TicketNumber, st.PRPath, st.TicketNumber), nil
 	case models.StateFailed:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Inspect log: %s\n  2. Add feedback: ai-orchestrator feedback %s --message \"...\"\n  3. Retry: ai-orchestrator resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber), nil
+		return fmt.Sprintf("Next steps for ticket %s:\n  1. Inspect log: %s\n  2. Add feedback: auto-pr feedback %s --message \"...\"\n  3. Retry: auto-pr resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber), nil
 	default:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Check status: ai-orchestrator status %s\n  2. Continue: ai-orchestrator resume %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
+		return fmt.Sprintf("Next steps for ticket %s:\n  1. Check status: auto-pr status %s\n  2. Continue: auto-pr resume %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
 	}
 }
 
@@ -472,13 +472,13 @@ func (o *Orchestrator) generatePR(ctx context.Context, st *models.TicketState, t
 			return err
 		}
 		if err := gitutil.PushBranch(ctx, st.WorktreePath, st.BranchName); err != nil {
-			msg := fmt.Sprintf("failed to push branch %s before PR creation: %v\n\nNext steps:\n  1. Verify remote/auth: git -C %s remote -v && gh auth status\n  2. Push manually: git -C %s push -u origin %s\n  3. Retry: ai-orchestrator pr %s", st.BranchName, err, st.WorktreePath, st.WorktreePath, st.BranchName, st.TicketNumber)
+			msg := fmt.Sprintf("failed to push branch %s before PR creation: %v\n\nNext steps:\n  1. Verify remote/auth: git -C %s remote -v && gh auth status\n  2. Push manually: git -C %s push -u origin %s\n  3. Retry: auto-pr pr %s", st.BranchName, err, st.WorktreePath, st.WorktreePath, st.BranchName, st.TicketNumber)
 			_ = markdown.AppendSection(st.LogPath, "PR Push Failed", msg)
 			return fmt.Errorf(msg)
 		}
 		url, err := gitutil.CreatePR(ctx, st.WorktreePath, title, st.PRPath, o.Cfg.BaseBranch)
 		if err != nil {
-			msg := fmt.Sprintf("failed to create PR for ticket %s on branch %s: %v\n\nNext steps:\n  1. Verify auth: gh auth status\n  2. Ensure branch is pushed: git -C %s push -u origin %s\n  3. Retry: ai-orchestrator pr %s", st.TicketNumber, st.BranchName, err, st.WorktreePath, st.BranchName, st.TicketNumber)
+			msg := fmt.Sprintf("failed to create PR for ticket %s on branch %s: %v\n\nNext steps:\n  1. Verify auth: gh auth status\n  2. Ensure branch is pushed: git -C %s push -u origin %s\n  3. Retry: auto-pr pr %s", st.TicketNumber, st.BranchName, err, st.WorktreePath, st.BranchName, st.TicketNumber)
 			_ = markdown.AppendSection(st.LogPath, "PR Create Failed", msg)
 			return fmt.Errorf(msg)
 		}
@@ -670,14 +670,14 @@ func (o *Orchestrator) ensureCommitForTicket(ctx context.Context, st models.Tick
 
 func (o *Orchestrator) validatePRPrereqs(ctx context.Context, st models.TicketState) error {
 	if st.Status == models.StateWaitingForHuman && !st.Approved {
-		return fmt.Errorf("ticket %s is waiting for human approval.\n\nNext steps:\n  1. Review proposal: %s\n  2. Approve to continue: ai-orchestrator approve %s\n  3. Or send more feedback: ai-orchestrator feedback %s --message \"...\"", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber)
+		return fmt.Errorf("ticket %s is waiting for human approval.\n\nNext steps:\n  1. Review proposal: %s\n  2. Approve to continue: auto-pr approve %s\n  3. Or send more feedback: auto-pr feedback %s --message \"...\"", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber)
 	}
 	if st.Status == models.StateFailed {
-		return fmt.Errorf("ticket %s is in failed state.\n\nNext steps:\n  1. Inspect log: %s\n  2. Fix issue or provide feedback: ai-orchestrator feedback %s --message \"...\"\n  3. Resume: ai-orchestrator resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber)
+		return fmt.Errorf("ticket %s is in failed state.\n\nNext steps:\n  1. Inspect log: %s\n  2. Fix issue or provide feedback: auto-pr feedback %s --message \"...\"\n  3. Resume: auto-pr resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber)
 	}
 	// If work is not done yet, guide users to resume instead of forcing PR creation.
 	if st.Status != models.StatePRReady && st.Status != models.StateDone {
-		return fmt.Errorf("ticket %s is in state %s and not ready for PR yet.\n\nNext steps:\n  1. Continue workflow: ai-orchestrator resume %s\n  2. Check progress: ai-orchestrator status %s", st.TicketNumber, st.Status, st.TicketNumber, st.TicketNumber)
+		return fmt.Errorf("ticket %s is in state %s and not ready for PR yet.\n\nNext steps:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.Status, st.TicketNumber, st.TicketNumber)
 	}
 	return nil
 }
@@ -697,7 +697,7 @@ func (o *Orchestrator) ensureBranchHasCommits(ctx context.Context, st models.Tic
 		if ahead > 0 {
 			return nil
 		}
-		return fmt.Errorf("branch %s has no commits ahead of %s, so a PR cannot be created.\n\nNext steps:\n  1. Check whether implementation actually changed code in %s\n  2. If code is missing, request another pass: ai-orchestrator feedback %s --message \"implementation produced no branch changes; please apply code changes\" && ai-orchestrator resume %s\n  3. If changes exist but are uncommitted, commit/push manually: git -C %s add -A && git -C %s commit -m \"sc-%s: implement\" && git -C %s push -u origin %s\n  4. Retry PR: ai-orchestrator pr %s", st.BranchName, base, st.WorktreePath, st.TicketNumber, st.TicketNumber, st.WorktreePath, st.WorktreePath, st.TicketNumber, st.WorktreePath, st.BranchName, st.TicketNumber)
+		return fmt.Errorf("branch %s has no commits ahead of %s, so a PR cannot be created.\n\nNext steps:\n  1. Check whether implementation actually changed code in %s\n  2. If code is missing, request another pass: auto-pr feedback %s --message \"implementation produced no branch changes; please apply code changes\" && auto-pr resume %s\n  3. If changes exist but are uncommitted, commit/push manually: git -C %s add -A && git -C %s commit -m \"sc-%s: implement\" && git -C %s push -u origin %s\n  4. Retry PR: auto-pr pr %s", st.BranchName, base, st.WorktreePath, st.TicketNumber, st.TicketNumber, st.WorktreePath, st.WorktreePath, st.TicketNumber, st.WorktreePath, st.BranchName, st.TicketNumber)
 	}
 
 	// If base detection failed, fall back to checking any changes in working tree.
@@ -705,5 +705,5 @@ func (o *Orchestrator) ensureBranchHasCommits(ctx context.Context, st models.Tic
 	if err == nil && strings.TrimSpace(res.Stdout) != "" {
 		return nil
 	}
-	return fmt.Errorf("could not confirm branch %s has commits suitable for PR creation.\n\nNext steps:\n  1. Ensure there is committed work on branch %s\n  2. Push branch: git -C %s push -u origin %s\n  3. Retry: ai-orchestrator pr %s", st.BranchName, st.BranchName, st.WorktreePath, st.BranchName, st.TicketNumber)
+	return fmt.Errorf("could not confirm branch %s has commits suitable for PR creation.\n\nNext steps:\n  1. Ensure there is committed work on branch %s\n  2. Push branch: git -C %s push -u origin %s\n  3. Retry: auto-pr pr %s", st.BranchName, st.BranchName, st.WorktreePath, st.BranchName, st.TicketNumber)
 }

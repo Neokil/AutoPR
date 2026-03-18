@@ -31,7 +31,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Provider:       "codex",
-		StateDirName:   ".ai-orchestrator",
+		StateDirName:   ".auto-pr",
 		ServerPort:     8080,
 		ServerWorkers:  4,
 		CreatePR:       true,
@@ -49,19 +49,23 @@ func ConfigPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
-	return filepath.Join(home, ".ai-orchestrator", "config.yaml"), nil
+	return filepath.Join(home, ".auto-pr", "config.yaml"), nil
 }
 
-func legacyConfigPath() (string, error) {
+func legacyConfigPaths() ([]string, error) {
+	paths := []string{}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve home dir: %w", err)
+	}
+	paths = append(paths, filepath.Join(home, ".ai-orchestrator", "config.yaml"))
+
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home dir: %w", err)
-		}
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "ai-orchestrator", "config.yaml"), nil
+	paths = append(paths, filepath.Join(base, "ai-orchestrator", "config.yaml"))
+	return paths, nil
 }
 
 func Load() (Config, error) {
@@ -73,18 +77,26 @@ func Load() (Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			legacyPath, lerr := legacyConfigPath()
+			legacyPaths, lerr := legacyConfigPaths()
 			if lerr != nil {
 				return cfg, lerr
 			}
-			legacyData, lerr := os.ReadFile(legacyPath)
-			if lerr != nil {
-				if os.IsNotExist(lerr) {
-					return cfg, nil
+			found := false
+			for _, legacyPath := range legacyPaths {
+				legacyData, lerr := os.ReadFile(legacyPath)
+				if lerr != nil {
+					if os.IsNotExist(lerr) {
+						continue
+					}
+					return cfg, fmt.Errorf("read legacy config file %s: %w", legacyPath, lerr)
 				}
-				return cfg, fmt.Errorf("read legacy config file %s: %w", legacyPath, lerr)
+				data = legacyData
+				found = true
+				break
 			}
-			data = legacyData
+			if !found {
+				return cfg, nil
+			}
 		} else {
 			return cfg, fmt.Errorf("read config file %s: %w", path, err)
 		}
@@ -96,7 +108,7 @@ func Load() (Config, error) {
 		cfg.Provider = "codex"
 	}
 	if cfg.StateDirName == "" {
-		cfg.StateDirName = ".ai-orchestrator"
+		cfg.StateDirName = ".auto-pr"
 	}
 	if cfg.ServerPort <= 0 {
 		cfg.ServerPort = 8080

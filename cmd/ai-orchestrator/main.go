@@ -14,6 +14,18 @@ import (
 
 const defaultServerURL = "http://127.0.0.1:8080"
 
+func resolveServerURL() string {
+	serverURL := strings.TrimSpace(os.Getenv("AUTO_PR_SERVER_URL"))
+	if serverURL != "" {
+		return serverURL
+	}
+	serverURL = strings.TrimSpace(os.Getenv("AI_ORCHESTRATOR_SERVER_URL"))
+	if serverURL != "" {
+		return serverURL
+	}
+	return defaultServerURL
+}
+
 func main() {
 	ctx := context.Background()
 	if len(os.Args) < 2 {
@@ -26,10 +38,7 @@ func main() {
 
 	repoRoot, err := gitutil.RepoRoot(ctx, cwd)
 	fatalIf(err)
-	serverURL := strings.TrimSpace(os.Getenv("AI_ORCHESTRATOR_SERVER_URL"))
-	if serverURL == "" {
-		serverURL = defaultServerURL
-	}
+	serverURL := resolveServerURL()
 	svc := orchestrator.NewRemoteService(serverURL, repoRoot)
 
 	switch os.Args[1] {
@@ -72,7 +81,7 @@ func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 
 func statusCmd(svc orchestrator.Service, args []string) {
 	if len(args) > 1 {
-		fatalIf(errors.New("usage: ai-orchestrator status [ticket-number]"))
+		fatalIf(errors.New("usage: auto-pr status [ticket-number]"))
 	}
 	ticket := ""
 	if len(args) == 1 {
@@ -129,14 +138,14 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fatalIf(errors.New("usage: ai-orchestrator cleanup <ticket-number> | --done | --all"))
+		fatalIf(errors.New("usage: auto-pr cleanup <ticket-number> | --done | --all"))
 	}
 	fatalIf(svc.CleanupTicket(ctx, rest[0]))
 }
 
 func requireArgs(cmd string, args []string, min int) {
 	if len(args) < min {
-		fatalIf(fmt.Errorf("usage: ai-orchestrator %s ...", cmd))
+		fatalIf(fmt.Errorf("usage: auto-pr %s ...", cmd))
 	}
 }
 
@@ -149,20 +158,20 @@ func fatalIf(err error) {
 }
 
 func usage() {
-	fmt.Println(`ai-orchestrator
+	fmt.Println(`auto-pr
 
 Commands:
-  ai-orchestrator run <ticket-number> [<ticket-number>...]
-  ai-orchestrator wait-for-job <job-id>
-  ai-orchestrator status [<ticket-number>]
-  ai-orchestrator approve <ticket-number>
-  ai-orchestrator feedback <ticket-number> --message "..."
-  ai-orchestrator reject <ticket-number>
-  ai-orchestrator resume <ticket-number>
-  ai-orchestrator pr <ticket-number>
-  ai-orchestrator cleanup <ticket-number>
-  ai-orchestrator cleanup --done
-  ai-orchestrator cleanup --all`)
+  auto-pr run <ticket-number> [<ticket-number>...]
+  auto-pr wait-for-job <job-id>
+  auto-pr status [<ticket-number>]
+  auto-pr approve <ticket-number>
+  auto-pr feedback <ticket-number> --message "..."
+  auto-pr reject <ticket-number>
+  auto-pr resume <ticket-number>
+  auto-pr pr <ticket-number>
+  auto-pr cleanup <ticket-number>
+  auto-pr cleanup --done
+  auto-pr cleanup --all`)
 }
 
 func printNextSteps(svc orchestrator.Service, ticket string) {

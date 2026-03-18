@@ -1,223 +1,102 @@
-# ai-orchestrator
+# auto-pr
 
-CLI + server orchestrator for AI-assisted ticket workflows.
+From issue to PR in one loop.
 
-## What it does
+`auto-pr` helps you run ticket-to-PR workflows with a local server, CLI, and web UI.
 
-- Runs from any git subdirectory (auto-detects repo root)
-- Accepts ticket numbers as CLI args
-- Fetches ticket details from Shortcut through the selected provider (provider-side MCP)
-- Creates per-ticket worktrees and branches (`sc-<ticket>-<slug>`)
-- Runs investigation + implementation with a switchable provider (`codex` or `gemini`)
-- Stores persistent state/logs in `.ai-orchestrator/`
-- Supports human approval/feedback/reject/resume in CLI
-- Runs checks and generates `pr.md`
-- Optionally creates a PR via `gh pr create`
+## Quick Start
 
-## Architecture
-
-The project now uses a DDD-inspired layered structure so logic can be reused by CLI, server, and web clients:
-
-- `internal/domain/ticket`: core ticket/state models and workflow state values
-- `internal/application/orchestrator`: application service interface/use-cases used by clients
-- `internal/ports`: storage contracts (interfaces) for persistence abstraction
-- `internal/state`: current JSON/filesystem-backed store adapter implementing ports
-- `internal/workflow`: orchestration logic (currently reused by the application service)
-- `cmd/ai-orchestrator`: CLI adapter (calls application service)
-- `cmd/orchestratord`: REST API server adapter
-
-Notes:
-- `internal/models` currently re-exports domain types as backward-compatible aliases.
-- This is an incremental refactor to preserve behavior while preparing for `orchestratord` (REST + web UI).
-
-## Install
-
-Build and register PATH entry in your `~/.zshrc`:
+1. Build and install binaries to your PATH:
 
 ```bash
 make install
 source ~/.zshrc
 ```
 
-This builds the binaries to `.build/ai-orchestrator` and `.build/orchestratord`, then adds `.build/` to `PATH`.
-
-If you use Codex as provider, run it in non-interactive mode in config:
-
-```yaml
-providers:
-  codex:
-    command: codex
-    args: ["exec", "-"]
-```
-
-Checks are empty by default. Configure repo-appropriate commands in `~/.ai-orchestrator/config.yaml`, for example:
-
-```yaml
-server_port: 8080
-server_workers: 4
-check_commands:
-  - npm test
-  - npm run typecheck
-```
-
-During implementation, the coding agent is instructed to auto-detect and run formatter/linter commands from the repository itself (for example scripts, Make targets, and tool config files) before returning.
-
-## Commands
+2. Start the server:
 
 ```bash
-ai-orchestrator run <ticket-number> <ticket-number>...
-ai-orchestrator wait-for-job <job-id>
-ai-orchestrator status <ticket-number>
-ai-orchestrator approve <ticket-number>
-ai-orchestrator feedback <ticket-number> --message "..."
-ai-orchestrator reject <ticket-number>
-ai-orchestrator resume <ticket-number>
-ai-orchestrator pr <ticket-number>
-ai-orchestrator cleanup <ticket-number>
-ai-orchestrator cleanup --done
-ai-orchestrator cleanup --all
+auto-prd
 ```
 
-## Server
-
-Start the REST server (default port from config: `server_port`, default `8080`):
+3. In your repository, schedule a run:
 
 ```bash
-orchestratord
+auto-pr run 12345
 ```
 
-Optional flags:
+4. Wait for completion if needed:
 
 ```bash
-orchestratord --port 9010
+auto-pr wait-for-job <job-id>
 ```
 
-URL layout:
+5. Open the web UI:
 
-- React frontend is served at `/` (embedded from `web/dist` at Go build time)
-- API is served under `/api/*`
+- http://127.0.0.1:8080
 
-Frontend development:
+## Main Commands
 
 ```bash
-cd web
-npm install
-npm run dev
+auto-pr run <ticket-number> [<ticket-number>...]
+auto-pr wait-for-job <job-id>
+auto-pr status [<ticket-number>]
+auto-pr approve <ticket-number>
+auto-pr feedback <ticket-number> --message "..."
+auto-pr reject <ticket-number>
+auto-pr resume <ticket-number>
+auto-pr pr <ticket-number>
+auto-pr cleanup <ticket-number>
+auto-pr cleanup --done
+auto-pr cleanup --all
 ```
 
-Frontend build (required before `go build ./cmd/orchestratord` if you want updated UI in the binary):
+Notes:
+
+- Mutating commands schedule background jobs and return a job id.
+- Use `wait-for-job` when you want to block until a job finishes.
+
+## Configuration
+
+Default config file:
+
+- `~/.auto-pr/config.yaml`
+
+Starter config:
+
+- [`config.example.yaml`](./config.example.yaml)
+
+Common settings:
+
+- `server_port` (default `8080`)
+- `server_workers` (default `4`)
+- `provider` (`codex` or `gemini`)
+
+Server URL override for CLI:
 
 ```bash
-cd web
-npm run build
+export AUTO_PR_SERVER_URL=http://127.0.0.1:8080
 ```
 
-Optional API base override for frontend dev:
+## Storage
 
-```bash
-cp web/.env.example web/.env
-# set VITE_API_BASE_URL if needed, default is same-origin
-```
+- Global settings and server metadata: `~/.auto-pr/`
+- Ticket artifacts per repo: `<repo>/.auto-pr/`
 
-Server metadata/state is stored in:
-
-- `~/.ai-orchestrator/server/state.json`
-
-Ticket artifacts remain in each repository under:
-
-- `<repo>/.ai-orchestrator/...`
-
-Endpoints:
-
-- `GET /api/health`
-- `GET /api/tickets` (optional query: `repo_path`)
-- `GET /api/tickets/{id}?repo_path=/abs/path/to/repo`
-- `GET /api/tickets/{id}/events?repo_path=/abs/path/to/repo`
-- `GET /api/tickets/{id}/artifacts/{name}?repo_path=/abs/path/to/repo`
-- `GET /api/jobs/{id}`
-- `POST /api/tickets/{id}/run` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
-- `POST /api/tickets/{id}/resume` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
-- `POST /api/tickets/{id}/approve` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
-- `POST /api/tickets/{id}/reject` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
-- `POST /api/tickets/{id}/feedback` (JSON body: `{"repo_path":"...","message":"..."}`) -> returns `202` with `job_id`
-- `POST /api/tickets/{id}/pr` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
-- `POST /api/tickets/{id}/cleanup` (JSON body: `{"repo_path":"..."}`) -> returns `202` with `job_id`
-- `POST /api/cleanup` (JSON body: `{"repo_path":"...","scope":"done|all"}`) -> returns `202` with `job_id`
-
-Job status values:
-
-- `queued`
-- `running`
-- `done`
-- `failed`
-
-Workers run jobs concurrently, while still guaranteeing:
-
-- per-ticket serialization
-- repo-wide exclusive cleanup (`cleanup done/all`) against other jobs in the same repo
-
-CLI always targets `orchestratord` (default URL: `http://127.0.0.1:8080`).
-Set this env var to point at a different server URL:
-
-```bash
-export AI_ORCHESTRATOR_SERVER_URL=http://127.0.0.1:8080
-ai-orchestrator run 12345
-ai-orchestrator wait-for-job <job-id>
-```
-
-Mutating commands (`run`, `resume`, `approve`, `reject`, `feedback`, `pr`, `cleanup`) schedule background jobs and return immediately with a job id.
-
-## Config
-
-Default config path:
-
-- `~/.ai-orchestrator/config.yaml`
-
-Legacy fallback still supported:
-
-- `~/.config/ai-orchestrator/config.yaml`
-
-Use [`config.example.yaml`](./config.example.yaml) as a starting point.
-
-### Shortcut MCP
-
-Shortcut access is expected to be configured in your selected provider CLI (`codex` or `gemini`) via that provider's MCP/tool configuration.
-
-When you run `ai-orchestrator run <ticket>`, the orchestrator asks the active provider to fetch ticket details for that ticket number and return normalized JSON.
-
-## Runtime files
-
-Per ticket runtime state is stored at:
-
-- `.ai-orchestrator/<ticket-number>/`
-
-Key files:
-
-- `state.json`
-- `ticket.json`
-- `log.md`
-- `proposal.md`
-- `final_solution.md`
-- `pr.md`
-- `checks.log`
-- `provider/*.md|*.log`
-
-## Important
-
-Do not commit runtime artifacts.
-
-Add this to your repo `.gitignore`:
+Add to `.gitignore`:
 
 ```gitignore
-.ai-orchestrator/
+.auto-pr/
 ```
 
-The tool also auto-adds this entry when missing.
+## Legacy Compatibility
 
-## Minimal workflow
+- Legacy binary names are still produced: `.build/ai-orchestrator`, `.build/orchestratord`
+- Legacy env var still works: `AI_ORCHESTRATOR_SERVER_URL`
+- Legacy config/state paths are still read when present
 
-1. `ai-orchestrator run 12345`
-2. Review `.ai-orchestrator/12345/proposal.md`
-3. `ai-orchestrator approve 12345` or `ai-orchestrator feedback 12345 --message "..."`
-4. `ai-orchestrator status 12345`
-5. Use `.ai-orchestrator/12345/pr.md` (or enable `create_pr`)
+## More Details
+
+For API endpoints, architecture, runtime files, and implementation details, see:
+
+- [`docs/TECHNICAL.md`](./docs/TECHNICAL.md)

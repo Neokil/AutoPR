@@ -8,15 +8,17 @@ build:
 		echo "building frontend (web/dist)"; \
 		cd web && npm install && npm run build; \
 	fi
-	@go build -o .build/ai-orchestrator ./cmd/ai-orchestrator
-	@go build -o .build/orchestratord ./cmd/orchestratord
+	@go build -o .build/auto-pr ./cmd/ai-orchestrator
+	@go build -o .build/auto-prd ./cmd/orchestratord
+	@cp .build/auto-pr .build/ai-orchestrator
+	@cp .build/auto-prd .build/orchestratord
 
 install: build
 	@ZSHRC="$$HOME/.zshrc"; \
-	ALIAS_START="# >>> ai-orchestrator alias >>>"; \
-	ALIAS_END="# <<< ai-orchestrator alias <<<"; \
-	START="# >>> ai-orchestrator build-path >>>"; \
-	END="# <<< ai-orchestrator build-path <<<"; \
+	ALIAS_START="# >>> auto-pr alias >>>"; \
+	ALIAS_END="# <<< auto-pr alias <<<"; \
+	START="# >>> auto-pr build-path >>>"; \
+	END="# <<< auto-pr build-path <<<"; \
 	TMP="$$(mktemp)"; \
 	if [ -f "$$ZSHRC" ]; then \
 		awk -v as="$$ALIAS_START" -v ae="$$ALIAS_END" -v ps="$$START" -v pe="$$END" 'BEGIN{skip=0} $$0==as||$$0==ps{skip=1;next} $$0==ae||$$0==pe{skip=0;next} !skip{print}' "$$ZSHRC" > "$$TMP"; \
@@ -31,6 +33,6 @@ install: build
 		echo "$$END"; \
 	} > "$$ZSHRC"; \
 	rm -f "$$TMP"; \
-	echo "built .build/ai-orchestrator and .build/orchestratord"; \
+	echo "built .build/auto-pr and .build/auto-prd (plus legacy names)"; \
 	echo "updated PATH in $$ZSHRC"; \
 	echo "run: source $$ZSHRC"

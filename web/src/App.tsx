@@ -283,7 +283,7 @@ export function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>AI Orchestrator</h1>
+        <h1>auto-pr</h1>
         <div className="button-row">
           <button onClick={() => void refreshTickets()} disabled={loading}>
             Refresh All Tickets
