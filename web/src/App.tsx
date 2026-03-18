@@ -8,7 +8,6 @@ import {
   createPR,
   feedbackTicket,
   getArtifact,
-  getEvents,
   getJob,
   getTicket,
   listTickets,
@@ -17,7 +16,7 @@ import {
   runTicket
 } from "./api";
 import { MarkdownView } from "./MarkdownView";
-import type { EventItem, Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
@@ -46,11 +45,69 @@ function allowedActions(status: string): Action[] {
   }
 }
 
+function formatValue(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+  if (value === undefined) {
+    return "";
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  return String(value);
+}
+
+function renderTicketObject(obj: Record<string, unknown>, prefix = ""): JSX.Element[] {
+  return Object.entries(obj).map(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return (
+        <div key={path} className="ticket-section">
+          <h4>{key.replace(/_/g, " ")}</h4>
+          <div className="ticket-fields">{renderTicketObject(value as Record<string, unknown>, path)}</div>
+        </div>
+      );
+    }
+    if (Array.isArray(value)) {
+      return (
+        <div key={path} className="ticket-field">
+          <span className="meta">{key.replace(/_/g, " ")}</span>
+          <pre>{JSON.stringify(value, null, 2)}</pre>
+        </div>
+      );
+    }
+    if ((key === "description" || key === "acceptance_criteria") && typeof value === "string") {
+      return (
+        <div key={path} className="ticket-field">
+          <span className="meta">{key.replace(/_/g, " ")}</span>
+          <MarkdownView content={value} emptyText="No content." />
+        </div>
+      );
+    }
+    if (key === "url" && typeof value === "string" && value.trim()) {
+      return (
+        <div key={path} className="ticket-field">
+          <span className="meta">{key}</span>
+          <a href={value} target="_blank" rel="noreferrer">
+            {value}
+          </a>
+        </div>
+      );
+    }
+    return (
+      <div key={path} className="ticket-field">
+        <span className="meta">{key.replace(/_/g, " ")}</span>
+        <span>{formatValue(value)}</span>
+      </div>
+    );
+  });
+}
+
 export function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [details, setDetails] = useState<TicketDetails | null>(null);
-  const [events, setEvents] = useState<EventItem[]>([]);
   const [proposal, setProposal] = useState("");
   const [logText, setLogText] = useState("");
   const [activeTab, setActiveTab] = useState<"details" | "proposal" | "logs">("details");
@@ -89,7 +146,6 @@ export function App() {
   useEffect(() => {
     if (!selectedSummary) {
       setDetails(null);
-      setEvents([]);
       setProposal("");
       setLogText("");
       return;
@@ -129,20 +185,17 @@ export function App() {
     }
     setError("");
     try {
-      const [ticketDetails, eventItems, proposalText, logs] = await Promise.all([
+      const [ticketDetails, proposalText, logs] = await Promise.all([
         getTicket(repoPath, ticket),
-        getEvents(repoPath, ticket),
         getArtifact(repoPath, ticket, "proposal"),
         getArtifact(repoPath, ticket, "log")
       ]);
       setDetails(ticketDetails);
-      setEvents(eventItems);
       setProposal(proposalText);
       setLogText(logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load ticket details");
       setDetails(null);
-      setEvents([]);
       setProposal("");
       setLogText("");
     } finally {
@@ -368,25 +421,14 @@ export function App() {
               {activeTab === "details" ? (
                 <article className="card">
                   <h3>{details?.ticket?.title || "(no title)"}</h3>
-                  <MarkdownView content={details?.ticket?.description ?? ""} emptyText="No description." />
                   <p className="meta">{selectedSummary.repo_path}</p>
+                  {details?.ticket ? <div className="ticket-fields">{renderTicketObject(details.ticket as Record<string, unknown>)}</div> : null}
                   {details?.next_steps ? (
                     <>
                       <h4>Next Steps</h4>
                       <MarkdownView content={details.next_steps} />
                     </>
                   ) : null}
-                  <h4>Recent Events</h4>
-                  <ul className="events">
-                    {events.slice(0, 10).map((ev, idx) => (
-                      <li key={`${ev.timestamp}-${idx}`}>
-                        <div>
-                          <strong>{ev.title}</strong> <span className="meta">{ev.timestamp}</span>
-                        </div>
-                        <MarkdownView content={ev.body} />
-                      </li>
-                    ))}
-                  </ul>
                 </article>
               ) : null}
 

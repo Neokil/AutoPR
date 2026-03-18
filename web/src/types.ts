@@ -38,11 +38,8 @@ export interface TicketDetails {
   repo_path: string;
   ticket_number: string;
   state: TicketState;
-  ticket?: {
+  ticket?: Record<string, unknown> & {
     title?: string;
-    description?: string;
-    acceptance_criteria?: string;
-    url?: string;
   };
   next_steps?: string;
 }

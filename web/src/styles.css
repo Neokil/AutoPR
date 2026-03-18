@@ -212,6 +212,25 @@ button:disabled {
   margin-top: 12px;
 }
 
+.ticket-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ticket-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ticket-section {
+  border: 1px solid var(--soft-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--soft-bg);
+}
+
 pre {
   white-space: pre-wrap;
   background: var(--soft-bg);
@@ -239,15 +258,6 @@ pre {
 
 .markdown code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.events {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .banner {
