@@ -63,6 +63,9 @@ export function App() {
   const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
   const activeJobIdRef = useRef<string>("");
+  const refreshInFlightRef = useRef(false);
+  const refreshQueuedRef = useRef(false);
+  const detailsRefreshNeededRef = useRef(false);
 
   useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
@@ -154,30 +157,61 @@ export function App() {
   async function handleServerEvent(evt: ServerEvent) {
     const selected = selectedSummaryRef.current;
     const trackedJobID = activeJobIdRef.current;
-    if (evt.type === "job" && evt.job_id && (!trackedJobID || evt.job_id === trackedJobID)) {
-      try {
-        const job = await getJob(evt.job_id);
-        setActiveJob(job);
-        if (job.status === "done" || job.status === "failed") {
+    if (evt.type === "job" && evt.job_id && trackedJobID && evt.job_id === trackedJobID) {
+      const status = evt.status ?? "";
+      if (status === "done" || status === "failed") {
+        try {
+          const job = await getJob(evt.job_id);
+          setActiveJob(job);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "failed to refresh job");
+        } finally {
           setActiveJobId("");
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "failed to refresh job");
+      } else if (status === "queued" || status === "running") {
+        setActiveJob((current) => {
+          if (!current) {
+            return current;
+          }
+          return { ...current, status };
+        });
       }
     }
 
-    await refreshTickets(false);
-    if (!selected) {
+    const shouldRefreshDetails =
+      !!selected &&
+      ((evt.type === "repo_tickets_synced" && evt.repo_path === selected.repo_path) ||
+        (evt.repo_path === selected.repo_path && evt.ticket_number === selected.ticket_number));
+    requestRefresh(shouldRefreshDetails);
+  }
+
+  function requestRefresh(withDetails: boolean) {
+    refreshQueuedRef.current = true;
+    if (withDetails) {
+      detailsRefreshNeededRef.current = true;
+    }
+    if (refreshInFlightRef.current) {
       return;
     }
+    void runRefreshQueue();
+  }
 
-    if (evt.type === "repo_tickets_synced" && evt.repo_path === selected.repo_path) {
-      await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
-      return;
-    }
-
-    if (evt.repo_path === selected.repo_path && evt.ticket_number === selected.ticket_number) {
-      await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
+  async function runRefreshQueue() {
+    refreshInFlightRef.current = true;
+    try {
+      while (refreshQueuedRef.current) {
+        refreshQueuedRef.current = false;
+        await refreshTickets(false);
+        if (detailsRefreshNeededRef.current) {
+          detailsRefreshNeededRef.current = false;
+          const selected = selectedSummaryRef.current;
+          if (selected) {
+            await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
+          }
+        }
+      }
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }
 
