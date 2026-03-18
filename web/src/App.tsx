@@ -254,9 +254,23 @@ export function App() {
     <div className="app">
       <header className="header">
         <h1>AI Orchestrator</h1>
-        <button onClick={() => void refreshTickets()} disabled={loading}>
-          Refresh All Tickets
-        </button>
+        <div className="button-row">
+          <button onClick={() => void refreshTickets()} disabled={loading}>
+            Refresh All Tickets
+          </button>
+          <button
+            onClick={() => selectedSummary && void queueAction(() => cleanupDone(selectedSummary.repo_path))}
+            disabled={!selectedSummary}
+          >
+            Cleanup Done
+          </button>
+          <button
+            onClick={() => selectedSummary && void queueAction(() => cleanupAll(selectedSummary.repo_path))}
+            disabled={!selectedSummary}
+          >
+            Cleanup All
+          </button>
+        </div>
       </header>
 
       {error ? <div className="banner error">{error}</div> : null}
@@ -362,10 +376,6 @@ export function App() {
                       <MarkdownView content={details.next_steps} />
                     </>
                   ) : null}
-                  <div className="button-row">
-                    <button onClick={() => void queueAction(() => cleanupDone(selectedSummary.repo_path))}>Cleanup Done (Repo)</button>
-                    <button onClick={() => void queueAction(() => cleanupAll(selectedSummary.repo_path))}>Cleanup All (Repo)</button>
-                  </div>
                   <h4>Recent Events</h4>
                   <ul className="events">
                     {events.slice(0, 10).map((ev, idx) => (
