@@ -89,8 +89,7 @@ Install behavior:
 - `make remove-config` removes the `~/.auto-pr` scaffolding directory.
 - `make install` creates `~/.auto-pr/server/logs/` for daemon stdout/stderr.
 - Existing files are kept as-is (non-destructive).
-- On macOS, `make install` writes `~/Library/LaunchAgents/com.autopr.auto-prd.plist` and starts it with `launchctl`.
-- On Linux with `systemd --user` available, `make install` writes `~/.config/systemd/user/auto-prd.service` and enables it.
+- Service-related scripts currently short-circuit and print that `launchd` / `systemd` operations are disabled.
 
 Repository discovery config:
 

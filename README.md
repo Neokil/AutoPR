@@ -35,10 +35,7 @@ It also scaffolds (without overwriting existing files):
 - `~/.auto-pr/prompts/*.md.tmpl` (default prompt templates)
 - `~/.auto-pr/server/logs/` for daemon stdout/stderr
 
-On supported systems, `make install` also installs and starts the background daemon for the current user:
-
-- macOS: `~/Library/LaunchAgents/com.autopr.auto-prd.plist`
-- Linux with `systemd --user`: `~/.config/systemd/user/auto-prd.service`
+Service-related make targets currently no-op with a message because `launchd` / `systemd` integration is intentionally disabled for now.
 
 2. If your platform is unsupported or service setup was skipped, start the server manually:
 
@@ -137,8 +134,7 @@ Service management:
 - `make refresh-service`
 - `make service-status`
 - `make service-logs`
-- macOS: `launchctl kickstart -k gui/$(id -u)/com.autopr.auto-prd`
-- Linux: `systemctl --user restart auto-prd.service`
+- These currently return early because service integration is disabled.
 
 Removal:
 
