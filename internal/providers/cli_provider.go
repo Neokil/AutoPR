@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"ai-ticket-worker/internal/config"
-	"ai-ticket-worker/internal/models"
+	"ai-ticket-worker/internal/domain/ticket"
 	"ai-ticket-worker/internal/shell"
 )
 
@@ -51,28 +51,28 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 
 func (p *CLIProvider) Name() string { return p.name }
 
-func (p *CLIProvider) getTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error) {
+func (p *CLIProvider) getTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error) {
 	prompt, err := renderPromptTemplate(p.promptsDir, tplTicket, map[string]string{
 		"TicketNumber": ticketNumber,
 	})
 	if err != nil {
-		return models.Ticket{}, "", err
+		return ticket.Ticket{}, "", err
 	}
 	out, err := p.runPrompt(ctx, repoPath, runtimeDir, "ticket", prompt)
 	if err != nil {
-		return models.Ticket{}, "", err
+		return ticket.Ticket{}, "", err
 	}
-	ticket, err := decodeTicketPayload(out)
+	parsedTicket, err := decodeTicketPayload(out)
 	if err != nil {
-		return models.Ticket{}, out, err
+		return ticket.Ticket{}, out, err
 	}
-	if ticket.Number == "" {
-		ticket.Number = ticketNumber
+	if parsedTicket.Number == "" {
+		parsedTicket.Number = ticketNumber
 	}
-	if ticket.ID == "" {
-		ticket.ID = ticket.Number
+	if parsedTicket.ID == "" {
+		parsedTicket.ID = parsedTicket.Number
 	}
-	return ticket, out, nil
+	return parsedTicket, out, nil
 }
 
 func (p *CLIProvider) runPrompt(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, error) {
@@ -94,7 +94,7 @@ func (p *CLIProvider) runPrompt(ctx context.Context, worktreePath, runtimeDir, p
 	return res.Stdout, nil
 }
 
-func renderTicketContext(ticket models.Ticket) string {
+func renderTicketContext(ticket ticket.Ticket) string {
 	var b strings.Builder
 	if ticket.ParentTicket != nil {
 		parent := ticket.ParentTicket
@@ -114,7 +114,7 @@ type GeminiProvider struct{ CLIProvider }
 
 type CodexProvider struct{ CLIProvider }
 
-func (p *GeminiProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error) {
+func (p *GeminiProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error) {
 	return p.getTicket(ctx, ticketNumber, repoPath, runtimeDir)
 }
 
@@ -186,7 +186,7 @@ func (p *GeminiProvider) SummarizePR(ctx context.Context, req PRRequest, runtime
 	return PRResult{Body: out, RawOut: out}, nil
 }
 
-func (p *CodexProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error) {
+func (p *CodexProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error) {
 	return p.getTicket(ctx, ticketNumber, repoPath, runtimeDir)
 }
 
@@ -258,7 +258,7 @@ func (p *CodexProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeD
 	return PRResult{Body: out, RawOut: out}, nil
 }
 
-func decodeTicketPayload(raw string) (models.Ticket, error) {
+func decodeTicketPayload(raw string) (ticket.Ticket, error) {
 	trimmed := strings.TrimSpace(raw)
 	if strings.HasPrefix(trimmed, "```") {
 		trimmed = stripCodeFence(trimmed)
@@ -268,13 +268,13 @@ func decodeTicketPayload(raw string) (models.Ticket, error) {
 			trimmed = trimmed[start : end+1]
 		}
 	}
-	var direct models.Ticket
+	var direct ticket.Ticket
 	if err := json.Unmarshal([]byte(trimmed), &direct); err == nil && strings.TrimSpace(direct.Title) != "" {
 		return direct, nil
 	}
 
 	var wrapped struct {
-		Ticket models.Ticket `json:"ticket"`
+		Ticket ticket.Ticket `json:"ticket"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &wrapped); err == nil && strings.TrimSpace(wrapped.Ticket.Title) != "" {
 		return wrapped.Ticket, nil
@@ -290,10 +290,10 @@ func decodeTicketPayload(raw string) (models.Ticket, error) {
 		} `json:"labels"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &shortcut); err != nil {
-		return models.Ticket{}, fmt.Errorf("parse provider ticket JSON: %w", err)
+		return ticket.Ticket{}, fmt.Errorf("parse provider ticket JSON: %w", err)
 	}
 	if strings.TrimSpace(shortcut.Name) == "" {
-		return models.Ticket{}, fmt.Errorf("ticket title missing in provider output")
+		return ticket.Ticket{}, fmt.Errorf("ticket title missing in provider output")
 	}
 	labels := make([]string, 0, len(shortcut.Labels))
 	for _, l := range shortcut.Labels {
@@ -301,7 +301,7 @@ func decodeTicketPayload(raw string) (models.Ticket, error) {
 			labels = append(labels, l.Name)
 		}
 	}
-	return models.Ticket{
+	return ticket.Ticket{
 		ID:          fmt.Sprintf("%v", shortcut.ID),
 		Title:       shortcut.Name,
 		Description: shortcut.Description,

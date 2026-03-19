@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"ai-ticket-worker/internal/config"
+	ticketdomain "ai-ticket-worker/internal/domain/ticket"
 	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/markdown"
-	"ai-ticket-worker/internal/models"
 	"ai-ticket-worker/internal/ports"
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/shell"
@@ -56,29 +56,29 @@ func (o *Orchestrator) RunTicket(ctx context.Context, ticketNumber string) error
 	if err != nil {
 		return err
 	}
-	if st.Status == models.StatePRReady {
+	if st.Status == ticketdomain.StatePRReady {
 		t, err := o.Store.LoadTicket(ticketNumber)
 		if err != nil {
 			return err
 		}
 		return o.generatePR(ctx, st, t)
 	}
-	if st.Status == models.StateWaitingForHuman && !st.Approved {
+	if st.Status == ticketdomain.StateWaitingForHuman && !st.Approved {
 		fmt.Printf("ticket %s is waiting for human input. Run approve/feedback/reject.\n", ticketNumber)
 		return nil
 	}
-	if st.Status == models.StateQueued ||
-		st.Status == models.StateInvestigating ||
-		st.Status == models.StateProposalReady {
+	if st.Status == ticketdomain.StateQueued ||
+		st.Status == ticketdomain.StateInvestigating ||
+		st.Status == ticketdomain.StateProposalReady {
 		return o.investigate(ctx, st)
 	}
 	if st.Approved ||
-		st.Status == models.StateImplementing ||
-		st.Status == models.StateValidating ||
-		st.Status == models.StatePRReady {
+		st.Status == ticketdomain.StateImplementing ||
+		st.Status == ticketdomain.StateValidating ||
+		st.Status == ticketdomain.StatePRReady {
 		return o.implementationPipeline(ctx, st)
 	}
-	if st.Status == models.StateDone {
+	if st.Status == ticketdomain.StateDone {
 		fmt.Printf("ticket %s already done\n", ticketNumber)
 	}
 	return nil
@@ -89,26 +89,26 @@ func (o *Orchestrator) ResumeTicket(ctx context.Context, ticketNumber string) er
 	if err != nil {
 		return err
 	}
-	if st.Status == models.StatePRReady {
+	if st.Status == ticketdomain.StatePRReady {
 		t, err := o.Store.LoadTicket(ticketNumber)
 		if err != nil {
 			return err
 		}
 		return o.generatePR(ctx, &st, t)
 	}
-	if st.Status == models.StateWaitingForHuman && !st.Approved {
+	if st.Status == ticketdomain.StateWaitingForHuman && !st.Approved {
 		fmt.Printf("ticket %s is waiting for human input.\n", ticketNumber)
 		return nil
 	}
-	if st.Status == models.StateQueued ||
-		st.Status == models.StateInvestigating ||
-		st.Status == models.StateProposalReady {
+	if st.Status == ticketdomain.StateQueued ||
+		st.Status == ticketdomain.StateInvestigating ||
+		st.Status == ticketdomain.StateProposalReady {
 		return o.investigate(ctx, &st)
 	}
 	if st.Approved ||
-		st.Status == models.StateImplementing ||
-		st.Status == models.StateValidating ||
-		st.Status == models.StatePRReady {
+		st.Status == ticketdomain.StateImplementing ||
+		st.Status == ticketdomain.StateValidating ||
+		st.Status == ticketdomain.StatePRReady {
 		return o.implementationPipeline(ctx, &st)
 	}
 	return nil
@@ -120,7 +120,7 @@ func (o *Orchestrator) Approve(ctx context.Context, ticketNumber string) error {
 		return err
 	}
 	st.Approved = true
-	st.Status = models.StateImplementing
+	st.Status = ticketdomain.StateImplementing
 	if err := o.Store.SaveState(ticketNumber, st); err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (o *Orchestrator) Feedback(ticketNumber, message string) error {
 	}
 	st.LastFeedback = message
 	st.Approved = false
-	st.Status = models.StateInvestigating
+	st.Status = ticketdomain.StateInvestigating
 	if err := markdown.AppendSection(st.LogPath, "Human Feedback", message); err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (o *Orchestrator) Reject(ticketNumber string) error {
 	if err != nil {
 		return err
 	}
-	st.Status = models.StateFailed
+	st.Status = ticketdomain.StateFailed
 	st.Approved = false
 	st.LastError = "rejected by human"
 	if err := markdown.AppendSection(st.LogPath, "Human Rejection", "Rejected by reviewer."); err != nil {
@@ -179,23 +179,23 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 		return "", err
 	}
 	switch st.Status {
-	case models.StateQueued:
+	case ticketdomain.StateQueued:
 		return "", nil
-	case models.StateInvestigating, models.StateProposalReady, models.StateWaitingForHuman:
+	case ticketdomain.StateInvestigating, ticketdomain.StateProposalReady, ticketdomain.StateWaitingForHuman:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review proposal: %s\n  2. Approve: auto-pr approve %s\n  3. Provide feedback: auto-pr feedback %s --message \"...\"\n  4. Reject: auto-pr reject %s", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
-	case models.StateImplementing, models.StateValidating:
+	case ticketdomain.StateImplementing, ticketdomain.StateValidating:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
-	case models.StatePRReady:
+	case ticketdomain.StatePRReady:
 		if strings.TrimSpace(st.PRURL) != "" {
 			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review PR markdown: %s\n  2. Review GitHub PR: %s\n  3. Apply open review comments: auto-pr apply-pr-comments %s", st.TicketNumber, st.PRPath, st.PRURL, st.TicketNumber), nil
 		}
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Generate/create PR: auto-pr pr %s\n  2. Review PR markdown: %s", st.TicketNumber, st.TicketNumber, st.PRPath), nil
-	case models.StateDone:
+	case ticketdomain.StateDone:
 		if strings.TrimSpace(st.PRURL) != "" {
 			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Review GitHub PR: %s\n  3. Apply open review comments: auto-pr apply-pr-comments %s", st.TicketNumber, st.PRPath, st.PRURL, st.TicketNumber), nil
 		}
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Check current state: auto-pr status %s", st.TicketNumber, st.PRPath, st.TicketNumber), nil
-	case models.StateFailed:
+	case ticketdomain.StateFailed:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Inspect log: %s\n  2. Add feedback: auto-pr feedback %s --message \"...\"\n  3. Retry: auto-pr resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber), nil
 	default:
 		return fmt.Sprintf("Next steps for ticket %s:\n  1. Check status: auto-pr status %s\n  2. Continue: auto-pr resume %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
@@ -226,7 +226,7 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		if st.Status == models.StateDone {
+		if st.Status == ticketdomain.StateDone {
 			if err := o.CleanupTicket(ctx, ticket); err != nil {
 				fmt.Fprintf(os.Stderr, "cleanup %s failed: %v\n", ticket, err)
 			}
@@ -264,7 +264,7 @@ func (o *Orchestrator) GeneratePR(ctx context.Context, ticketNumber string) erro
 	if err := o.generatePR(ctx, &st, t); err != nil {
 		return err
 	}
-	st.Status = models.StateDone
+	st.Status = ticketdomain.StateDone
 	if err := o.Store.SaveState(ticketNumber, st); err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 	_ = markdown.AppendSection(st.LogPath, "PR Comments", commentContext)
 
 	prevStatus := st.Status
-	st.Status = models.StateImplementing
+	st.Status = ticketdomain.StateImplementing
 	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
 		return err
 	}
@@ -315,7 +315,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 			"Only implement requested changes that are relevant and correct.\n\n" + commentContext,
 	}, st.ProviderDirPath)
 	if err != nil {
-		st.Status = models.StateFailed
+		st.Status = ticketdomain.StateFailed
 		st.LastError = err.Error()
 		_ = markdown.AppendSection(st.LogPath, "Apply PR Comments Failed", err.Error())
 		_ = o.Store.SaveState(st.TicketNumber, st)
@@ -328,7 +328,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 		return err
 	}
 
-	st.Status = models.StateValidating
+	st.Status = ticketdomain.StateValidating
 	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 		return err
 	}
 	if !ok {
-		st.Status = models.StateFailed
+		st.Status = ticketdomain.StateFailed
 		st.LastError = "checks failed after applying PR comments"
 		_ = markdown.AppendSection(st.LogPath, "Validation Failed", checkOutput)
 		_ = o.Store.SaveState(st.TicketNumber, st)
@@ -346,7 +346,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 	_ = markdown.AppendSection(st.LogPath, "Validation", "All checks passed after applying PR comments.")
 
 	if err := o.ensureCommitForTicket(ctx, st, ticket); err != nil {
-		st.Status = models.StateFailed
+		st.Status = ticketdomain.StateFailed
 		st.LastError = err.Error()
 		_ = markdown.AppendSection(st.LogPath, "Commit Failed", err.Error())
 		_ = o.Store.SaveState(st.TicketNumber, st)
@@ -354,7 +354,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 	}
 	if err := gitutil.PushBranch(ctx, st.WorktreePath, st.BranchName); err != nil {
 		msg := fmt.Sprintf("failed to push updates for ticket %s: %v", st.TicketNumber, err)
-		st.Status = models.StateFailed
+		st.Status = ticketdomain.StateFailed
 		st.LastError = msg
 		_ = markdown.AppendSection(st.LogPath, "PR Update Push Failed", msg)
 		_ = o.Store.SaveState(st.TicketNumber, st)
@@ -365,7 +365,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 	st.Status = prevStatus
 	st.LastError = ""
 	if st.Status == "" {
-		st.Status = models.StateDone
+		st.Status = ticketdomain.StateDone
 	}
 	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
 		return err
@@ -373,7 +373,7 @@ func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string)
 	return nil
 }
 
-func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*models.TicketState, error) {
+func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*ticketdomain.State, error) {
 	if st, err := o.Store.LoadState(ticketNumber); err == nil {
 		if _, ticketErr := o.Store.LoadTicket(ticketNumber); ticketErr == nil {
 			return &st, nil
@@ -391,7 +391,7 @@ func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*mo
 		return nil, err
 	}
 	ticket.Number = ticketNumber
-	st := models.NewTicketState(ticketNumber)
+	st := ticketdomain.NewState(ticketNumber)
 	st.ProposalPath = paths["proposal"]
 	st.FinalPath = paths["final"]
 	st.LogPath = paths["log"]
@@ -420,13 +420,13 @@ func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*mo
 	return &st, nil
 }
 
-func (o *Orchestrator) investigate(ctx context.Context, st *models.TicketState) error {
+func (o *Orchestrator) investigate(ctx context.Context, st *ticketdomain.State) error {
 	ticket, err := o.Store.LoadTicket(st.TicketNumber)
 	if err != nil {
 		return err
 	}
 
-	st.Status = models.StateInvestigating
+	st.Status = ticketdomain.StateInvestigating
 	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 		return err
 	}
@@ -441,7 +441,7 @@ func (o *Orchestrator) investigate(ctx context.Context, st *models.TicketState) 
 		Feedback:       st.LastFeedback,
 	}, st.ProviderDirPath)
 	if err != nil {
-		st.Status = models.StateFailed
+		st.Status = ticketdomain.StateFailed
 		st.LastError = err.Error()
 		_ = o.Store.SaveState(st.TicketNumber, *st)
 		_ = markdown.AppendSection(st.LogPath, "Investigation Failed", err.Error())
@@ -454,11 +454,11 @@ func (o *Orchestrator) investigate(ctx context.Context, st *models.TicketState) 
 	if err := markdown.AppendSection(st.LogPath, "Investigation", res.RawOut); err != nil {
 		return err
 	}
-	st.Status = models.StateProposalReady
+	st.Status = ticketdomain.StateProposalReady
 	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 		return err
 	}
-	st.Status = models.StateWaitingForHuman
+	st.Status = ticketdomain.StateWaitingForHuman
 	st.Approved = false
 	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 		return err
@@ -467,7 +467,7 @@ func (o *Orchestrator) investigate(ctx context.Context, st *models.TicketState) 
 	return nil
 }
 
-func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.TicketState) error {
+func (o *Orchestrator) implementationPipeline(ctx context.Context, st *ticketdomain.State) error {
 	ticket, err := o.Store.LoadTicket(st.TicketNumber)
 	if err != nil {
 		return err
@@ -475,7 +475,7 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 	var failureContext string
 
 	for {
-		st.Status = models.StateImplementing
+		st.Status = ticketdomain.StateImplementing
 		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 			return err
 		}
@@ -491,7 +491,7 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 			FailureContext:    failureContext,
 		}, st.ProviderDirPath)
 		if err != nil {
-			st.Status = models.StateFailed
+			st.Status = ticketdomain.StateFailed
 			st.LastError = err.Error()
 			_ = markdown.AppendSection(st.LogPath, "Implementation Failed", err.Error())
 			_ = o.Store.SaveState(st.TicketNumber, *st)
@@ -505,7 +505,7 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 			return err
 		}
 
-		st.Status = models.StateValidating
+		st.Status = ticketdomain.StateValidating
 		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 			return err
 		}
@@ -522,7 +522,7 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 		_ = markdown.AppendSection(st.LogPath, "Validation Failed", checkOutput)
 		st.FixAttempts++
 		if st.FixAttempts > o.Cfg.MaxFixAttempts {
-			st.Status = models.StateFailed
+			st.Status = ticketdomain.StateFailed
 			st.LastError = "checks failed after max attempts"
 			_ = o.Store.SaveState(st.TicketNumber, *st)
 			return fmt.Errorf("ticket %s: checks failed after %d attempts", st.TicketNumber, st.FixAttempts)
@@ -532,9 +532,9 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 		}
 	}
 
-	st.Status = models.StatePRReady
+	st.Status = ticketdomain.StatePRReady
 	if err := o.ensureCommitForTicket(ctx, *st, ticket); err != nil {
-		st.Status = models.StateFailed
+		st.Status = ticketdomain.StateFailed
 		st.LastError = err.Error()
 		_ = o.Store.SaveState(st.TicketNumber, *st)
 		_ = markdown.AppendSection(st.LogPath, "Commit Failed", err.Error())
@@ -546,7 +546,7 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 	if err := o.generatePR(ctx, st, ticket); err != nil {
 		return err
 	}
-	st.Status = models.StateDone
+	st.Status = ticketdomain.StateDone
 	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 		return err
 	}
@@ -554,7 +554,7 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *models.Ti
 	return nil
 }
 
-func (o *Orchestrator) generatePR(ctx context.Context, st *models.TicketState, ticket models.Ticket) error {
+func (o *Orchestrator) generatePR(ctx context.Context, st *ticketdomain.State, ticket ticketdomain.Ticket) error {
 	pr, err := o.Provider.SummarizePR(ctx, providers.PRRequest{
 		Ticket:            ticket,
 		WorktreePath:      st.WorktreePath,
@@ -598,7 +598,7 @@ func (o *Orchestrator) generatePR(ctx context.Context, st *models.TicketState, t
 	return nil
 }
 
-func (o *Orchestrator) runChecks(ctx context.Context, st models.TicketState) (bool, string, error) {
+func (o *Orchestrator) runChecks(ctx context.Context, st ticketdomain.State) (bool, string, error) {
 	commands := make([]string, 0, len(o.Cfg.FormatCommands)+len(o.Cfg.LintCommands)+len(o.Cfg.CheckCommands))
 	commands = append(commands, o.Cfg.FormatCommands...)
 	commands = append(commands, o.Cfg.LintCommands...)
@@ -653,7 +653,7 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 	return nil
 }
 
-func (o *Orchestrator) localPR(ticket models.Ticket, st models.TicketState) (string, error) {
+func (o *Orchestrator) localPR(ticket ticketdomain.Ticket, st ticketdomain.State) (string, error) {
 	proposal, _ := os.ReadFile(st.ProposalPath)
 	final, _ := os.ReadFile(st.FinalPath)
 	checks, _ := os.ReadFile(st.ChecksLogPath)
@@ -696,7 +696,7 @@ func hasCheckFailures(checks string) bool {
 	return strings.Contains(s, "[exit] failed:") || strings.Contains(s, "failed")
 }
 
-func branchName(ticket models.Ticket) string {
+func branchName(ticket ticketdomain.Ticket) string {
 	slug := slugify(ticket.Title)
 	if slug == "" {
 		slug = "ticket"
@@ -724,7 +724,7 @@ func indent(s, pref string) string {
 	return strings.Join(lines, "\n")
 }
 
-func relatedContextSummary(ticket models.Ticket) string {
+func relatedContextSummary(ticket ticketdomain.Ticket) string {
 	var parts []string
 	if ticket.ParentTicket != nil {
 		parts = append(parts, fmt.Sprintf("Parent Ticket: %s (%s)", ticket.ParentTicket.Title, ticket.ParentTicket.URL))
@@ -762,7 +762,7 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	return err
 }
 
-func (o *Orchestrator) ensureCommitForTicket(ctx context.Context, st models.TicketState, ticket models.Ticket) error {
+func (o *Orchestrator) ensureCommitForTicket(ctx context.Context, st ticketdomain.State, ticket ticketdomain.Ticket) error {
 	hasChanges, err := gitutil.HasChanges(ctx, st.WorktreePath)
 	if err != nil {
 		return fmt.Errorf("check git status before commit: %w", err)
@@ -778,15 +778,15 @@ func (o *Orchestrator) ensureCommitForTicket(ctx context.Context, st models.Tick
 	return nil
 }
 
-func (o *Orchestrator) validatePRPrereqs(ctx context.Context, st models.TicketState) error {
-	if st.Status == models.StateWaitingForHuman && !st.Approved {
+func (o *Orchestrator) validatePRPrereqs(ctx context.Context, st ticketdomain.State) error {
+	if st.Status == ticketdomain.StateWaitingForHuman && !st.Approved {
 		return fmt.Errorf("ticket %s is waiting for human approval.\n\nNext steps:\n  1. Review proposal: %s\n  2. Approve to continue: auto-pr approve %s\n  3. Or send more feedback: auto-pr feedback %s --message \"...\"", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber)
 	}
-	if st.Status == models.StateFailed {
+	if st.Status == ticketdomain.StateFailed {
 		return fmt.Errorf("ticket %s is in failed state.\n\nNext steps:\n  1. Inspect log: %s\n  2. Fix issue or provide feedback: auto-pr feedback %s --message \"...\"\n  3. Resume: auto-pr resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber)
 	}
 	// If work is not done yet, guide users to resume instead of forcing PR creation.
-	if st.Status != models.StatePRReady && st.Status != models.StateDone {
+	if st.Status != ticketdomain.StatePRReady && st.Status != ticketdomain.StateDone {
 		return fmt.Errorf("ticket %s is in state %s and not ready for PR yet.\n\nNext steps:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.Status, st.TicketNumber, st.TicketNumber)
 	}
 	return nil
@@ -932,7 +932,7 @@ func formatPRCommentContext(comments []prComment) string {
 	return strings.TrimSpace(b.String())
 }
 
-func (o *Orchestrator) ensureBranchHasCommits(ctx context.Context, st models.TicketState) error {
+func (o *Orchestrator) ensureBranchHasCommits(ctx context.Context, st ticketdomain.State) error {
 	candidates := []string{}
 	if strings.TrimSpace(o.Cfg.BaseBranch) != "" {
 		candidates = append(candidates, strings.TrimSpace(o.Cfg.BaseBranch))

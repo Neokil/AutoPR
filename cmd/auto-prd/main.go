@@ -21,8 +21,8 @@ import (
 	"ai-ticket-worker/internal/application/orchestrator"
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/contracts/api"
+	ticketdomain "ai-ticket-worker/internal/domain/ticket"
 	"ai-ticket-worker/internal/gitutil"
-	"ai-ticket-worker/internal/models"
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/shell"
@@ -661,7 +661,7 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 	}
 
 	paths := rt.store.Paths(ticket)
-	st := models.NewTicketState(ticket)
+	st := ticketdomain.NewState(ticket)
 	st.ProposalPath = paths["proposal"]
 	st.FinalPath = paths["final"]
 	st.LogPath = paths["log"]
