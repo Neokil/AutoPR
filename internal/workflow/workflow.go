@@ -386,19 +386,19 @@ func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*ti
 	if _, err := o.Store.EnsureTicketDir(ticketNumber); err != nil {
 		return nil, err
 	}
-	ticket, rawTicket, err := o.Provider.GetTicket(ctx, ticketNumber, o.RepoRoot, paths["providerDir"])
+	ticket, rawTicket, err := o.Provider.GetTicket(ctx, ticketNumber, o.RepoRoot, paths.ProviderDir)
 	if err != nil {
 		return nil, err
 	}
 	ticket.Number = ticketNumber
 	st := ticketdomain.NewState(ticketNumber)
-	st.ProposalPath = paths["proposal"]
-	st.FinalPath = paths["final"]
-	st.LogPath = paths["log"]
-	st.PRPath = paths["pr"]
-	st.ChecksLogPath = paths["checks"]
-	st.TicketJSONPath = paths["ticket"]
-	st.ProviderDirPath = paths["providerDir"]
+	st.ProposalPath = paths.Proposal
+	st.FinalPath = paths.Final
+	st.LogPath = paths.Log
+	st.PRPath = paths.PR
+	st.ChecksLogPath = paths.Checks
+	st.TicketJSONPath = paths.Ticket
+	st.ProviderDirPath = paths.ProviderDir
 	st.BranchName = branchName(ticket)
 
 	worktreePath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, ticketNumber, st.BranchName, o.Cfg.BaseBranch)

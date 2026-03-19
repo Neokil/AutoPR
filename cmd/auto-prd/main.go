@@ -23,6 +23,7 @@ import (
 	"ai-ticket-worker/internal/contracts/api"
 	ticketdomain "ai-ticket-worker/internal/domain/ticket"
 	"ai-ticket-worker/internal/gitutil"
+	"ai-ticket-worker/internal/ports"
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/shell"
@@ -480,7 +481,7 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	paths := rt.store.Paths(ticket)
-	events, err := parseLogEvents(paths["log"])
+	events, err := parseLogEvents(paths.Log)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -662,13 +663,13 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 
 	paths := rt.store.Paths(ticket)
 	st := ticketdomain.NewState(ticket)
-	st.ProposalPath = paths["proposal"]
-	st.FinalPath = paths["final"]
-	st.LogPath = paths["log"]
-	st.PRPath = paths["pr"]
-	st.ChecksLogPath = paths["checks"]
-	st.TicketJSONPath = paths["ticket"]
-	st.ProviderDirPath = paths["providerDir"]
+	st.ProposalPath = paths.Proposal
+	st.FinalPath = paths.Final
+	st.LogPath = paths.Log
+	st.PRPath = paths.PR
+	st.ChecksLogPath = paths.Checks
+	st.TicketJSONPath = paths.Ticket
+	st.ProviderDirPath = paths.ProviderDir
 	if err := rt.store.SaveState(ticket, st); err != nil {
 		return err
 	}
@@ -938,22 +939,22 @@ func parseLogEvents(path string) ([]logEvent, error) {
 	return events, nil
 }
 
-func artifactPath(paths map[string]string, name string) (string, bool) {
+func artifactPath(paths ports.TicketPaths, name string) (string, bool) {
 	switch name {
 	case "state":
-		return paths["state"], true
+		return paths.State, true
 	case "ticket":
-		return paths["ticket"], true
+		return paths.Ticket, true
 	case "log":
-		return paths["log"], true
+		return paths.Log, true
 	case "proposal":
-		return paths["proposal"], true
+		return paths.Proposal, true
 	case "final":
-		return paths["final"], true
+		return paths.Final, true
 	case "pr":
-		return paths["pr"], true
+		return paths.PR, true
 	case "checks":
-		return paths["checks"], true
+		return paths.Checks, true
 	default:
 		return "", false
 	}

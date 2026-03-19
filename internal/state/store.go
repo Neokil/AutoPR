@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"ai-ticket-worker/internal/domain/ticket"
+	"ai-ticket-worker/internal/ports"
 )
 
 const (
@@ -104,18 +105,18 @@ func (s *Store) LoadTicket(ticketNumber string) (ticket.Ticket, error) {
 	return t, nil
 }
 
-func (s *Store) Paths(ticketNumber string) map[string]string {
+func (s *Store) Paths(ticketNumber string) ports.TicketPaths {
 	dir := s.TicketDir(ticketNumber)
-	return map[string]string{
-		"dir":         dir,
-		"state":       filepath.Join(dir, StateFileName),
-		"ticket":      filepath.Join(dir, TicketFileName),
-		"log":         filepath.Join(dir, LogFileName),
-		"proposal":    filepath.Join(dir, ProposalFileName),
-		"final":       filepath.Join(dir, FinalSolutionFileName),
-		"pr":          filepath.Join(dir, PRFileName),
-		"checks":      filepath.Join(dir, ChecksFileName),
-		"providerDir": filepath.Join(dir, ProviderDirName),
+	return ports.TicketPaths{
+		Dir:         dir,
+		State:       filepath.Join(dir, StateFileName),
+		Ticket:      filepath.Join(dir, TicketFileName),
+		Log:         filepath.Join(dir, LogFileName),
+		Proposal:    filepath.Join(dir, ProposalFileName),
+		Final:       filepath.Join(dir, FinalSolutionFileName),
+		PR:          filepath.Join(dir, PRFileName),
+		Checks:      filepath.Join(dir, ChecksFileName),
+		ProviderDir: filepath.Join(dir, ProviderDirName),
 	}
 }
 
