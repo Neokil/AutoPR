@@ -56,26 +56,21 @@ func (o *Orchestrator) RunTicket(ctx context.Context, ticketNumber string) error
 	if err != nil {
 		return err
 	}
-	if st.Status == ticketdomain.StatePRReady {
+	if st.ShouldGeneratePROnRun() {
 		t, err := o.Store.LoadTicket(ticketNumber)
 		if err != nil {
 			return err
 		}
 		return o.generatePR(ctx, st, t)
 	}
-	if st.Status == ticketdomain.StateWaitingForHuman && !st.Approved {
+	if st.WaitsForHumanInput() {
 		fmt.Printf("ticket %s is waiting for human input. Run approve/feedback/reject.\n", ticketNumber)
 		return nil
 	}
-	if st.Status == ticketdomain.StateQueued ||
-		st.Status == ticketdomain.StateInvestigating ||
-		st.Status == ticketdomain.StateProposalReady {
+	if st.ShouldInvestigate() {
 		return o.investigate(ctx, st)
 	}
-	if st.Approved ||
-		st.Status == ticketdomain.StateImplementing ||
-		st.Status == ticketdomain.StateValidating ||
-		st.Status == ticketdomain.StatePRReady {
+	if st.ShouldImplement() {
 		return o.implementationPipeline(ctx, st)
 	}
 	if st.Status == ticketdomain.StateDone {
@@ -89,26 +84,21 @@ func (o *Orchestrator) ResumeTicket(ctx context.Context, ticketNumber string) er
 	if err != nil {
 		return err
 	}
-	if st.Status == ticketdomain.StatePRReady {
+	if st.ShouldGeneratePROnRun() {
 		t, err := o.Store.LoadTicket(ticketNumber)
 		if err != nil {
 			return err
 		}
 		return o.generatePR(ctx, &st, t)
 	}
-	if st.Status == ticketdomain.StateWaitingForHuman && !st.Approved {
+	if st.WaitsForHumanInput() {
 		fmt.Printf("ticket %s is waiting for human input.\n", ticketNumber)
 		return nil
 	}
-	if st.Status == ticketdomain.StateQueued ||
-		st.Status == ticketdomain.StateInvestigating ||
-		st.Status == ticketdomain.StateProposalReady {
+	if st.ShouldInvestigate() {
 		return o.investigate(ctx, &st)
 	}
-	if st.Approved ||
-		st.Status == ticketdomain.StateImplementing ||
-		st.Status == ticketdomain.StateValidating ||
-		st.Status == ticketdomain.StatePRReady {
+	if st.ShouldImplement() {
 		return o.implementationPipeline(ctx, &st)
 	}
 	return nil
@@ -119,8 +109,7 @@ func (o *Orchestrator) Approve(ctx context.Context, ticketNumber string) error {
 	if err != nil {
 		return err
 	}
-	st.Approved = true
-	st.Status = ticketdomain.StateImplementing
+	st.ApproveForImplementation()
 	if err := o.Store.SaveState(ticketNumber, st); err != nil {
 		return err
 	}
@@ -133,9 +122,7 @@ func (o *Orchestrator) Feedback(ticketNumber, message string) error {
 	if err != nil {
 		return err
 	}
-	st.LastFeedback = message
-	st.Approved = false
-	st.Status = ticketdomain.StateInvestigating
+	st.ApplyFeedback(message)
 	if err := markdown.AppendSection(st.LogPath, "Human Feedback", message); err != nil {
 		return err
 	}
@@ -147,9 +134,7 @@ func (o *Orchestrator) Reject(ticketNumber string) error {
 	if err != nil {
 		return err
 	}
-	st.Status = ticketdomain.StateFailed
-	st.Approved = false
-	st.LastError = "rejected by human"
+	st.RejectByHuman()
 	if err := markdown.AppendSection(st.LogPath, "Human Rejection", "Rejected by reviewer."); err != nil {
 		return err
 	}
@@ -178,28 +163,7 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	switch st.Status {
-	case ticketdomain.StateQueued:
-		return "", nil
-	case ticketdomain.StateInvestigating, ticketdomain.StateProposalReady, ticketdomain.StateWaitingForHuman:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review proposal: %s\n  2. Approve: auto-pr approve %s\n  3. Provide feedback: auto-pr feedback %s --message \"...\"\n  4. Reject: auto-pr reject %s", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
-	case ticketdomain.StateImplementing, ticketdomain.StateValidating:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
-	case ticketdomain.StatePRReady:
-		if strings.TrimSpace(st.PRURL) != "" {
-			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review PR markdown: %s\n  2. Review GitHub PR: %s\n  3. Apply open review comments: auto-pr apply-pr-comments %s", st.TicketNumber, st.PRPath, st.PRURL, st.TicketNumber), nil
-		}
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Generate/create PR: auto-pr pr %s\n  2. Review PR markdown: %s", st.TicketNumber, st.TicketNumber, st.PRPath), nil
-	case ticketdomain.StateDone:
-		if strings.TrimSpace(st.PRURL) != "" {
-			return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Review GitHub PR: %s\n  3. Apply open review comments: auto-pr apply-pr-comments %s", st.TicketNumber, st.PRPath, st.PRURL, st.TicketNumber), nil
-		}
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Review final PR markdown: %s\n  2. Check current state: auto-pr status %s", st.TicketNumber, st.PRPath, st.TicketNumber), nil
-	case ticketdomain.StateFailed:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Inspect log: %s\n  2. Add feedback: auto-pr feedback %s --message \"...\"\n  3. Retry: auto-pr resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber), nil
-	default:
-		return fmt.Sprintf("Next steps for ticket %s:\n  1. Check status: auto-pr status %s\n  2. Continue: auto-pr resume %s", st.TicketNumber, st.TicketNumber, st.TicketNumber), nil
-	}
+	return st.NextStepsCLI(), nil
 }
 
 func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) error {
