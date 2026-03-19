@@ -4,20 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/domain/ticket"
-	"ai-ticket-worker/internal/shell"
 )
 
 type CLIProvider struct {
-	name       string
-	command    string
-	args       []string
-	promptsDir string
+	name     string
+	renderer *PromptRenderer
+	runner   *PromptCommandRunner
 }
 
 func NewFromConfig(cfg config.Config) (AIProvider, error) {
@@ -36,14 +32,28 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := initializePromptTemplates(promptsDir); err != nil {
+	renderer, err := NewPromptRenderer(promptsDir)
+	if err != nil {
 		return nil, err
+	}
+	base := CLIProvider{
+		name:     cfg.Provider,
+		renderer: renderer,
+		runner: &PromptCommandRunner{
+			providerName: cfg.Provider,
+			command:      pc.Command,
+			args:         pc.Args,
+		},
 	}
 	switch cfg.Provider {
 	case "gemini":
-		return &GeminiProvider{CLIProvider{name: "gemini", command: pc.Command, args: pc.Args, promptsDir: promptsDir}}, nil
+		base.name = "gemini"
+		base.runner.providerName = "gemini"
+		return &GeminiProvider{CLIProvider: base}, nil
 	case "codex":
-		return &CodexProvider{CLIProvider{name: "codex", command: pc.Command, args: pc.Args, promptsDir: promptsDir}}, nil
+		base.name = "codex"
+		base.runner.providerName = "codex"
+		return &CodexProvider{CLIProvider: base}, nil
 	default:
 		return nil, fmt.Errorf("unsupported provider: %s", cfg.Provider)
 	}
@@ -52,13 +62,13 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 func (p *CLIProvider) Name() string { return p.name }
 
 func (p *CLIProvider) getTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error) {
-	prompt, err := renderPromptTemplate(p.promptsDir, tplTicket, map[string]string{
+	prompt, err := p.renderer.Render(tplTicket, map[string]string{
 		"TicketNumber": ticketNumber,
 	})
 	if err != nil {
 		return ticket.Ticket{}, "", err
 	}
-	out, err := p.runPrompt(ctx, repoPath, runtimeDir, "ticket", prompt)
+	out, err := p.runner.Run(ctx, repoPath, runtimeDir, "ticket", prompt)
 	if err != nil {
 		return ticket.Ticket{}, "", err
 	}
@@ -73,25 +83,6 @@ func (p *CLIProvider) getTicket(ctx context.Context, ticketNumber, repoPath, run
 		parsedTicket.ID = parsedTicket.Number
 	}
 	return parsedTicket, out, nil
-}
-
-func (p *CLIProvider) runPrompt(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, error) {
-	inputPath := filepath.Join(runtimeDir, fmt.Sprintf("%s-input.md", phase))
-	outputPath := filepath.Join(runtimeDir, fmt.Sprintf("%s-output.md", phase))
-	stderrPath := filepath.Join(runtimeDir, fmt.Sprintf("%s-stderr.log", phase))
-	if err := os.WriteFile(inputPath, []byte(prompt), 0o644); err != nil {
-		return "", err
-	}
-	res, err := shell.Run(ctx, worktreePath, nil, prompt, p.command, p.args...)
-	_ = os.WriteFile(outputPath, []byte(res.Stdout), 0o644)
-	_ = os.WriteFile(stderrPath, []byte(res.Stderr), 0o644)
-	if err != nil {
-		return "", fmt.Errorf("provider %s phase %s failed: %w", p.name, phase, err)
-	}
-	if strings.TrimSpace(res.Stdout) == "" {
-		return "", fmt.Errorf("provider %s phase %s returned empty output", p.name, phase)
-	}
-	return res.Stdout, nil
 }
 
 func renderTicketContext(ticket ticket.Ticket) string {
@@ -119,7 +110,7 @@ func (p *GeminiProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, 
 }
 
 func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
-	prompt, err := renderPromptTemplate(p.promptsDir, tplInvestigate, map[string]string{
+	prompt, err := p.renderer.Render(tplInvestigate, map[string]string{
 		"TicketNumber":             req.Ticket.Number,
 		"TicketTitle":              req.Ticket.Title,
 		"TicketURL":                req.Ticket.URL,
@@ -136,7 +127,7 @@ func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest
 	if err != nil {
 		return InvestigateResult{}, err
 	}
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", prompt)
+	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "investigate", prompt)
 	if err != nil {
 		return InvestigateResult{}, err
 	}
@@ -144,7 +135,7 @@ func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest
 }
 
 func (p *GeminiProvider) Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error) {
-	prompt, err := renderPromptTemplate(p.promptsDir, tplImplement, map[string]string{
+	prompt, err := p.renderer.Render(tplImplement, map[string]string{
 		"TicketNumber":      req.Ticket.Number,
 		"TicketTitle":       req.Ticket.Title,
 		"TicketDescription": req.Ticket.Description,
@@ -157,7 +148,7 @@ func (p *GeminiProvider) Implement(ctx context.Context, req ImplementRequest, ru
 	if err != nil {
 		return ImplementResult{}, err
 	}
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "implement", prompt)
+	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "implement", prompt)
 	if err != nil {
 		return ImplementResult{}, err
 	}
@@ -165,7 +156,7 @@ func (p *GeminiProvider) Implement(ctx context.Context, req ImplementRequest, ru
 }
 
 func (p *GeminiProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error) {
-	prompt, err := renderPromptTemplate(p.promptsDir, tplPR, map[string]string{
+	prompt, err := p.renderer.Render(tplPR, map[string]string{
 		"TicketNumber":      req.Ticket.Number,
 		"TicketTitle":       req.Ticket.Title,
 		"TicketDescription": req.Ticket.Description,
@@ -179,7 +170,7 @@ func (p *GeminiProvider) SummarizePR(ctx context.Context, req PRRequest, runtime
 	if err != nil {
 		return PRResult{}, err
 	}
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "pr", prompt)
+	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "pr", prompt)
 	if err != nil {
 		return PRResult{}, err
 	}
@@ -191,7 +182,7 @@ func (p *CodexProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, r
 }
 
 func (p *CodexProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
-	prompt, err := renderPromptTemplate(p.promptsDir, tplInvestigate, map[string]string{
+	prompt, err := p.renderer.Render(tplInvestigate, map[string]string{
 		"TicketNumber":             req.Ticket.Number,
 		"TicketTitle":              req.Ticket.Title,
 		"TicketURL":                req.Ticket.URL,
@@ -208,7 +199,7 @@ func (p *CodexProvider) Investigate(ctx context.Context, req InvestigateRequest,
 	if err != nil {
 		return InvestigateResult{}, err
 	}
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "investigate", prompt)
+	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "investigate", prompt)
 	if err != nil {
 		return InvestigateResult{}, err
 	}
@@ -216,7 +207,7 @@ func (p *CodexProvider) Investigate(ctx context.Context, req InvestigateRequest,
 }
 
 func (p *CodexProvider) Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error) {
-	prompt, err := renderPromptTemplate(p.promptsDir, tplImplement, map[string]string{
+	prompt, err := p.renderer.Render(tplImplement, map[string]string{
 		"TicketNumber":      req.Ticket.Number,
 		"TicketTitle":       req.Ticket.Title,
 		"TicketDescription": req.Ticket.Description,
@@ -229,7 +220,7 @@ func (p *CodexProvider) Implement(ctx context.Context, req ImplementRequest, run
 	if err != nil {
 		return ImplementResult{}, err
 	}
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "implement", prompt)
+	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "implement", prompt)
 	if err != nil {
 		return ImplementResult{}, err
 	}
@@ -237,7 +228,7 @@ func (p *CodexProvider) Implement(ctx context.Context, req ImplementRequest, run
 }
 
 func (p *CodexProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error) {
-	prompt, err := renderPromptTemplate(p.promptsDir, tplPR, map[string]string{
+	prompt, err := p.renderer.Render(tplPR, map[string]string{
 		"TicketNumber":      req.Ticket.Number,
 		"TicketTitle":       req.Ticket.Title,
 		"TicketDescription": req.Ticket.Description,
@@ -251,7 +242,7 @@ func (p *CodexProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeD
 	if err != nil {
 		return PRResult{}, err
 	}
-	out, err := p.runPrompt(ctx, req.WorktreePath, runtimeDir, "pr", prompt)
+	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "pr", prompt)
 	if err != nil {
 		return PRResult{}, err
 	}
