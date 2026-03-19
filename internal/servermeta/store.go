@@ -21,15 +21,15 @@ type RepoRecord struct {
 }
 
 type TicketRecord struct {
-	RepoID       string    `json:"repo_id"`
-	RepoPath     string    `json:"repo_path"`
-	TicketNumber string    `json:"ticket_number"`
-	Title        string    `json:"title,omitempty"`
-	Status       string    `json:"status"`
-	Busy         bool      `json:"busy"`
-	Approved     bool      `json:"approved"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	PRURL        string    `json:"pr_url,omitempty"`
+	RepoID       string      `json:"repo_id"`
+	RepoPath     string      `json:"repo_path"`
+	TicketNumber string      `json:"ticket_number"`
+	Title        string      `json:"title,omitempty"`
+	Status       string      `json:"status"`
+	Busy         bool        `json:"busy"`
+	Approved     bool        `json:"approved"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+	PRURL        string      `json:"pr_url,omitempty"`
 	Jobs         []JobRecord `json:"jobs,omitempty"`
 }
 
@@ -58,6 +58,8 @@ type Store struct {
 	mu   sync.Mutex
 	data Data
 }
+
+var _ Repository = (*Store)(nil)
 
 func DefaultPath() (string, error) {
 	home, err := os.UserHomeDir()

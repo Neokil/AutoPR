@@ -49,7 +49,7 @@ type queuedJob struct {
 
 type server struct {
 	cfg      config.Config
-	meta     *servermeta.Store
+	meta     servermeta.Repository
 	runtimes map[string]*repoRuntime
 	mu       sync.Mutex
 	jobs     chan queuedJob
