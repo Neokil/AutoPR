@@ -95,7 +95,8 @@ Common settings:
 
 - `server_port` (default `8080`)
 - `server_workers` (default `4`)
-- `provider` (`codex` or `gemini`)
+- `provider` (key under `providers`)
+- `providers.<name>.command` and `providers.<name>.args` define how a provider CLI is executed
 - `repository_directories` (default `[]`): paths that either are git repos or contain git repos
 
 Server URL override for CLI:

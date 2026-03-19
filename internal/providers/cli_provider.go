@@ -45,18 +45,7 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 			args:         pc.Args,
 		},
 	}
-	switch cfg.Provider {
-	case "gemini":
-		base.name = "gemini"
-		base.runner.providerName = "gemini"
-		return &GeminiProvider{CLIProvider: base}, nil
-	case "codex":
-		base.name = "codex"
-		base.runner.providerName = "codex"
-		return &CodexProvider{CLIProvider: base}, nil
-	default:
-		return nil, fmt.Errorf("unsupported provider: %s", cfg.Provider)
-	}
+	return &base, nil
 }
 
 func (p *CLIProvider) Name() string { return p.name }
@@ -101,15 +90,11 @@ func renderTicketContext(ticket ticket.Ticket) string {
 	return strings.TrimSpace(b.String())
 }
 
-type GeminiProvider struct{ CLIProvider }
-
-type CodexProvider struct{ CLIProvider }
-
-func (p *GeminiProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error) {
+func (p *CLIProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error) {
 	return p.getTicket(ctx, ticketNumber, repoPath, runtimeDir)
 }
 
-func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
+func (p *CLIProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
 	prompt, err := p.renderer.Render(tplInvestigate, map[string]string{
 		"TicketNumber":             req.Ticket.Number,
 		"TicketTitle":              req.Ticket.Title,
@@ -134,7 +119,7 @@ func (p *GeminiProvider) Investigate(ctx context.Context, req InvestigateRequest
 	return InvestigateResult{Proposal: out, RawOut: out}, nil
 }
 
-func (p *GeminiProvider) Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error) {
+func (p *CLIProvider) Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error) {
 	prompt, err := p.renderer.Render(tplImplement, map[string]string{
 		"TicketNumber":      req.Ticket.Number,
 		"TicketTitle":       req.Ticket.Title,
@@ -155,79 +140,7 @@ func (p *GeminiProvider) Implement(ctx context.Context, req ImplementRequest, ru
 	return ImplementResult{Summary: out, RawOut: out}, nil
 }
 
-func (p *GeminiProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error) {
-	prompt, err := p.renderer.Render(tplPR, map[string]string{
-		"TicketNumber":      req.Ticket.Number,
-		"TicketTitle":       req.Ticket.Title,
-		"TicketDescription": req.Ticket.Description,
-		"RelatedContext":    renderTicketContext(req.Ticket),
-		"WorktreePath":      req.WorktreePath,
-		"LogPath":           req.LogPath,
-		"ProposalPath":      req.ProposalPath,
-		"FinalSolutionPath": req.FinalSolutionPath,
-		"ChecksLogPath":     req.ChecksLogPath,
-	})
-	if err != nil {
-		return PRResult{}, err
-	}
-	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "pr", prompt)
-	if err != nil {
-		return PRResult{}, err
-	}
-	return PRResult{Body: out, RawOut: out}, nil
-}
-
-func (p *CodexProvider) GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error) {
-	return p.getTicket(ctx, ticketNumber, repoPath, runtimeDir)
-}
-
-func (p *CodexProvider) Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error) {
-	prompt, err := p.renderer.Render(tplInvestigate, map[string]string{
-		"TicketNumber":             req.Ticket.Number,
-		"TicketTitle":              req.Ticket.Title,
-		"TicketURL":                req.Ticket.URL,
-		"TicketDescription":        req.Ticket.Description,
-		"TicketAcceptanceCriteria": req.Ticket.AcceptanceCriteria,
-		"RelatedContext":           renderTicketContext(req.Ticket),
-		"RepoPath":                 req.RepoPath,
-		"WorktreePath":             req.WorktreePath,
-		"GuidelinesPath":           req.GuidelinesPath,
-		"LogPath":                  req.LogPath,
-		"ProposalPath":             req.ProposalPath,
-		"Feedback":                 req.Feedback,
-	})
-	if err != nil {
-		return InvestigateResult{}, err
-	}
-	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "investigate", prompt)
-	if err != nil {
-		return InvestigateResult{}, err
-	}
-	return InvestigateResult{Proposal: out, RawOut: out}, nil
-}
-
-func (p *CodexProvider) Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error) {
-	prompt, err := p.renderer.Render(tplImplement, map[string]string{
-		"TicketNumber":      req.Ticket.Number,
-		"TicketTitle":       req.Ticket.Title,
-		"TicketDescription": req.Ticket.Description,
-		"RelatedContext":    renderTicketContext(req.Ticket),
-		"ProposalPath":      req.ProposalPath,
-		"LogPath":           req.LogPath,
-		"GuidelinesPath":    req.GuidelinesPath,
-		"FailureContext":    req.FailureContext,
-	})
-	if err != nil {
-		return ImplementResult{}, err
-	}
-	out, err := p.runner.Run(ctx, req.WorktreePath, runtimeDir, "implement", prompt)
-	if err != nil {
-		return ImplementResult{}, err
-	}
-	return ImplementResult{Summary: out, RawOut: out}, nil
-}
-
-func (p *CodexProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error) {
+func (p *CLIProvider) SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error) {
 	prompt, err := p.renderer.Render(tplPR, map[string]string{
 		"TicketNumber":      req.Ticket.Number,
 		"TicketTitle":       req.Ticket.Title,

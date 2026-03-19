@@ -22,3 +22,8 @@ providers:
     args:
       - exec
       - "-"
+  # example for adding another provider without code changes:
+  # my-provider:
+  #   command: my-provider-cli
+  #   args:
+  #     - run
