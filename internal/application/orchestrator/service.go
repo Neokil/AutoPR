@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"ai-ticket-worker/internal/config"
+	"ai-ticket-worker/internal/application/tickets"
 	"ai-ticket-worker/internal/providers"
-	"ai-ticket-worker/internal/workflow"
 )
 
 // Service defines application-level orchestrator use-cases shared by clients.
@@ -25,11 +25,11 @@ type Service interface {
 }
 
 type WorkflowService struct {
-	orch *workflow.Orchestrator
+	orch *tickets.Orchestrator
 }
 
 func NewWorkflowService(cfg config.Config, repoRoot string, provider providers.AIProvider) *WorkflowService {
-	return &WorkflowService{orch: workflow.New(cfg, repoRoot, provider)}
+	return &WorkflowService{orch: tickets.New(cfg, repoRoot, provider)}
 }
 
 func (s *WorkflowService) RunTickets(ctx context.Context, ticketNumbers []string) error {

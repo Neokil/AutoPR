@@ -6,9 +6,9 @@ The project uses a layered structure to share logic across CLI, server, and web 
 
 - `internal/domain/ticket`: domain models and workflow state values
 - `internal/application/orchestrator`: application service interface/use-cases
+- `internal/application/tickets`: ticket lifecycle orchestration
 - `internal/ports`: persistence/storage contracts
 - `internal/state`: JSON/filesystem-backed store adapter
-- `internal/workflow`: orchestration logic
 - `cmd/auto-pr`: CLI entrypoint (built as `auto-pr`)
 - `cmd/auto-prd`: server entrypoint (built as `auto-prd`)
 
