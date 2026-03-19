@@ -19,9 +19,7 @@ import (
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/contracts/api"
 	ticketdomain "ai-ticket-worker/internal/domain/ticket"
-	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/ports"
-	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/state"
 	"ai-ticket-worker/web"
@@ -453,59 +451,6 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (repoRoot, repoID string, rt *repoRuntime, ok bool) {
-	var req api.RepoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
-		return "", "", nil, false
-	}
-	if strings.TrimSpace(req.RepoPath) == "" {
-		writeError(w, http.StatusBadRequest, "repo_path is required")
-		return "", "", nil, false
-	}
-	root, id, runtime, err := s.runtimeForRepoPath(req.RepoPath)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return "", "", nil, false
-	}
-	return root, id, runtime, true
-}
-
-func (s *server) runtimeForRepoPath(repoPath string) (repoRoot, repoID string, rt *repoRuntime, err error) {
-	repoRoot, err = resolveRepoRoot(repoPath)
-	if err != nil {
-		return "", "", nil, err
-	}
-	repoRec, err := s.meta.UpsertRepo(repoRoot)
-	if err != nil {
-		return "", "", nil, err
-	}
-	rt, err = s.runtimeForRepo(repoRoot)
-	if err != nil {
-		return "", "", nil, err
-	}
-	return repoRoot, repoRec.ID, rt, nil
-}
-
-func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if rt, ok := s.runtimes[repoRoot]; ok {
-		return rt, nil
-	}
-	provider, err := providers.NewFromConfig(s.cfg)
-	if err != nil {
-		return nil, err
-	}
-	rt := &repoRuntime{
-		svc:      orchestrator.NewWorkflowService(s.cfg, repoRoot, provider),
-		repoRoot: repoRoot,
-		store:    state.NewStore(repoRoot, s.cfg.StateDirName),
-	}
-	s.runtimes[repoRoot] = rt
-	return rt, nil
-}
-
 func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket, message, scope string) {
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
 		if err := s.ensureQueuedTicket(repoID, repoPath, ticket); err != nil {
@@ -801,21 +746,6 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 	return nil
 }
 
-func resolveRepoRoot(repoPath string) (string, error) {
-	if strings.TrimSpace(repoPath) == "" {
-		return "", errors.New("repo_path is empty")
-	}
-	abs, err := filepath.Abs(repoPath)
-	if err != nil {
-		return "", fmt.Errorf("resolve repo_path: %w", err)
-	}
-	root, err := gitutil.RepoRoot(context.Background(), abs)
-	if err != nil {
-		return "", fmt.Errorf("repo_path is not a git repository: %w", err)
-	}
-	return root, nil
-}
-
 func parseLogEvents(path string) ([]logEvent, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -872,70 +802,4 @@ func fatalIf(err error) {
 	}
 	fmt.Fprintln(os.Stderr, "error:", err)
 	os.Exit(1)
-}
-
-func discoverRepositoriesFromConfig(entries []string) []string {
-	out := []string{}
-	seen := map[string]struct{}{}
-	for _, raw := range entries {
-		root := strings.TrimSpace(raw)
-		if root == "" {
-			continue
-		}
-		root = expandHome(root)
-		absRoot, err := filepath.Abs(root)
-		if err != nil {
-			continue
-		}
-		if isGitRepositoryDir(absRoot) {
-			if _, ok := seen[absRoot]; !ok {
-				seen[absRoot] = struct{}{}
-				out = append(out, absRoot)
-			}
-			continue
-		}
-		children, err := os.ReadDir(absRoot)
-		if err != nil {
-			continue
-		}
-		for _, child := range children {
-			if !child.IsDir() {
-				continue
-			}
-			candidate := filepath.Join(absRoot, child.Name())
-			if !isGitRepositoryDir(candidate) {
-				continue
-			}
-			if _, ok := seen[candidate]; ok {
-				continue
-			}
-			seen[candidate] = struct{}{}
-			out = append(out, candidate)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func expandHome(path string) string {
-	if path == "~" {
-		if home, err := os.UserHomeDir(); err == nil {
-			return home
-		}
-		return path
-	}
-	if strings.HasPrefix(path, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, strings.TrimPrefix(path, "~/"))
-		}
-	}
-	return path
-}
-
-func isGitRepositoryDir(path string) bool {
-	st, err := os.Stat(filepath.Join(path, ".git"))
-	if err != nil {
-		return false
-	}
-	return st.IsDir() || st.Mode().IsRegular()
 }
