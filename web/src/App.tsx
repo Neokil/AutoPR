@@ -18,25 +18,11 @@ import {
   runTicket
 } from "./api";
 import { MarkdownView } from "./MarkdownView";
+import { TicketList } from "./TicketList";
 import type { Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
-}
-
-function summarizeJobAction(action: string): string {
-  switch (action) {
-    case "apply_pr_comments":
-      return "apply comments";
-    case "cleanup_ticket":
-      return "cleanup";
-    case "cleanup_done":
-      return "cleanup done";
-    case "cleanup_all":
-      return "cleanup all";
-    default:
-      return action.split("_").join(" ");
-  }
 }
 
 type Action = "run" | "resume" | "approve" | "reject" | "pr" | "apply_pr_comments" | "cleanup";
@@ -416,53 +402,18 @@ export function App() {
       ) : null}
 
       <main className="main">
-        <section className="panel left">
-          <div className="panel-header">
-            <h2>Tickets (All Repos)</h2>
-          </div>
-          <ul className="ticket-list">
-            {tickets.map((t) => (
-              <li key={ticketKey(t)}>
-                <button
-                  className={selectedKey === ticketKey(t) ? "ticket-item active" : "ticket-item"}
-                  onClick={() => setSelectedKey(ticketKey(t))}
-                >
-                  <strong>{t.ticket_number}</strong>
-                  <span>{t.title || "(no title)"}</span>
-                  <div className="ticket-status-row">
-                    {t.busy ? <span className="spinner" title="Worker is running" aria-label="Worker running" /> : null}
-                    <span className="meta">
-                      {t.status} {t.approved ? "· approved" : ""}
-                    </span>
-                  </div>
-                  {t.jobs && t.jobs.length > 0 ? (
-                    <div className="ticket-jobs-row">
-                      {t.jobs.map((job) => (
-                        <span key={job.id} className={`job-chip job-${job.status}`}>
-                          {summarizeJobAction(job.action)} · {job.status}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <span className="meta">{t.repo_path}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div className="ticket-list-footer">
-            <button
-              onClick={() => {
-                setError("");
-                setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
-                setNewTicketNumber("");
-                setShowAddTicketDialog(true);
-                void refreshRepositories();
-              }}
-            >
-              Add Ticket
-            </button>
-          </div>
-        </section>
+        <TicketList
+          tickets={tickets}
+          selectedKey={selectedKey}
+          onSelectTicket={setSelectedKey}
+          onAddTicket={() => {
+            setError("");
+            setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
+            setNewTicketNumber("");
+            setShowAddTicketDialog(true);
+            void refreshRepositories();
+          }}
+        />
 
         <section className="panel right">
           {selectedSummary ? (
