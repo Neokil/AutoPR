@@ -1,111 +1,148 @@
-# ai-orchestrator
+# AutoPR
 
-Simple CLI-only orchestrator for AI-assisted ticket workflows.
+From issue to PR in one loop.
 
-## What it does
+`AutoPR` helps you run ticket-to-PR workflows with a local server, CLI, and web UI.
 
-- Runs from any git subdirectory (auto-detects repo root)
-- Accepts ticket numbers as CLI args
-- Fetches ticket details from Shortcut through the selected provider (provider-side MCP)
-- Creates per-ticket worktrees and branches (`sc-<ticket>-<slug>`)
-- Runs investigation + implementation with a switchable provider (`codex` or `gemini`)
-- Stores persistent state/logs in `.ai-orchestrator/`
-- Supports human approval/feedback/reject/resume in CLI
-- Runs checks and generates `pr.md`
-- Optionally creates a PR via `gh pr create`
+## Quick Start
 
-## Install
-
-Build and register PATH entry in your `~/.zshrc`:
+1. Build and install binaries to your PATH:
 
 ```bash
 make install
 source ~/.zshrc
 ```
 
-This builds the binary to `.build/ai-orchestrator` and adds `.build/` to `PATH`.
+`make install` is composed of these steps:
 
-If you use Codex as provider, run it in non-interactive mode in config:
+- `make start`
+- `make build`
+- `make register-alias`
+- `make init-config`
+- `make register-service`
 
-```yaml
-providers:
-  codex:
-    command: codex
-    args: ["exec", "-"]
-```
+The reverse flow is available too:
 
-Checks are empty by default. Configure repo-appropriate commands in `~/.config/ai-orchestrator/config.yaml`, for example:
+- `make clean-build`
+- `make unregister-alias`
+- `make remove-config`
+- `make unregister-service`
+- `make uninstall`
 
-```yaml
-check_commands:
-  - npm test
-  - npm run typecheck
-```
+It also scaffolds (without overwriting existing files):
 
-During implementation, the coding agent is instructed to auto-detect and run formatter/linter commands from the repository itself (for example scripts, Make targets, and tool config files) before returning.
+- `~/.auto-pr/config.yaml` (from `config.example.yaml`)
+- `~/.auto-pr/prompts/*.md.tmpl` (default prompt templates)
+- `~/.auto-pr/server/logs/` for daemon stdout/stderr
 
-## Commands
+Service-related make targets currently no-op with a message because `launchd` / `systemd` integration is intentionally disabled for now.
+
+2. If your platform is unsupported or service setup was skipped, start the server manually:
 
 ```bash
-ai-orchestrator run <ticket-number> <ticket-number>...
-ai-orchestrator status <ticket-number>
-ai-orchestrator approve <ticket-number>
-ai-orchestrator feedback <ticket-number> --message "..."
-ai-orchestrator reject <ticket-number>
-ai-orchestrator resume <ticket-number>
-ai-orchestrator pr <ticket-number>
-ai-orchestrator cleanup <ticket-number>
-ai-orchestrator cleanup --done
-ai-orchestrator cleanup --all
+make start
 ```
 
-## Config
+3. In your repository, schedule a run:
 
-Default config path:
+```bash
+auto-pr run 12345
+```
 
-- `~/.config/ai-orchestrator/config.yaml`
+4. Wait for completion if needed:
 
-Use [`config.example.yaml`](./config.example.yaml) as a starting point.
+```bash
+auto-pr wait-for-job <job-id>
+```
 
-### Shortcut MCP
+5. Open the web UI:
 
-Shortcut access is expected to be configured in your selected provider CLI (`codex` or `gemini`) via that provider's MCP/tool configuration.
+- http://127.0.0.1:8080
 
-When you run `ai-orchestrator run <ticket>`, the orchestrator asks the active provider to fetch ticket details for that ticket number and return normalized JSON.
+## Main Commands
 
-## Runtime files
+```bash
+auto-pr run <ticket-number> [<ticket-number>...]
+auto-pr wait-for-job <job-id>
+auto-pr status [<ticket-number>]
+auto-pr approve <ticket-number>
+auto-pr feedback <ticket-number> --message "..."
+auto-pr reject <ticket-number>
+auto-pr resume <ticket-number>
+auto-pr pr <ticket-number>
+auto-pr apply-pr-comments <ticket-number>
+auto-pr cleanup <ticket-number>
+auto-pr cleanup --done
+auto-pr cleanup --all
+```
 
-Per ticket runtime state is stored at:
+Notes:
 
-- `.ai-orchestrator/<ticket-number>/`
+- Mutating commands schedule background jobs and return a job id.
+- Use `wait-for-job` when you want to block until a job finishes.
 
-Key files:
+## Configuration
 
-- `state.json`
-- `ticket.json`
-- `log.md`
-- `proposal.md`
-- `final_solution.md`
-- `pr.md`
-- `checks.log`
-- `provider/*.md|*.log`
+Default config file:
 
-## Important
+- `~/.auto-pr/config.yaml`
 
-Do not commit runtime artifacts.
+Starter config:
 
-Add this to your repo `.gitignore`:
+- [`config.example.yaml`](./config.example.yaml)
+
+Common settings:
+
+- `server_port` (default `8080`)
+- `server_workers` (default `4`)
+- `provider` (key under `providers`)
+- `providers.<name>.command` and `providers.<name>.args` define how a provider CLI is executed
+- `repository_directories` (default `[]`): paths that either are git repos or contain git repos
+
+Server URL override for CLI:
+
+```bash
+export AUTO_PR_SERVER_URL=http://127.0.0.1:8080
+```
+
+Prompt templates (editable):
+
+- `~/.auto-pr/prompts/ticket.md.tmpl`
+- `~/.auto-pr/prompts/investigate.md.tmpl`
+- `~/.auto-pr/prompts/implement.md.tmpl`
+- `~/.auto-pr/prompts/pr.md.tmpl`
+
+These files are auto-created with defaults on first use and can be edited to tune agent queries.
+
+## Storage
+
+- Global settings and server metadata: `~/.auto-pr/`
+- Ticket artifacts per repo: `<repo>/.auto-pr/`
+
+Add to `.gitignore`:
 
 ```gitignore
-.ai-orchestrator/
+.auto-pr/
 ```
 
-The tool also auto-adds this entry when missing.
+Automatic cleanup behavior:
 
-## Minimal workflow
+- For tickets with an open PR URL, the server periodically checks whether the PR is still open.
+- If the PR is closed or merged, the ticket is automatically cleaned up.
 
-1. `ai-orchestrator run 12345`
-2. Review `.ai-orchestrator/12345/proposal.md`
-3. `ai-orchestrator approve 12345` or `ai-orchestrator feedback 12345 --message "..."`
-4. `ai-orchestrator status 12345`
-5. Use `.ai-orchestrator/12345/pr.md` (or enable `create_pr`)
+Service management:
+
+- `make refresh-service`
+- `make service-status`
+- `make service-logs`
+- These currently return early because service integration is disabled.
+
+Removal:
+
+- `make uninstall` removes the user service, the PATH block in `~/.zshrc`, the `~/.auto-pr` scaffolding directory, and `.build/`
+
+## More Details
+
+For API endpoints, architecture, runtime files, and implementation details, see:
+
+- [`docs/TECHNICAL.md`](./docs/TECHNICAL.md)

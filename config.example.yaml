@@ -1,7 +1,10 @@
 provider: codex
 
 guidelines_file: CODING_GUIDELINES.md
-state_dir_name: .ai-orchestrator
+state_dir_name: .auto-pr
+repository_directories: []
+server_port: 8080
+server_workers: 4
 create_pr: true
 max_fix_attempts: 1
 base_branch: ""
@@ -19,3 +22,8 @@ providers:
     args:
       - exec
       - "-"
+  # example for adding another provider without code changes:
+  # my-provider:
+  #   command: my-provider-cli
+  #   args:
+  #     - run

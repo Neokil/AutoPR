@@ -17,6 +17,9 @@ type Config struct {
 	Provider       string                     `yaml:"provider"`
 	GuidelinesFile string                     `yaml:"guidelines_file"`
 	StateDirName   string                     `yaml:"state_dir_name"`
+	RepositoryDirs []string                   `yaml:"repository_directories"`
+	ServerPort     int                        `yaml:"server_port"`
+	ServerWorkers  int                        `yaml:"server_workers"`
 	CreatePR       bool                       `yaml:"create_pr"`
 	MaxFixAttempts int                        `yaml:"max_fix_attempts"`
 	BaseBranch     string                     `yaml:"base_branch"`
@@ -29,7 +32,10 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Provider:       "codex",
-		StateDirName:   ".ai-orchestrator",
+		StateDirName:   ".auto-pr",
+		RepositoryDirs: []string{},
+		ServerPort:     8080,
+		ServerWorkers:  4,
 		CreatePR:       true,
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{},
@@ -41,15 +47,19 @@ func Default() Config {
 }
 
 func ConfigPath() (string, error) {
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home dir: %w", err)
-		}
-		base = filepath.Join(home, ".config")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
-	return filepath.Join(base, "ai-orchestrator", "config.yaml"), nil
+	return filepath.Join(home, ".auto-pr", "config.yaml"), nil
+}
+
+func PromptsDirPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	return filepath.Join(home, ".auto-pr", "prompts"), nil
 }
 
 func Load() (Config, error) {
@@ -62,8 +72,9 @@ func Load() (Config, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return cfg, nil
+		} else {
+			return cfg, fmt.Errorf("read config file %s: %w", path, err)
 		}
-		return cfg, fmt.Errorf("read config file %s: %w", path, err)
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("parse config yaml: %w", err)
@@ -72,13 +83,22 @@ func Load() (Config, error) {
 		cfg.Provider = "codex"
 	}
 	if cfg.StateDirName == "" {
-		cfg.StateDirName = ".ai-orchestrator"
+		cfg.StateDirName = ".auto-pr"
+	}
+	if cfg.ServerPort <= 0 {
+		cfg.ServerPort = 8080
+	}
+	if cfg.ServerWorkers <= 0 {
+		cfg.ServerWorkers = 4
 	}
 	if cfg.MaxFixAttempts < 0 {
 		cfg.MaxFixAttempts = 0
 	}
 	if cfg.Providers == nil {
 		cfg.Providers = Default().Providers
+	}
+	if cfg.RepositoryDirs == nil {
+		cfg.RepositoryDirs = []string{}
 	}
 	return cfg, nil
 }

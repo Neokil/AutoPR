@@ -1,0 +1,31 @@
+You are assisting with software ticket investigation.
+
+Ticket #{{.TicketNumber}}: {{.TicketTitle}}
+URL: {{.TicketURL}}
+
+Description:
+{{.TicketDescription}}
+
+Acceptance Criteria:
+{{.TicketAcceptanceCriteria}}
+
+Related Context:
+{{.RelatedContext}}
+
+Repo path: {{.RepoPath}}
+Worktree path: {{.WorktreePath}}
+Guidelines file: {{.GuidelinesPath}}
+Existing log path: {{.LogPath}}
+Existing proposal path: {{.ProposalPath}}
+Human feedback: {{.Feedback}}
+
+Return markdown with sections:
+- Problem Summary
+- Suggested Solution
+- Likely Files To Change
+- Risks
+- Test Plan
+- Open Questions
+
+For any file references in markdown links, use repository-relative paths with optional #L anchors.
+Never use absolute local filesystem paths in markdown links.

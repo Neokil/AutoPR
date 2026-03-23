@@ -1,31 +1,47 @@
 SHELL := /bin/zsh
 
-.PHONY: build install
+.PHONY: build start clean-build register-alias unregister-alias init-config remove-config register-service unregister-service refresh-service service-status service-logs install uninstall
 
 build:
-	@mkdir -p .build
-	@go build -o .build/ai-orchestrator ./cmd/ai-orchestrator
+	@bash "$(CURDIR)/scripts/build.sh" "$(CURDIR)"
 
-install: build
-	@ZSHRC="$$HOME/.zshrc"; \
-	ALIAS_START="# >>> ai-orchestrator alias >>>"; \
-	ALIAS_END="# <<< ai-orchestrator alias <<<"; \
-	START="# >>> ai-orchestrator build-path >>>"; \
-	END="# <<< ai-orchestrator build-path <<<"; \
-	TMP="$$(mktemp)"; \
-	if [ -f "$$ZSHRC" ]; then \
-		awk -v as="$$ALIAS_START" -v ae="$$ALIAS_END" -v ps="$$START" -v pe="$$END" 'BEGIN{skip=0} $$0==as||$$0==ps{skip=1;next} $$0==ae||$$0==pe{skip=0;next} !skip{print}' "$$ZSHRC" > "$$TMP"; \
-	else \
-		: > "$$TMP"; \
-	fi; \
-	{ \
-		cat "$$TMP"; \
-		echo ""; \
-		echo "$$START"; \
-		echo "export PATH=\"$(CURDIR)/.build:\$$PATH\""; \
-		echo "$$END"; \
-	} > "$$ZSHRC"; \
-	rm -f "$$TMP"; \
-	echo "built .build/ai-orchestrator"; \
-	echo "updated PATH in $$ZSHRC"; \
-	echo "run: source $$ZSHRC"
+start: build
+	@bash "$(CURDIR)/scripts/start.sh" "$(CURDIR)"
+
+clean-build:
+	@bash "$(CURDIR)/scripts/clean_build.sh" "$(CURDIR)"
+
+register-alias:
+	@bash "$(CURDIR)/scripts/register_alias.sh" "$(CURDIR)"
+
+unregister-alias:
+	@bash "$(CURDIR)/scripts/unregister_alias.sh" "$(CURDIR)"
+
+init-config:
+	@bash "$(CURDIR)/scripts/init_config.sh" "$(CURDIR)"
+
+remove-config:
+	@bash "$(CURDIR)/scripts/remove_config.sh" "$(CURDIR)"
+
+register-service: build init-config
+	@bash "$(CURDIR)/scripts/register_service.sh" "$(CURDIR)"
+
+unregister-service:
+	@bash "$(CURDIR)/scripts/unregister_service.sh" "$(CURDIR)"
+
+refresh-service: build
+	@bash "$(CURDIR)/scripts/refresh_service.sh" "$(CURDIR)"
+
+service-status:
+	@bash "$(CURDIR)/scripts/service_status.sh" "$(CURDIR)"
+
+service-logs:
+	@bash "$(CURDIR)/scripts/service_logs.sh" "$(CURDIR)"
+
+install: build register-alias init-config register-service
+	@echo "install complete"
+	@echo "run: source $$HOME/.zshrc"
+
+uninstall: unregister-service unregister-alias remove-config clean-build
+	@echo "uninstall complete"
+	@echo "run: source $$HOME/.zshrc"

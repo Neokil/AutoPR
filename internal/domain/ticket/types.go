@@ -1,4 +1,4 @@
-package models
+package ticket
 
 import "time"
 
@@ -38,7 +38,7 @@ type TicketContext struct {
 	URL         string `json:"url"`
 }
 
-type TicketState struct {
+type State struct {
 	TicketNumber    string        `json:"ticket_number"`
 	BranchName      string        `json:"branch_name"`
 	WorktreePath    string        `json:"worktree_path"`
@@ -59,9 +59,9 @@ type TicketState struct {
 	PRURL           string        `json:"pr_url,omitempty"`
 }
 
-func NewTicketState(ticketNumber string) TicketState {
+func NewState(ticketNumber string) State {
 	now := time.Now().UTC()
-	return TicketState{
+	return State{
 		TicketNumber: ticketNumber,
 		Status:       StateQueued,
 		CreatedAt:    now,
@@ -69,6 +69,6 @@ func NewTicketState(ticketNumber string) TicketState {
 	}
 }
 
-func (s *TicketState) Touch() {
+func (s *State) Touch() {
 	s.UpdatedAt = time.Now().UTC()
 }

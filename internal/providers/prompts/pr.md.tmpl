@@ -1,0 +1,25 @@
+Generate a PR description in markdown.
+
+Ticket #{{.TicketNumber}}: {{.TicketTitle}}
+Description:
+{{.TicketDescription}}
+
+Related Context:
+{{.RelatedContext}}
+
+Use these files as source of truth:
+- worktree: {{.WorktreePath}}
+- log: {{.LogPath}}
+- proposal: {{.ProposalPath}}
+- final solution: {{.FinalSolutionPath}}
+- checks: {{.ChecksLogPath}}
+
+Include sections:
+- Summary
+- Problem Being Solved
+- Implementation Overview
+- Risks / Follow-ups
+- Test Failures / Blockers (only when checks/tests failed)
+
+For any file references in markdown links, use repository-relative paths with optional #L anchors.
+Never use absolute local filesystem paths in markdown links.

@@ -1,0 +1,561 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io/fs"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+
+	"ai-ticket-worker/internal/application/orchestrator"
+	"ai-ticket-worker/internal/config"
+	"ai-ticket-worker/internal/contracts/api"
+	"ai-ticket-worker/internal/gitutil"
+	"ai-ticket-worker/internal/ports"
+	"ai-ticket-worker/internal/servermeta"
+	"ai-ticket-worker/internal/state"
+	"ai-ticket-worker/web"
+)
+
+const (
+	jobRun             = "run"
+	jobResume          = "resume"
+	jobApprove         = "approve"
+	jobReject          = "reject"
+	jobFeedback        = "feedback"
+	jobPR              = "pr"
+	jobApplyPRComments = "apply_pr_comments"
+	jobCleanup         = "cleanup_ticket"
+	jobCleanupDone     = "cleanup_done"
+	jobCleanupAll      = "cleanup_all"
+)
+
+type repoRuntime struct {
+	svc      orchestrator.Service
+	repoRoot string
+	store    *state.Store
+}
+
+type queuedJob struct {
+	record  servermeta.JobRecord
+	message string
+}
+
+type server struct {
+	cfg      config.Config
+	meta     servermeta.Repository
+	runtimes map[string]*repoRuntime
+	mu       sync.Mutex
+	jobs     chan queuedJob
+	webFS    fs.FS
+
+	subsMu      sync.Mutex
+	subscribers map[string]chan serverEvent
+
+	repoLockMu sync.Mutex
+	repoLocks  map[string]*sync.RWMutex
+
+	ticketLockMu sync.Mutex
+	ticketLocks  map[string]*sync.Mutex
+}
+
+var sectionHeaderRE = regexp.MustCompile(`^## (.+) \(([^)]+)\)$`)
+var githubPRURLPattern = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)`)
+
+func main() {
+	portFlag := flag.Int("port", 0, "HTTP port override (default uses config server_port)")
+	flag.Parse()
+
+	cfg, err := config.Load()
+	fatalIf(err)
+
+	metaPath, err := servermeta.DefaultPath()
+	fatalIf(err)
+	meta, err := servermeta.NewStore(metaPath)
+	fatalIf(err)
+	distFS, err := web.Dist()
+	fatalIf(err)
+
+	s := &server{
+		cfg:         cfg,
+		meta:        meta,
+		runtimes:    map[string]*repoRuntime{},
+		jobs:        make(chan queuedJob, 256),
+		repoLocks:   map[string]*sync.RWMutex{},
+		ticketLocks: map[string]*sync.Mutex{},
+		webFS:       distFS,
+		subscribers: map[string]chan serverEvent{},
+	}
+	for i := 0; i < cfg.ServerWorkers; i++ {
+		go s.workerLoop()
+	}
+	go s.prMonitorLoop()
+
+	port := cfg.ServerPort
+	if *portFlag > 0 {
+		port = *portFlag
+	}
+	if port <= 0 {
+		port = 8080
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/repositories", s.handleListRepositories)
+	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
+	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
+	mux.HandleFunc("GET /api/tickets/{id}/events", s.handleTicketEvents)
+	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name}", s.handleTicketArtifact)
+	mux.HandleFunc("GET /api/jobs/{id}", s.handleGetJob)
+	mux.HandleFunc("GET /api/events", s.handleEvents)
+	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/resume", s.handleResumeTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/approve", s.handleApproveTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/reject", s.handleRejectTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/feedback", s.handleFeedbackTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/pr", s.handlePRTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/apply-pr-comments", s.handleApplyPRComments)
+	mux.HandleFunc("POST /api/tickets/{id}/cleanup", s.handleCleanupTicket)
+	mux.HandleFunc("POST /api/cleanup", s.handleCleanupScope)
+	mux.HandleFunc("/", s.handleFrontend)
+
+	addr := fmt.Sprintf(":%d", port)
+	fmt.Printf("AutoPR daemon listening on %s\n", addr)
+	fatalIf(http.ListenAndServe(addr, loggingMiddleware(mux)))
+}
+
+func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":       "ok",
+		"server_state": "~/.auto-pr/server/state.json",
+		"queue_depth":  len(s.jobs),
+		"frontend":     "embedded",
+	})
+}
+
+func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobRun, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleResumeTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobResume, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleApproveTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobApprove, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleRejectTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobReject, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleFeedbackTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	var req api.FeedbackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if strings.TrimSpace(req.RepoPath) == "" {
+		writeError(w, http.StatusBadRequest, "repo_path is required")
+		return
+	}
+	if strings.TrimSpace(req.Message) == "" {
+		writeError(w, http.StatusBadRequest, "message is required")
+		return
+	}
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.enqueueAndRespond(w, jobFeedback, repoID, repoRoot, ticket, req.Message, "")
+}
+
+func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobCleanup, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handlePRTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobPR, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleApplyPRComments(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	if !ok {
+		return
+	}
+	s.enqueueAndRespond(w, jobApplyPRComments, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
+	var req api.CleanupScopeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	scope := strings.TrimSpace(req.Scope)
+	if scope == "" {
+		scope = strings.TrimSpace(r.URL.Query().Get("scope"))
+	}
+	if strings.TrimSpace(req.RepoPath) == "" {
+		writeError(w, http.StatusBadRequest, "repo_path is required")
+		return
+	}
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	switch scope {
+	case "done":
+		s.enqueueAndRespond(w, jobCleanupDone, repoID, repoRoot, "", "", scope)
+	case "all":
+		s.enqueueAndRespond(w, jobCleanupAll, repoID, repoRoot, "", "", scope)
+	default:
+		writeError(w, http.StatusBadRequest, "scope must be 'done' or 'all'")
+	}
+}
+
+func (s *server) handleGetJob(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	job, ok := s.meta.GetJob(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "job not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, job)
+}
+
+func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
+	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+	if repoPath == "" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"tickets": s.meta.ListTickets(""),
+		})
+		return
+	}
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.syncRepoTickets(repoID, repoRoot, rt, false); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"repo_id":   repoID,
+		"repo_path": repoRoot,
+		"tickets":   s.meta.ListTickets(repoID),
+	})
+}
+
+func (s *server) handleListRepositories(w http.ResponseWriter, r *http.Request) {
+	configured := discoverRepositoriesFromConfig(s.cfg.RepositoryDirs)
+	seen := s.meta.ListRepos()
+	paths := make([]string, 0, len(configured)+len(seen))
+	seenPaths := map[string]struct{}{}
+	for _, p := range configured {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		if _, ok := seenPaths[abs]; ok {
+			continue
+		}
+		seenPaths[abs] = struct{}{}
+		paths = append(paths, abs)
+	}
+	for _, rec := range seen {
+		p := strings.TrimSpace(rec.Path)
+		if p == "" {
+			continue
+		}
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			continue
+		}
+		if _, ok := seenPaths[abs]; ok {
+			continue
+		}
+		seenPaths[abs] = struct{}{}
+		paths = append(paths, abs)
+	}
+	sort.Strings(paths)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"repositories": paths,
+	})
+}
+
+func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+	if repoPath == "" {
+		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		return
+	}
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, false); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeError(w, http.StatusNotFound, "ticket not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	st, err := rt.store.LoadState(ticket)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "ticket not found")
+		return
+	}
+	t, err := rt.store.LoadTicket(ticket)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	nextSteps, _ := rt.svc.NextSteps(ticket)
+	githubBlobBase, _ := gitutil.GitHubBlobBase(r.Context(), repoRoot, s.cfg.BaseBranch)
+	resp := ticketDetails{
+		RepoID:         repoID,
+		RepoPath:       repoRoot,
+		TicketNumber:   ticket,
+		GitHubBlobBase: githubBlobBase,
+		State:          st,
+		NextSteps:      nextSteps,
+	}
+	if err == nil {
+		resp.Ticket = t
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+	if repoPath == "" {
+		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		return
+	}
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	paths := rt.store.Paths(ticket)
+	events, err := parseLogEvents(paths.Log)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"repo_id":       repoID,
+				"repo_path":     repoRoot,
+				"ticket_number": ticket,
+				"events":        []logEvent{},
+			})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"repo_id":       repoID,
+		"repo_path":     repoRoot,
+		"ticket_number": ticket,
+		"events":        events,
+	})
+}
+
+func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	name := r.PathValue("name")
+	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+	if repoPath == "" {
+		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		return
+	}
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	path, ok := artifactPath(rt.store.Paths(ticket), name)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unknown artifact")
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			writeJSON(w, http.StatusOK, map[string]string{
+				"repo_id":       repoID,
+				"repo_path":     repoRoot,
+				"ticket_number": ticket,
+				"name":          name,
+				"path":          path,
+				"content":       "",
+			})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"repo_id":       repoID,
+		"repo_path":     repoRoot,
+		"ticket_number": ticket,
+		"name":          name,
+		"path":          path,
+		"content":       string(data),
+	})
+}
+
+func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket, message, scope string) {
+	if action == jobRun && strings.TrimSpace(ticket) != "" {
+		if err := s.ensureQueuedTicket(repoID, repoPath, ticket); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, scope)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	qj := queuedJob{record: job, message: message}
+	s.broadcast(serverEvent{
+		Type:         "job",
+		RepoID:       repoID,
+		RepoPath:     repoPath,
+		TicketNumber: ticket,
+		JobID:        job.ID,
+		Action:       action,
+		Scope:        scope,
+		Status:       "queued",
+	})
+	select {
+	case s.jobs <- qj:
+		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
+			Status:       "accepted",
+			JobID:        job.ID,
+			Action:       action,
+			RepoID:       repoID,
+			RepoPath:     repoPath,
+			TicketNumber: ticket,
+		})
+	default:
+		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
+		s.broadcast(serverEvent{
+			Type:         "job",
+			RepoID:       repoID,
+			RepoPath:     repoPath,
+			TicketNumber: ticket,
+			JobID:        job.ID,
+			Action:       action,
+			Scope:        scope,
+			Status:       "failed",
+			Error:        "job queue is full",
+		})
+		writeError(w, http.StatusServiceUnavailable, "job queue is full")
+	}
+}
+
+func parseLogEvents(path string) ([]logEvent, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(string(data), "\n")
+	events := make([]logEvent, 0)
+	cur := logEvent{}
+	bodyLines := make([]string, 0)
+	flush := func() {
+		if strings.TrimSpace(cur.Title) == "" {
+			return
+		}
+		cur.Body = strings.TrimSpace(strings.Join(bodyLines, "\n"))
+		events = append(events, cur)
+	}
+	for _, line := range lines {
+		if m := sectionHeaderRE.FindStringSubmatch(line); len(m) == 3 {
+			flush()
+			cur = logEvent{Title: strings.TrimSpace(m[1]), Timestamp: strings.TrimSpace(m[2])}
+			bodyLines = bodyLines[:0]
+			continue
+		}
+		bodyLines = append(bodyLines, line)
+	}
+	flush()
+	return events, nil
+}
+
+func artifactPath(paths ports.TicketPaths, name string) (string, bool) {
+	switch name {
+	case "state":
+		return paths.State, true
+	case "ticket":
+		return paths.Ticket, true
+	case "log":
+		return paths.Log, true
+	case "proposal":
+		return paths.Proposal, true
+	case "final":
+		return paths.Final, true
+	case "pr":
+		return paths.PR, true
+	case "checks":
+		return paths.Checks, true
+	default:
+		return "", false
+	}
+}
+
+func fatalIf(err error) {
+	if err == nil {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "error:", err)
+	os.Exit(1)
+}

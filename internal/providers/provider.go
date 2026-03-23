@@ -3,11 +3,11 @@ package providers
 import (
 	"context"
 
-	"ai-ticket-worker/internal/models"
+	"ai-ticket-worker/internal/domain/ticket"
 )
 
 type InvestigateRequest struct {
-	Ticket         models.Ticket
+	Ticket         ticket.Ticket
 	RepoPath       string
 	WorktreePath   string
 	GuidelinesPath string
@@ -22,7 +22,7 @@ type InvestigateResult struct {
 }
 
 type ImplementRequest struct {
-	Ticket            models.Ticket
+	Ticket            ticket.Ticket
 	RepoPath          string
 	WorktreePath      string
 	GuidelinesPath    string
@@ -38,7 +38,7 @@ type ImplementResult struct {
 }
 
 type PRRequest struct {
-	Ticket            models.Ticket
+	Ticket            ticket.Ticket
 	WorktreePath      string
 	LogPath           string
 	ProposalPath      string
@@ -53,7 +53,7 @@ type PRResult struct {
 
 type AIProvider interface {
 	Name() string
-	GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (models.Ticket, string, error)
+	GetTicket(ctx context.Context, ticketNumber, repoPath, runtimeDir string) (ticket.Ticket, string, error)
 	Investigate(ctx context.Context, req InvestigateRequest, runtimeDir string) (InvestigateResult, error)
 	Implement(ctx context.Context, req ImplementRequest, runtimeDir string) (ImplementResult, error)
 	SummarizePR(ctx context.Context, req PRRequest, runtimeDir string) (PRResult, error)
