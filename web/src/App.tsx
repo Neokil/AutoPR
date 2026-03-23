@@ -316,6 +316,7 @@ export function App() {
             ...t,
             title: evt.title ?? t.title,
             status: evt.status ?? t.status,
+            last_error: evt.error ?? t.last_error,
             updated_at: new Date().toISOString()
           };
         }
@@ -524,6 +525,11 @@ export function App() {
                     <section className="ticket-section">
                       <span className="field-label">Priority</span>
                       <span>{priority || "-"}</span>
+                    </section>
+
+                    <section className="ticket-section">
+                      <span className="field-label">Last Error</span>
+                      <MarkdownView content={details?.state.last_error ?? ""} emptyText="No error recorded." />
                     </section>
 
                     <section className="ticket-section">

@@ -39,6 +39,11 @@ func (s *RemoteService) RunTickets(_ context.Context, ticketNumbers []string) er
 	return nil
 }
 
+func (s *RemoteService) RunTicket(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
+	return err
+}
+
 func (s *RemoteService) Status(ticketNumber string) error {
 	if strings.TrimSpace(ticketNumber) == "" {
 		var out struct {

@@ -65,7 +65,7 @@ func (s *server) executeJob(job queuedJob) error {
 
 	switch job.record.Action {
 	case jobRun:
-		err = rt.svc.RunTickets(context.Background(), []string{ticket})
+		err = rt.svc.RunTicket(context.Background(), ticket)
 		if err == nil {
 			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
@@ -116,6 +116,11 @@ func (s *server) executeJob(job queuedJob) error {
 		}
 	default:
 		err = fmt.Errorf("unsupported job action: %s", job.record.Action)
+	}
+	if err != nil && ticket != "" {
+		if persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, rt, job, err); persistErr != nil {
+			return fmt.Errorf("%w (also failed to persist ticket failure: %v)", err, persistErr)
+		}
 	}
 	return err
 }

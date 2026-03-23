@@ -62,6 +62,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		Title:        strings.TrimSpace(t.Title),
 		Status:       string(st.Status),
 		Approved:     st.Approved,
+		LastError:    strings.TrimSpace(st.LastError),
 		UpdatedAt:    st.UpdatedAt.UTC(),
 		PRURL:        st.PRURL,
 	}
@@ -76,6 +77,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 			TicketNumber: ticket,
 			Title:        rec.Title,
 			Status:       rec.Status,
+			Error:        rec.LastError,
 		})
 	}
 	return nil
@@ -100,6 +102,7 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 			Title:        strings.TrimSpace(ticketData.Title),
 			Status:       string(st.Status),
 			Approved:     st.Approved,
+			LastError:    strings.TrimSpace(st.LastError),
 			UpdatedAt:    st.UpdatedAt.UTC(),
 			PRURL:        st.PRURL,
 		})

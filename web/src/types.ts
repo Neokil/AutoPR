@@ -8,6 +8,7 @@ export interface TicketSummary {
   status: string;
   busy: boolean;
   approved: boolean;
+  last_error?: string;
   updated_at: string;
   pr_url?: string;
   jobs?: Job[];

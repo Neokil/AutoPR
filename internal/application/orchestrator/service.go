@@ -3,13 +3,14 @@ package orchestrator
 import (
 	"context"
 
-	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/application/tickets"
+	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/providers"
 )
 
 // Service defines application-level orchestrator use-cases shared by clients.
 type Service interface {
+	RunTicket(ctx context.Context, ticketNumber string) error
 	RunTickets(ctx context.Context, ticketNumbers []string) error
 	Status(ticketNumber string) error
 	Approve(ctx context.Context, ticketNumber string) error
@@ -34,6 +35,10 @@ func NewWorkflowService(cfg config.Config, repoRoot string, provider providers.A
 
 func (s *WorkflowService) RunTickets(ctx context.Context, ticketNumbers []string) error {
 	return s.orch.RunTickets(ctx, ticketNumbers)
+}
+
+func (s *WorkflowService) RunTicket(ctx context.Context, ticketNumber string) error {
+	return s.orch.RunTicket(ctx, ticketNumber)
 }
 
 func (s *WorkflowService) Status(ticketNumber string) error {

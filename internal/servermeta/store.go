@@ -28,6 +28,7 @@ type TicketRecord struct {
 	Status       string      `json:"status"`
 	Busy         bool        `json:"busy"`
 	Approved     bool        `json:"approved"`
+	LastError    string      `json:"last_error,omitempty"`
 	UpdatedAt    time.Time   `json:"updated_at"`
 	PRURL        string      `json:"pr_url,omitempty"`
 	Jobs         []JobRecord `json:"jobs,omitempty"`
