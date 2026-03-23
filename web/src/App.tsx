@@ -107,7 +107,7 @@ export function App() {
       }
     }
     return paths;
-  }, [tickets]);
+  }, [repositoryOptions, tickets]);
   const ticketRecord = asRecord(details?.ticket);
   const ticketTitle = readString(ticketRecord, "title") || selectedSummary?.title || "(no title)";
   const ticketURL = readString(ticketRecord, "url");
