@@ -17,6 +17,7 @@ import (
 	"ai-ticket-worker/internal/application/orchestrator"
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/contracts/api"
+	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/ports"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/state"
@@ -357,12 +358,14 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nextSteps, _ := rt.svc.NextSteps(ticket)
+	githubBlobBase, _ := gitutil.GitHubBlobBase(r.Context(), repoRoot, s.cfg.BaseBranch)
 	resp := ticketDetails{
-		RepoID:       repoID,
-		RepoPath:     repoRoot,
-		TicketNumber: ticket,
-		State:        st,
-		NextSteps:    nextSteps,
+		RepoID:         repoID,
+		RepoPath:       repoRoot,
+		TicketNumber:   ticket,
+		GitHubBlobBase: githubBlobBase,
+		State:          st,
+		NextSteps:      nextSteps,
 	}
 	if err == nil {
 		resp.Ticket = t

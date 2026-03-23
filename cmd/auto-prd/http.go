@@ -14,12 +14,13 @@ import (
 )
 
 type ticketDetails struct {
-	RepoID       string      `json:"repo_id"`
-	RepoPath     string      `json:"repo_path"`
-	TicketNumber string      `json:"ticket_number"`
-	State        interface{} `json:"state"`
-	Ticket       interface{} `json:"ticket,omitempty"`
-	NextSteps    string      `json:"next_steps,omitempty"`
+	RepoID         string      `json:"repo_id"`
+	RepoPath       string      `json:"repo_path"`
+	TicketNumber   string      `json:"ticket_number"`
+	GitHubBlobBase string      `json:"github_blob_base,omitempty"`
+	State          interface{} `json:"state"`
+	Ticket         interface{} `json:"ticket,omitempty"`
+	NextSteps      string      `json:"next_steps,omitempty"`
 }
 
 type logEvent struct {

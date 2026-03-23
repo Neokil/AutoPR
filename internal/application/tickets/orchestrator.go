@@ -411,6 +411,8 @@ func (o *Orchestrator) investigate(ctx context.Context, st *ticketdomain.State) 
 		_ = markdown.AppendSection(st.LogPath, "Investigation Failed", err.Error())
 		return err
 	}
+	res.Proposal = markdown.NormalizeRepoLinks(res.Proposal, o.RepoRoot, st.WorktreePath)
+	res.RawOut = markdown.NormalizeRepoLinks(res.RawOut, o.RepoRoot, st.WorktreePath)
 
 	if err := markdown.Write(st.ProposalPath, res.Proposal); err != nil {
 		return err
@@ -461,6 +463,8 @@ func (o *Orchestrator) implementationPipeline(ctx context.Context, st *ticketdom
 			_ = o.Store.SaveState(st.TicketNumber, *st)
 			return err
 		}
+		impl.Summary = markdown.NormalizeRepoLinks(impl.Summary, o.RepoRoot, st.WorktreePath)
+		impl.RawOut = markdown.NormalizeRepoLinks(impl.RawOut, o.RepoRoot, st.WorktreePath)
 
 		if err := markdown.AppendSection(st.LogPath, "Implementation", impl.RawOut); err != nil {
 			return err
@@ -534,6 +538,7 @@ func (o *Orchestrator) generatePR(ctx context.Context, st *ticketdomain.State, t
 		}
 		pr.Body = fallback
 	}
+	pr.Body = markdown.NormalizeRepoLinks(pr.Body, o.RepoRoot, st.WorktreePath)
 	if err := markdown.Write(st.PRPath, pr.Body); err != nil {
 		return err
 	}

@@ -39,6 +39,7 @@ export interface TicketDetails {
   repo_id: string;
   repo_path: string;
   ticket_number: string;
+  github_blob_base?: string;
   state: TicketState;
   ticket?: Record<string, unknown> & {
     title?: string;

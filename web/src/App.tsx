@@ -540,12 +540,24 @@ export function App() {
 
                     <section className="ticket-section">
                       <span className="field-label">Description</span>
-                      <MarkdownView content={ticketDescription} emptyText="No description." />
+                      <MarkdownView
+                        content={ticketDescription}
+                        emptyText="No description."
+                        githubBlobBase={details?.github_blob_base}
+                        repoPath={details?.repo_path}
+                        worktreePath={details?.state.worktree_path}
+                      />
                     </section>
 
                     <section className="ticket-section">
                       <span className="field-label">Acceptance Criteria</span>
-                      <MarkdownView content={acceptanceCriteria} emptyText="No acceptance criteria." />
+                      <MarkdownView
+                        content={acceptanceCriteria}
+                        emptyText="No acceptance criteria."
+                        githubBlobBase={details?.github_blob_base}
+                        repoPath={details?.repo_path}
+                        worktreePath={details?.state.worktree_path}
+                      />
                     </section>
 
                     <section className="ticket-section">
@@ -555,12 +567,24 @@ export function App() {
 
                     <section className="ticket-section">
                       <span className="field-label">Last Error</span>
-                      <MarkdownView content={details?.state.last_error ?? ""} emptyText="No error recorded." />
+                      <MarkdownView
+                        content={details?.state.last_error ?? ""}
+                        emptyText="No error recorded."
+                        githubBlobBase={details?.github_blob_base}
+                        repoPath={details?.repo_path}
+                        worktreePath={details?.state.worktree_path}
+                      />
                     </section>
 
                     <section className="ticket-section">
                       <span className="field-label">Next Steps</span>
-                      <MarkdownView content={details?.next_steps ?? ""} emptyText="No next steps available." />
+                      <MarkdownView
+                        content={details?.next_steps ?? ""}
+                        emptyText="No next steps available."
+                        githubBlobBase={details?.github_blob_base}
+                        repoPath={details?.repo_path}
+                        worktreePath={details?.state.worktree_path}
+                      />
                     </section>
                   </div>
                 </article>
@@ -593,7 +617,13 @@ export function App() {
                   )}
                   <article className="card">
                     <h4>Proposal</h4>
-                    <MarkdownView content={proposal} emptyText="No proposal available." />
+                    <MarkdownView
+                      content={proposal}
+                      emptyText="No proposal available."
+                      githubBlobBase={details?.github_blob_base}
+                      repoPath={details?.repo_path}
+                      worktreePath={details?.state.worktree_path}
+                    />
                   </article>
                 </>
               ) : null}
@@ -601,7 +631,13 @@ export function App() {
               {activeTab === "logs" ? (
                 <article className="card">
                   <h4>Logs</h4>
-                  <MarkdownView content={logText} emptyText="No logs available." />
+                  <MarkdownView
+                    content={logText}
+                    emptyText="No logs available."
+                    githubBlobBase={details?.github_blob_base}
+                    repoPath={details?.repo_path}
+                    worktreePath={details?.state.worktree_path}
+                  />
                 </article>
               ) : null}
             </>
