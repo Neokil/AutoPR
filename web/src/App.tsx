@@ -25,6 +25,10 @@ function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
 }
 
+function pendingTicketKey(repoPath: string, ticketNumber: string): string {
+  return `${repoPath}::${ticketNumber}`;
+}
+
 type Action = "run" | "resume" | "approve" | "reject" | "pr" | "apply_pr_comments" | "cleanup";
 
 function allowedActions(status: string): Action[] {
@@ -92,6 +96,8 @@ export function App() {
   const [showAddTicketDialog, setShowAddTicketDialog] = useState(false);
   const [newTicketRepoPath, setNewTicketRepoPath] = useState("");
   const [newTicketNumber, setNewTicketNumber] = useState("");
+  const [pendingAddedTickets, setPendingAddedTickets] = useState<string[]>([]);
+  const [addTicketError, setAddTicketError] = useState("");
 
   const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
   const knownRepoPaths = useMemo(() => {
@@ -356,11 +362,30 @@ export function App() {
   async function submitAddTicket() {
     const repoPath = newTicketRepoPath.trim();
     const ticketNumber = newTicketNumber.trim();
+    setAddTicketError("");
     if (!repoPath || !ticketNumber) {
-      setError("repo folder path and ticket number are required");
+      setAddTicketError("repo folder path and ticket number are required");
       return;
     }
+    const pendingKey = pendingTicketKey(repoPath, ticketNumber);
+    if (pendingAddedTickets.includes(pendingKey)) {
+      setAddTicketError(`ticket ${ticketNumber} is already being added to AutoPR for this repository`);
+      return;
+    }
+    try {
+      const repoTickets = await listTickets(repoPath);
+      const existing = repoTickets.find((t) => t.ticket_number === ticketNumber);
+      if (existing) {
+        setAddTicketError(`ticket ${ticketNumber} is already added to AutoPR for this repository`);
+        return;
+      }
+    } catch (err) {
+      setAddTicketError(err instanceof Error ? err.message : "failed to validate ticket");
+      return;
+    }
+    setPendingAddedTickets((current) => [...current, pendingKey]);
     const ok = await queueAction(() => runTicket(repoPath, ticketNumber));
+    setPendingAddedTickets((current) => current.filter((key) => key !== pendingKey));
     if (ok) {
       setShowAddTicketDialog(false);
       setNewTicketRepoPath("");
@@ -409,6 +434,7 @@ export function App() {
           onSelectTicket={setSelectedKey}
           onAddTicket={() => {
             setError("");
+            setAddTicketError("");
             setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
             setNewTicketNumber("");
             setShowAddTicketDialog(true);
@@ -590,6 +616,7 @@ export function App() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Add Ticket</h3>
             <p className="meta">Schedule a ticket run for a repository.</p>
+            {addTicketError ? <div className="banner error">{addTicketError}</div> : null}
 
             <label className="field-label" htmlFor="repo-path-input">
               Repository Folder
@@ -598,7 +625,10 @@ export function App() {
               id="repo-path-input"
               list="repo-path-options"
               value={newTicketRepoPath}
-              onChange={(e) => setNewTicketRepoPath(e.target.value)}
+              onChange={(e) => {
+                setNewTicketRepoPath(e.target.value);
+                setAddTicketError("");
+              }}
               placeholder="/absolute/path/to/repo"
             />
             <datalist id="repo-path-options">
@@ -613,7 +643,10 @@ export function App() {
             <input
               id="ticket-number-input"
               value={newTicketNumber}
-              onChange={(e) => setNewTicketNumber(e.target.value)}
+              onChange={(e) => {
+                setNewTicketNumber(e.target.value);
+                setAddTicketError("");
+              }}
               placeholder="e.g. 66825"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -628,6 +661,7 @@ export function App() {
                 type="button"
                 className="secondary"
                 onClick={() => {
+                  setAddTicketError("");
                   setShowAddTicketDialog(false);
                 }}
               >
