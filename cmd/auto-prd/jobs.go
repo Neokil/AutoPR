@@ -87,6 +87,9 @@ func (s *server) executeJob(job queuedJob) error {
 	case jobFeedback:
 		err = rt.svc.Feedback(ticket, job.message)
 		if err == nil {
+			err = rt.svc.ResumeTicket(context.Background(), ticket)
+		}
+		if err == nil {
 			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
 	case jobCleanup:
