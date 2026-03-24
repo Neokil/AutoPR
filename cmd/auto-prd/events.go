@@ -18,6 +18,7 @@ type serverEvent struct {
 	Action       string `json:"action,omitempty"`
 	Scope        string `json:"scope,omitempty"`
 	Error        string `json:"error,omitempty"`
+	PRURL        string `json:"pr_url,omitempty"`
 }
 
 func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {

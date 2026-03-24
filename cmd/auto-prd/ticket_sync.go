@@ -78,6 +78,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 			Title:        rec.Title,
 			Status:       rec.Status,
 			Error:        rec.LastError,
+			PRURL:        rec.PRURL,
 		})
 	}
 	return nil

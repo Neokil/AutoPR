@@ -87,6 +87,7 @@ export interface ServerEvent {
   action?: string;
   scope?: string;
   error?: string;
+  pr_url?: string;
 }
 
 export interface RepositoryListResponse {

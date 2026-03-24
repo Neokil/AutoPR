@@ -323,6 +323,7 @@ export function App() {
             title: evt.title ?? t.title,
             status: evt.status ?? t.status,
             last_error: evt.error ?? t.last_error,
+            pr_url: evt.pr_url ?? t.pr_url,
             updated_at: new Date().toISOString()
           };
         }
