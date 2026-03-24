@@ -1,7 +1,7 @@
 # Features
 - Convert logs to json format
 - Save query-configs per provider (so we can have different queries per provider and can easily switch between providers)
-- When the PR was created there should be an "Open PR" button on the top
+- 
 
 # Bugs
 - 

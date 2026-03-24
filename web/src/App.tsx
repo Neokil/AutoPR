@@ -494,6 +494,11 @@ export function App() {
                     Apply PR Comments
                   </button>
                 ) : null}
+                {selectedSummary.pr_url ? (
+                  <a href={selectedSummary.pr_url} target="_blank" rel="noreferrer">
+                    <button>Open PR</button>
+                  </a>
+                ) : null}
                 {allowedActions(selectedSummary.status).includes("cleanup") ? (
                   <button onClick={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
                     Cleanup
