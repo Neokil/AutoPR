@@ -22,6 +22,10 @@ providers:
     args:
       - exec
       - "-"
+  claude:
+    command: claude
+    args:
+      - --print
   # example for adding another provider without code changes:
   # my-provider:
   #   command: my-provider-cli

@@ -40,8 +40,9 @@ func Default() Config {
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{},
 		Providers: map[string]ProviderCommand{
-			"gemini": {Command: "gemini", Args: []string{}},
-			"codex":  {Command: "codex", Args: []string{"exec", "-"}},
+			"gemini":      {Command: "gemini", Args: []string{}},
+			"codex":       {Command: "codex", Args: []string{"exec", "-"}},
+			"claude-code": {Command: "claude", Args: []string{"--print"}},
 		},
 	}
 }
