@@ -32,7 +32,7 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	renderer, err := NewPromptRenderer(promptsDir)
+	renderer, err := NewPromptRenderer(promptsDir, cfg.Provider)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,5 @@
 # Features
 - Convert logs to json format
-- Save query-configs per provider (so we can have different queries per provider and can easily switch between providers)
 - 
 
 # Bugs
