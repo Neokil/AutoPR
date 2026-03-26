@@ -1,5 +1,7 @@
 # AutoPR
 
+> **Warning:** This repository is in active development. Expect frequent changes, including breaking ones. APIs, configuration formats, and workflows may change without notice between versions.
+
 From issue to PR in one loop.
 
 AutoPR runs a ticket workflow around a local daemon, a CLI, and an embedded web UI. It stores ticket state inside each repository, executes your configured coding agent provider, and lets you review, approve, resume, and clean up work without leaving your machine.
