@@ -10,19 +10,19 @@ import (
 
 // Service defines application-level orchestrator use-cases shared by clients.
 type Service interface {
-	RunTicket(ctx context.Context, ticketNumber string) error
-	RunTickets(ctx context.Context, ticketNumbers []string) error
-	Status(ticketNumber string) error
+	StartFlow(ctx context.Context, ticketNumber string) error
+	ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error
+
+	// Legacy wrappers — map to ApplyAction using convention-based label detection.
 	Approve(ctx context.Context, ticketNumber string) error
-	Feedback(ticketNumber, message string) error
 	Reject(ticketNumber string) error
-	ResumeTicket(ctx context.Context, ticketNumber string) error
-	GeneratePR(ctx context.Context, ticketNumber string) error
-	ApplyPRComments(ctx context.Context, ticketNumber string) error
+	Feedback(ticketNumber, message string) error
+
+	Status(ticketNumber string) error
+	NextSteps(ticketNumber string) (string, error)
 	CleanupDone(ctx context.Context) error
 	CleanupAll(ctx context.Context) error
 	CleanupTicket(ctx context.Context, ticketNumber string) error
-	NextSteps(ticketNumber string) (string, error)
 }
 
 type WorkflowService struct {
@@ -33,40 +33,32 @@ func NewWorkflowService(cfg config.Config, repoRoot string, provider providers.A
 	return &WorkflowService{orch: tickets.New(cfg, repoRoot, provider)}
 }
 
-func (s *WorkflowService) RunTickets(ctx context.Context, ticketNumbers []string) error {
-	return s.orch.RunTickets(ctx, ticketNumbers)
+func (s *WorkflowService) StartFlow(ctx context.Context, ticketNumber string) error {
+	return s.orch.StartFlow(ctx, ticketNumber)
 }
 
-func (s *WorkflowService) RunTicket(ctx context.Context, ticketNumber string) error {
-	return s.orch.RunTicket(ctx, ticketNumber)
-}
-
-func (s *WorkflowService) Status(ticketNumber string) error {
-	return s.orch.Status(ticketNumber)
+func (s *WorkflowService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
+	return s.orch.ApplyAction(ctx, ticketNumber, actionLabel, message)
 }
 
 func (s *WorkflowService) Approve(ctx context.Context, ticketNumber string) error {
 	return s.orch.Approve(ctx, ticketNumber)
 }
 
-func (s *WorkflowService) Feedback(ticketNumber, message string) error {
-	return s.orch.Feedback(ticketNumber, message)
-}
-
 func (s *WorkflowService) Reject(ticketNumber string) error {
 	return s.orch.Reject(ticketNumber)
 }
 
-func (s *WorkflowService) ResumeTicket(ctx context.Context, ticketNumber string) error {
-	return s.orch.ResumeTicket(ctx, ticketNumber)
+func (s *WorkflowService) Feedback(ticketNumber, message string) error {
+	return s.orch.Feedback(ticketNumber, message)
 }
 
-func (s *WorkflowService) GeneratePR(ctx context.Context, ticketNumber string) error {
-	return s.orch.GeneratePR(ctx, ticketNumber)
+func (s *WorkflowService) Status(ticketNumber string) error {
+	return s.orch.Status(ticketNumber)
 }
 
-func (s *WorkflowService) ApplyPRComments(ctx context.Context, ticketNumber string) error {
-	return s.orch.ApplyPRComments(ctx, ticketNumber)
+func (s *WorkflowService) NextSteps(ticketNumber string) (string, error) {
+	return s.orch.NextSteps(ticketNumber)
 }
 
 func (s *WorkflowService) CleanupDone(ctx context.Context) error {
@@ -79,8 +71,4 @@ func (s *WorkflowService) CleanupAll(ctx context.Context) error {
 
 func (s *WorkflowService) CleanupTicket(ctx context.Context, ticketNumber string) error {
 	return s.orch.CleanupTicket(ctx, ticketNumber)
-}
-
-func (s *WorkflowService) NextSteps(ticketNumber string) (string, error) {
-	return s.orch.NextSteps(ticketNumber)
 }

@@ -30,17 +30,35 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 	}
 }
 
-func (s *RemoteService) RunTickets(_ context.Context, ticketNumbers []string) error {
-	for _, ticket := range ticketNumbers {
-		if _, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticket)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticket); err != nil {
-			return err
-		}
-	}
-	return nil
+func (s *RemoteService) StartFlow(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
+	return err
 }
 
-func (s *RemoteService) RunTicket(_ context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
+func (s *RemoteService) ApplyAction(_ context.Context, ticketNumber, actionLabel, message string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber)), api.ActionRequest{
+		RepoPath: s.repoPath,
+		Label:    actionLabel,
+		Message:  message,
+	}, actionLabel, ticketNumber)
+	return err
+}
+
+func (s *RemoteService) Approve(_ context.Context, ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/approve", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "approve", ticketNumber)
+	return err
+}
+
+func (s *RemoteService) Reject(ticketNumber string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/reject", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "reject", ticketNumber)
+	return err
+}
+
+func (s *RemoteService) Feedback(ticketNumber, message string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/feedback", url.PathEscape(ticketNumber)), api.FeedbackRequest{
+		RepoPath: s.repoPath,
+		Message:  message,
+	}, "feedback", ticketNumber)
 	return err
 }
 
@@ -53,7 +71,7 @@ func (s *RemoteService) Status(ticketNumber string) error {
 			return err
 		}
 		for _, t := range out.Tickets {
-			fmt.Printf("ticket %v  state=%v  approved=%v  updated=%v\n", t["ticket_number"], t["status"], t["approved"], t["updated_at"])
+			fmt.Printf("ticket %v  status=%v  state=%v  updated=%v\n", t["ticket_number"], t["status"], t["current_state"], t["updated_at"])
 		}
 		return nil
 	}
@@ -67,52 +85,31 @@ func (s *RemoteService) Status(ticketNumber string) error {
 		return err
 	}
 	fmt.Printf("ticket %s\n", out.TicketNumber)
-	fmt.Printf("  state: %v\n", out.State["status"])
-	fmt.Printf("  approved: %v\n", out.State["approved"])
-	fmt.Printf("  branch: %v\n", out.State["branch_name"])
+	fmt.Printf("  status:   %v\n", out.State["flow_status"])
+	fmt.Printf("  state:    %v\n", out.State["current_state"])
+	fmt.Printf("  branch:   %v\n", out.State["branch_name"])
 	fmt.Printf("  worktree: %v\n", out.State["worktree_path"])
-	fmt.Printf("  proposal: %v\n", out.State["proposal_path"])
-	fmt.Printf("  pr: %v\n", out.State["pr_path"])
 	if v := strings.TrimSpace(fmt.Sprintf("%v", out.State["pr_url"])); v != "" && v != "<nil>" {
-		fmt.Printf("  pr_url: %s\n", v)
+		fmt.Printf("  pr_url:   %s\n", v)
 	}
 	if v := strings.TrimSpace(fmt.Sprintf("%v", out.State["last_error"])); v != "" && v != "<nil>" {
-		fmt.Printf("  last_error: %s\n", v)
+		fmt.Printf("  error:    %s\n", v)
+	}
+	if out.NextSteps != "" {
+		fmt.Printf("\n%s\n", out.NextSteps)
 	}
 	return nil
 }
 
-func (s *RemoteService) Approve(_ context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/approve", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "approve", ticketNumber)
-	return err
-}
-
-func (s *RemoteService) Feedback(ticketNumber, message string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/feedback", url.PathEscape(ticketNumber)), api.FeedbackRequest{
-		RepoPath: s.repoPath,
-		Message:  message,
-	}, "feedback", ticketNumber)
-	return err
-}
-
-func (s *RemoteService) Reject(ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/reject", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "reject", ticketNumber)
-	return err
-}
-
-func (s *RemoteService) ResumeTicket(_ context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/resume", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "resume", ticketNumber)
-	return err
-}
-
-func (s *RemoteService) GeneratePR(_ context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/pr", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "pr", ticketNumber)
-	return err
-}
-
-func (s *RemoteService) ApplyPRComments(_ context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/apply-pr-comments", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "apply pr comments", ticketNumber)
-	return err
+func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
+	var out struct {
+		NextSteps string `json:"next_steps"`
+	}
+	path := "/api/tickets/" + url.PathEscape(ticketNumber) + "?repo_path=" + url.QueryEscape(s.repoPath)
+	if err := s.doJSON(http.MethodGet, path, nil, &out); err != nil {
+		return "", err
+	}
+	return out.NextSteps, nil
 }
 
 func (s *RemoteService) CleanupDone(_ context.Context) error {
@@ -128,34 +125,6 @@ func (s *RemoteService) CleanupAll(_ context.Context) error {
 func (s *RemoteService) CleanupTicket(_ context.Context, ticketNumber string) error {
 	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
 	return err
-}
-
-func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
-	var out struct {
-		NextSteps string `json:"next_steps"`
-	}
-	path := "/api/tickets/" + url.PathEscape(ticketNumber) + "?repo_path=" + url.QueryEscape(s.repoPath)
-	if err := s.doJSON(http.MethodGet, path, nil, &out); err != nil {
-		return "", err
-	}
-	return out.NextSteps, nil
-}
-
-func (s *RemoteService) enqueueOnly(method, path string, body interface{}, action, ticket string) (api.ActionAcceptedResponse, error) {
-	var accepted api.ActionAcceptedResponse
-	if err := s.doJSON(method, path, body, &accepted); err != nil {
-		return api.ActionAcceptedResponse{}, err
-	}
-	jobID := strings.TrimSpace(accepted.JobID)
-	if jobID == "" {
-		return api.ActionAcceptedResponse{}, fmt.Errorf("server response missing job_id")
-	}
-	if ticket != "" {
-		fmt.Printf("%s scheduled for ticket %s, job id is %s\n", action, ticket, jobID)
-	} else {
-		fmt.Printf("%s scheduled, job id is %s\n", action, jobID)
-	}
-	return accepted, nil
 }
 
 func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobStatusResponse, error) {
@@ -182,6 +151,23 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 			return job, fmt.Errorf("unexpected job status: %s", job.Status)
 		}
 	}
+}
+
+func (s *RemoteService) enqueueOnly(method, path string, body interface{}, action, ticket string) (api.ActionAcceptedResponse, error) {
+	var accepted api.ActionAcceptedResponse
+	if err := s.doJSON(method, path, body, &accepted); err != nil {
+		return api.ActionAcceptedResponse{}, err
+	}
+	jobID := strings.TrimSpace(accepted.JobID)
+	if jobID == "" {
+		return api.ActionAcceptedResponse{}, fmt.Errorf("server response missing job_id")
+	}
+	if ticket != "" {
+		fmt.Printf("%s scheduled for ticket %s, job id is %s\n", action, ticket, jobID)
+	} else {
+		fmt.Printf("%s scheduled, job id is %s\n", action, jobID)
+	}
+	return accepted, nil
 }
 
 func (s *RemoteService) doJSON(method, path string, body interface{}, out interface{}) error {

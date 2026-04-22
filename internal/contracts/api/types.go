@@ -16,6 +16,12 @@ type CleanupScopeRequest struct {
 	Scope    string `json:"scope"`
 }
 
+type ActionRequest struct {
+	RepoPath string `json:"repo_path"`
+	Label    string `json:"label"`
+	Message  string `json:"message,omitempty"`
+}
+
 type ActionAcceptedResponse struct {
 	Status       string `json:"status"`
 	JobID        string `json:"job_id"`

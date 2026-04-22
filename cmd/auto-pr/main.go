@@ -44,6 +44,8 @@ func main() {
 		waitForJobCmd(ctx, svc, os.Args[2:])
 	case "status":
 		statusCmd(svc, os.Args[2:])
+	case "action":
+		actionCmd(ctx, svc, os.Args[2:])
 	case "approve":
 		requireArgs("approve", os.Args[2:], 1)
 		ticket := os.Args[2]
@@ -57,15 +59,7 @@ func main() {
 	case "resume":
 		requireArgs("resume", os.Args[2:], 1)
 		ticket := os.Args[2]
-		fatalIf(svc.ResumeTicket(ctx, ticket))
-	case "pr":
-		requireArgs("pr", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.GeneratePR(ctx, ticket))
-	case "apply-pr-comments":
-		requireArgs("apply-pr-comments", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.ApplyPRComments(ctx, ticket))
+		fatalIf(svc.StartFlow(ctx, ticket))
 	case "cleanup":
 		cleanupCmd(ctx, svc, os.Args[2:])
 	default:
@@ -76,7 +70,9 @@ func main() {
 
 func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	requireArgs("run", args, 1)
-	fatalIf(svc.RunTickets(ctx, args))
+	for _, ticket := range args {
+		fatalIf(svc.StartFlow(ctx, ticket))
+	}
 }
 
 func statusCmd(svc orchestrator.Service, args []string) {
@@ -91,6 +87,21 @@ func statusCmd(svc orchestrator.Service, args []string) {
 	if ticket != "" {
 		printNextSteps(svc, ticket)
 	}
+}
+
+func actionCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+	requireArgs("action", args, 1)
+	ticket := args[0]
+
+	fs := flag.NewFlagSet("action", flag.ExitOnError)
+	label := fs.String("label", "", "action label (required)")
+	message := fs.String("message", "", "optional message (for provide_feedback actions)")
+	_ = fs.Parse(args[1:])
+
+	if strings.TrimSpace(*label) == "" {
+		fatalIf(errors.New("action requires --label"))
+	}
+	fatalIf(svc.ApplyAction(ctx, ticket, *label, *message))
 }
 
 func feedbackCmd(svc orchestrator.Service, args []string) {
@@ -164,12 +175,11 @@ Commands:
   auto-pr run <ticket-number> [<ticket-number>...]
   auto-pr wait-for-job <job-id>
   auto-pr status [<ticket-number>]
+  auto-pr action <ticket-number> --label "<action-label>" [--message "..."]
   auto-pr approve <ticket-number>
   auto-pr feedback <ticket-number> --message "..."
   auto-pr reject <ticket-number>
   auto-pr resume <ticket-number>
-  auto-pr pr <ticket-number>
-  auto-pr apply-pr-comments <ticket-number>
   auto-pr cleanup <ticket-number>
   auto-pr cleanup --done
   auto-pr cleanup --all`)

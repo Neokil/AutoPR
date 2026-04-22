@@ -2,13 +2,10 @@ package tickets
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"ai-ticket-worker/internal/config"
@@ -19,6 +16,7 @@ import (
 	"ai-ticket-worker/internal/providers"
 	"ai-ticket-worker/internal/shell"
 	"ai-ticket-worker/internal/state"
+	"ai-ticket-worker/internal/workflow"
 	"ai-ticket-worker/internal/worktree"
 )
 
@@ -42,103 +40,160 @@ func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, pr
 	}
 }
 
-func (o *Orchestrator) RunTickets(ctx context.Context, ticketNumbers []string) error {
-	for _, n := range ticketNumbers {
-		if err := o.RunTicket(ctx, n); err != nil {
-			fmt.Fprintf(os.Stderr, "ticket %s failed: %v\n", n, err)
-		}
-	}
-	return nil
-}
-
-func (o *Orchestrator) RunTicket(ctx context.Context, ticketNumber string) error {
-	st, err := o.initOrLoad(ctx, ticketNumber)
+// StartFlow begins or re-runs the workflow for a ticket. Creates a worktree on
+// first call; re-runs the current state if the ticket is already waiting or failed.
+func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error {
+	wf, err := workflow.Load(o.RepoRoot)
 	if err != nil {
-		return err
+		return fmt.Errorf("load workflow: %w", err)
 	}
-	if st.ShouldGeneratePROnRun() {
-		t, err := o.Store.LoadTicket(ticketNumber)
-		if err != nil {
+
+	st, err := o.Store.LoadState(ticketNumber)
+	if os.IsNotExist(err) {
+		st = ticketdomain.NewState(ticketNumber)
+		if err := o.Store.SaveState(ticketNumber, st); err != nil {
 			return err
 		}
-		return o.generatePR(ctx, st, t)
+	} else if err != nil {
+		return err
 	}
-	if st.WaitsForHumanInput() {
-		fmt.Printf("ticket %s is waiting for human input. Run approve/feedback/reject.\n", ticketNumber)
+
+	if st.FlowStatus == ticketdomain.FlowStatusDone || st.FlowStatus == ticketdomain.FlowStatusCancelled {
+		fmt.Printf("ticket %s is already %s\n", ticketNumber, st.FlowStatus)
 		return nil
 	}
-	if st.ShouldInvestigate() {
-		return o.investigate(ctx, st)
+	if st.FlowStatus == ticketdomain.FlowStatusRunning {
+		return fmt.Errorf("ticket %s is already running", ticketNumber)
 	}
-	if st.ShouldImplement() {
-		return o.implementationPipeline(ctx, st)
+
+	// Ensure worktree exists.
+	if st.WorktreePath == "" {
+		branchName := fmt.Sprintf("auto-pr/%s", ticketNumber)
+		wtPath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, ticketNumber, branchName, o.Cfg.BaseBranch)
+		if err != nil {
+			return fmt.Errorf("create worktree: %w", err)
+		}
+		st.BranchName = branchName
+		st.WorktreePath = wtPath
+		if err := o.Store.SaveState(ticketNumber, st); err != nil {
+			return err
+		}
 	}
-	if st.Status == ticketdomain.StateDone {
-		fmt.Printf("ticket %s already done\n", ticketNumber)
+
+	// Ensure the .auto-pr artifact directory exists inside the worktree.
+	autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
+	if err := os.MkdirAll(autoPRDir, 0o755); err != nil {
+		return fmt.Errorf("create .auto-pr dir: %w", err)
 	}
-	return nil
+
+	// Write context.md once (skip if already present).
+	contextPath := st.ArtifactPath("context.md")
+	if _, statErr := os.Stat(contextPath); os.IsNotExist(statErr) {
+		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
+		content := fmt.Sprintf("Ticket: %s\nGuidelines: %s\nRepo: %s\n", ticketNumber, guidelinesPath, o.RepoRoot)
+		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+
+	// Determine which state to run.
+	var stateCfg workflow.StateConfig
+	if st.CurrentState == "" {
+		first, ok := wf.FirstState()
+		if !ok {
+			return fmt.Errorf("workflow has no states defined")
+		}
+		stateCfg = first
+	} else {
+		cfg, ok := wf.StateByName(st.CurrentState)
+		if !ok {
+			return fmt.Errorf("current state %q not found in workflow", st.CurrentState)
+		}
+		stateCfg = cfg
+	}
+
+	return o.runState(ctx, &st, stateCfg)
 }
 
-func (o *Orchestrator) ResumeTicket(ctx context.Context, ticketNumber string) error {
+// ApplyAction applies the named action to a ticket that is waiting for input.
+func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
+	wf, err := workflow.Load(o.RepoRoot)
+	if err != nil {
+		return fmt.Errorf("load workflow: %w", err)
+	}
+
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
 		return err
 	}
-	if st.ShouldGeneratePROnRun() {
-		t, err := o.Store.LoadTicket(ticketNumber)
-		if err != nil {
-			return err
+
+	if st.FlowStatus != ticketdomain.FlowStatusWaiting {
+		return fmt.Errorf("ticket %s is not waiting for an action (status: %s)", ticketNumber, st.FlowStatus)
+	}
+
+	stateCfg, ok := wf.StateByName(st.CurrentState)
+	if !ok {
+		return fmt.Errorf("current state %q not found in workflow", st.CurrentState)
+	}
+
+	var action *workflow.ActionConfig
+	for i, a := range stateCfg.Actions {
+		if strings.EqualFold(a.Label, actionLabel) {
+			action = &stateCfg.Actions[i]
+			break
 		}
-		return o.generatePR(ctx, &st, t)
 	}
-	if st.WaitsForHumanInput() {
-		fmt.Printf("ticket %s is waiting for human input.\n", ticketNumber)
-		return nil
+	if action == nil {
+		labels := make([]string, len(stateCfg.Actions))
+		for i, a := range stateCfg.Actions {
+			labels[i] = a.Label
+		}
+		return fmt.Errorf("action %q not found in state %q (available: %s)", actionLabel, st.CurrentState, strings.Join(labels, ", "))
 	}
-	if st.ShouldInvestigate() {
-		return o.investigate(ctx, &st)
-	}
-	if st.ShouldImplement() {
-		return o.implementationPipeline(ctx, &st)
-	}
-	return nil
+
+	return o.dispatchAction(ctx, &st, wf, *action, message)
 }
 
+// Approve applies the first forward (non-terminal move_to_state) action in the current state.
+// Legacy wrapper for backward compatibility with v2 API clients.
 func (o *Orchestrator) Approve(ctx context.Context, ticketNumber string) error {
-	st, err := o.Store.LoadState(ticketNumber)
+	st, wf, err := o.loadStateAndWorkflow(ticketNumber)
 	if err != nil {
 		return err
 	}
-	st.ApproveForImplementation()
-	if err := o.Store.SaveState(ticketNumber, st); err != nil {
-		return err
-	}
-	_ = markdown.AppendSection(st.LogPath, "Human Approval", "Approved for implementation.")
-	return o.ResumeTicket(ctx, ticketNumber)
-}
-
-func (o *Orchestrator) Feedback(ticketNumber, message string) error {
-	st, err := o.Store.LoadState(ticketNumber)
+	label, err := firstForwardActionLabel(wf, st.CurrentState)
 	if err != nil {
 		return err
 	}
-	st.ApplyFeedback(message)
-	if err := markdown.AppendSection(st.LogPath, "Human Feedback", message); err != nil {
-		return err
-	}
-	return o.Store.SaveState(ticketNumber, st)
+	return o.ApplyAction(ctx, ticketNumber, label, "")
 }
 
+// Reject applies the first terminal move_to_state action in the current state.
+// Legacy wrapper for backward compatibility with v2 API clients.
 func (o *Orchestrator) Reject(ticketNumber string) error {
-	st, err := o.Store.LoadState(ticketNumber)
+	st, wf, err := o.loadStateAndWorkflow(ticketNumber)
 	if err != nil {
 		return err
 	}
-	st.RejectByHuman()
-	if err := markdown.AppendSection(st.LogPath, "Human Rejection", "Rejected by reviewer."); err != nil {
+	label, err := firstCancelActionLabel(wf, st.CurrentState)
+	if err != nil {
 		return err
 	}
-	return o.Store.SaveState(ticketNumber, st)
+	return o.ApplyAction(context.Background(), ticketNumber, label, "")
+}
+
+// Feedback applies the first provide_feedback action in the current state with the given message.
+// Legacy wrapper for backward compatibility with v2 API clients.
+func (o *Orchestrator) Feedback(ticketNumber, message string) error {
+	st, wf, err := o.loadStateAndWorkflow(ticketNumber)
+	if err != nil {
+		return err
+	}
+	label, err := firstFeedbackActionLabel(wf, st.CurrentState)
+	if err != nil {
+		return err
+	}
+	return o.ApplyAction(context.Background(), ticketNumber, label, message)
 }
 
 func (o *Orchestrator) Status(ticketNumber string) error {
@@ -163,7 +218,8 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return st.NextStepsCLI(), nil
+	wf, _ := workflow.Load(o.RepoRoot)
+	return buildNextSteps(st, wf), nil
 }
 
 func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) error {
@@ -190,9 +246,9 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		if st.Status == ticketdomain.StateDone {
+		if st.FlowStatus == ticketdomain.FlowStatusDone {
 			if err := o.CleanupTicket(ctx, ticket); err != nil {
-				fmt.Fprintf(os.Stderr, "cleanup %s failed: %v\n", ticket, err)
+				fmt.Fprintf(os.Stderr, "cleanup %s: %v\n", ticket, err)
 			}
 		}
 	}
@@ -207,394 +263,192 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	sort.Strings(tickets)
 	for _, ticket := range tickets {
 		if err := o.CleanupTicket(ctx, ticket); err != nil {
-			fmt.Fprintf(os.Stderr, "cleanup %s failed: %v\n", ticket, err)
+			fmt.Fprintf(os.Stderr, "cleanup %s: %v\n", ticket, err)
 		}
 	}
 	return nil
 }
 
-func (o *Orchestrator) GeneratePR(ctx context.Context, ticketNumber string) error {
-	st, err := o.Store.LoadState(ticketNumber)
-	if err != nil {
-		return err
-	}
-	if err := o.validatePRPrereqs(ctx, st); err != nil {
-		return err
-	}
-	t, err := o.Store.LoadTicket(ticketNumber)
-	if err != nil {
-		return err
-	}
-	if err := o.generatePR(ctx, &st, t); err != nil {
-		return err
-	}
-	st.Status = ticketdomain.StateDone
-	if err := o.Store.SaveState(ticketNumber, st); err != nil {
-		return err
-	}
-	return nil
-}
+// --- internal helpers ---
 
-func (o *Orchestrator) ApplyPRComments(ctx context.Context, ticketNumber string) error {
-	st, err := o.Store.LoadState(ticketNumber)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(st.PRURL) == "" {
-		return fmt.Errorf("ticket %s has no PR URL; create the PR first with auto-pr pr %s", ticketNumber, ticketNumber)
-	}
-	ticket, err := o.Store.LoadTicket(ticketNumber)
-	if err != nil {
-		return err
-	}
+func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, stateCfg workflow.StateConfig) error {
+	logPath := st.ArtifactPath(stateCfg.Name + ".log")
 
-	comments, err := o.fetchOpenPRComments(ctx, st.PRURL, st.WorktreePath)
-	if err != nil {
-		return err
-	}
-	if len(comments) == 0 {
-		_ = markdown.AppendSection(st.LogPath, "PR Comments", "No open PR review comments found.")
-		fmt.Printf("ticket %s has no open PR review comments\n", ticketNumber)
-		return nil
-	}
-
-	commentContext := formatPRCommentContext(comments)
-	_ = markdown.AppendSection(st.LogPath, "PR Comments", commentContext)
-
-	prevStatus := st.Status
-	st.Status = ticketdomain.StateImplementing
-	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
-		return err
-	}
-
-	impl, err := o.Provider.Implement(ctx, providers.ImplementRequest{
-		Ticket:            ticket,
-		RepoPath:          o.RepoRoot,
-		WorktreePath:      st.WorktreePath,
-		GuidelinesPath:    config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg),
-		LogPath:           st.LogPath,
-		ProposalPath:      st.ProposalPath,
-		FinalSolutionPath: st.FinalPath,
-		FailureContext: "Address the following open GitHub PR review comments.\n" +
-			"Only implement requested changes that are relevant and correct.\n\n" + commentContext,
-	}, st.ProviderDirPath)
-	if err != nil {
-		st.Status = ticketdomain.StateFailed
-		st.LastError = err.Error()
-		_ = markdown.AppendSection(st.LogPath, "Apply PR Comments Failed", err.Error())
-		_ = o.Store.SaveState(st.TicketNumber, st)
-		return err
-	}
-	if err := markdown.AppendSection(st.LogPath, "Apply PR Comments", impl.RawOut); err != nil {
-		return err
-	}
-	if err := markdown.Write(st.FinalPath, impl.Summary); err != nil {
-		return err
-	}
-
-	st.Status = ticketdomain.StateValidating
-	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
-		return err
-	}
-	ok, checkOutput, err := o.runChecks(ctx, st)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		st.Status = ticketdomain.StateFailed
-		st.LastError = "checks failed after applying PR comments"
-		_ = markdown.AppendSection(st.LogPath, "Validation Failed", checkOutput)
-		_ = o.Store.SaveState(st.TicketNumber, st)
-		return fmt.Errorf("ticket %s: checks failed after applying PR comments", st.TicketNumber)
-	}
-	_ = markdown.AppendSection(st.LogPath, "Validation", "All checks passed after applying PR comments.")
-
-	if err := o.ensureCommitForTicket(ctx, st, ticket); err != nil {
-		st.Status = ticketdomain.StateFailed
-		st.LastError = err.Error()
-		_ = markdown.AppendSection(st.LogPath, "Commit Failed", err.Error())
-		_ = o.Store.SaveState(st.TicketNumber, st)
-		return err
-	}
-	if err := gitutil.PushBranch(ctx, st.WorktreePath, st.BranchName); err != nil {
-		msg := fmt.Sprintf("failed to push updates for ticket %s: %v", st.TicketNumber, err)
-		st.Status = ticketdomain.StateFailed
-		st.LastError = msg
-		_ = markdown.AppendSection(st.LogPath, "PR Update Push Failed", msg)
-		_ = o.Store.SaveState(st.TicketNumber, st)
-		return fmt.Errorf(msg)
-	}
-	_ = markdown.AppendSection(st.LogPath, "PR Updated", fmt.Sprintf("Pushed updates for %s", st.PRURL))
-
-	st.Status = prevStatus
+	st.CurrentState = stateCfg.Name
+	st.FlowStatus = ticketdomain.FlowStatusRunning
 	st.LastError = ""
-	if st.Status == "" {
-		st.Status = ticketdomain.StateDone
-	}
-	if err := o.Store.SaveState(st.TicketNumber, st); err != nil {
+	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 		return err
 	}
-	return nil
+
+	if err := o.runCommands(ctx, st.WorktreePath, stateCfg.PrePromptCommands, logPath, "Pre-prompt"); err != nil {
+		return o.failState(st, err)
+	}
+
+	promptContent, err := workflow.ReadPrompt(o.RepoRoot, stateCfg.Prompt)
+	if err != nil {
+		return o.failState(st, fmt.Errorf("read prompt %s: %w", stateCfg.Prompt, err))
+	}
+
+	promptPath := st.ArtifactPath(stateCfg.Name + ".prompt.md")
+	if err := os.WriteFile(promptPath, promptContent, 0o644); err != nil {
+		return o.failState(st, err)
+	}
+
+	runtimeDir := st.ArtifactPath("provider")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		return o.failState(st, err)
+	}
+
+	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
+		PromptPath: promptPath,
+		WorkDir:    st.WorktreePath,
+		RuntimeDir: runtimeDir,
+	})
+	if err != nil {
+		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
+		return o.failState(st, err)
+	}
+
+	_ = markdown.AppendSection(logPath, stateCfg.Name, result.RawOutput)
+
+	if err := o.runCommands(ctx, st.WorktreePath, stateCfg.PostPromptCommands, logPath, "Post-prompt"); err != nil {
+		return o.failState(st, err)
+	}
+
+	// Remove feedback.md so stale feedback is not visible to the next run.
+	_ = os.Remove(st.ArtifactPath("feedback.md"))
+
+	st.FlowStatus = ticketdomain.FlowStatusWaiting
+	return o.Store.SaveState(st.TicketNumber, *st)
 }
 
-func (o *Orchestrator) initOrLoad(ctx context.Context, ticketNumber string) (*ticketdomain.State, error) {
-	if st, err := o.Store.LoadState(ticketNumber); err == nil {
-		if _, ticketErr := o.Store.LoadTicket(ticketNumber); ticketErr == nil {
-			return &st, nil
-		} else if !os.IsNotExist(ticketErr) {
-			return nil, ticketErr
+func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
+	st.FlowStatus = ticketdomain.FlowStatusFailed
+	st.LastError = cause.Error()
+	_ = o.Store.SaveState(st.TicketNumber, *st)
+	return cause
+}
+
+func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
+	logPath := st.ArtifactPath(st.CurrentState + ".log")
+	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
+
+	switch action.Type {
+	case workflow.ActionProvideFeedback:
+		return o.writeFeedbackAndRerun(ctx, st, wf, message)
+	case workflow.ActionMoveToState:
+		return o.transitionTo(ctx, st, wf, action.Target)
+	case workflow.ActionRunScript:
+		return o.executeScript(ctx, st, wf, action)
+	default:
+		return fmt.Errorf("unknown action type: %s", action.Type)
+	}
+}
+
+func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string) error {
+	if workflow.IsTerminal(target) {
+		switch target {
+		case "done":
+			st.FlowStatus = ticketdomain.FlowStatusDone
+		case "cancelled":
+			st.FlowStatus = ticketdomain.FlowStatusCancelled
+		default:
+			st.FlowStatus = ticketdomain.FlowStatusFailed
 		}
+		return o.Store.SaveState(st.TicketNumber, *st)
 	}
-
-	paths := o.Store.Paths(ticketNumber)
-	if _, err := o.Store.EnsureTicketDir(ticketNumber); err != nil {
-		return nil, err
+	stateCfg, ok := wf.StateByName(target)
+	if !ok {
+		return fmt.Errorf("target state %q not found in workflow", target)
 	}
-	ticket, rawTicket, err := o.Provider.GetTicket(ctx, ticketNumber, o.RepoRoot, paths.ProviderDir)
-	if err != nil {
-		return nil, err
-	}
-	ticket.Number = ticketNumber
-	st := ticketdomain.NewState(ticketNumber)
-	st.ProposalPath = paths.Proposal
-	st.FinalPath = paths.Final
-	st.LogPath = paths.Log
-	st.PRPath = paths.PR
-	st.ChecksLogPath = paths.Checks
-	st.TicketJSONPath = paths.Ticket
-	st.ProviderDirPath = paths.ProviderDir
-	st.BranchName = branchName(ticket)
-
-	worktreePath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, ticketNumber, st.BranchName, o.Cfg.BaseBranch)
-	if err != nil {
-		return nil, err
-	}
-	st.WorktreePath = worktreePath
-
-	if _, err := o.Store.SaveTicket(ticketNumber, ticket); err != nil {
-		return nil, err
-	}
-	_ = markdown.AppendSection(st.LogPath, "Ticket Fetch (Provider)", rawTicket)
-	if err := markdown.AppendSection(st.LogPath, "Ticket Loaded", fmt.Sprintf("#%s %s\n\n%s\n\nAcceptance Criteria:\n%s\n\nRelated Context:\n%s", ticket.Number, ticket.Title, ticket.Description, ticket.AcceptanceCriteria, relatedContextSummary(ticket))); err != nil {
-		return nil, err
-	}
-	if err := o.Store.SaveState(ticketNumber, st); err != nil {
-		return nil, err
-	}
-	return &st, nil
+	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) investigate(ctx context.Context, st *ticketdomain.State) error {
-	ticket, err := o.Store.LoadTicket(st.TicketNumber)
-	if err != nil {
+func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string) error {
+	if strings.TrimSpace(message) == "" {
+		return fmt.Errorf("feedback message is required")
+	}
+	feedbackPath := st.ArtifactPath("feedback.md")
+	if err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644); err != nil {
 		return err
 	}
-
-	st.Status = ticketdomain.StateInvestigating
-	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
-		return err
+	stateCfg, ok := wf.StateByName(st.CurrentState)
+	if !ok {
+		return fmt.Errorf("current state %q not found in workflow", st.CurrentState)
 	}
-
-	res, err := o.Provider.Investigate(ctx, providers.InvestigateRequest{
-		Ticket:         ticket,
-		RepoPath:       o.RepoRoot,
-		WorktreePath:   st.WorktreePath,
-		GuidelinesPath: config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg),
-		LogPath:        st.LogPath,
-		ProposalPath:   st.ProposalPath,
-		Feedback:       st.LastFeedback,
-	}, st.ProviderDirPath)
-	if err != nil {
-		st.Status = ticketdomain.StateFailed
-		st.LastError = err.Error()
-		_ = o.Store.SaveState(st.TicketNumber, *st)
-		_ = markdown.AppendSection(st.LogPath, "Investigation Failed", err.Error())
-		return err
-	}
-	res.Proposal = markdown.NormalizeRepoLinks(res.Proposal, o.RepoRoot, st.WorktreePath)
-	res.RawOut = markdown.NormalizeRepoLinks(res.RawOut, o.RepoRoot, st.WorktreePath)
-
-	if err := markdown.Write(st.ProposalPath, res.Proposal); err != nil {
-		return err
-	}
-	if err := markdown.AppendSection(st.LogPath, "Investigation", res.RawOut); err != nil {
-		return err
-	}
-	st.Status = ticketdomain.StateProposalReady
-	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
-		return err
-	}
-	st.Status = ticketdomain.StateWaitingForHuman
-	st.Approved = false
-	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
-		return err
-	}
-	fmt.Printf("ticket %s proposal ready: %s\n", st.TicketNumber, st.ProposalPath)
-	return nil
+	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) implementationPipeline(ctx context.Context, st *ticketdomain.State) error {
-	ticket, err := o.Store.LoadTicket(st.TicketNumber)
-	if err != nil {
-		return err
-	}
-	var failureContext string
+func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig) error {
+	logPath := st.ArtifactPath(st.CurrentState + ".log")
 
-	for {
-		st.Status = ticketdomain.StateImplementing
-		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
-			return err
+	var out strings.Builder
+	var scriptErr error
+	for _, cmd := range action.Commands {
+		res, err := shell.Run(ctx, st.WorktreePath, nil, "", "/bin/sh", "-c", cmd)
+		output := res.Stdout
+		if strings.TrimSpace(res.Stderr) != "" {
+			output += "\n[stderr]\n" + res.Stderr
 		}
-
-		impl, err := o.Provider.Implement(ctx, providers.ImplementRequest{
-			Ticket:            ticket,
-			RepoPath:          o.RepoRoot,
-			WorktreePath:      st.WorktreePath,
-			GuidelinesPath:    config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg),
-			LogPath:           st.LogPath,
-			ProposalPath:      st.ProposalPath,
-			FinalSolutionPath: st.FinalPath,
-			FailureContext:    failureContext,
-		}, st.ProviderDirPath)
+		out.WriteString(output)
+		_ = markdown.AppendSection(logPath, "Script: "+cmd, strings.TrimSpace(output))
 		if err != nil {
-			st.Status = ticketdomain.StateFailed
-			st.LastError = err.Error()
-			_ = markdown.AppendSection(st.LogPath, "Implementation Failed", err.Error())
-			_ = o.Store.SaveState(st.TicketNumber, *st)
-			return err
-		}
-		impl.Summary = markdown.NormalizeRepoLinks(impl.Summary, o.RepoRoot, st.WorktreePath)
-		impl.RawOut = markdown.NormalizeRepoLinks(impl.RawOut, o.RepoRoot, st.WorktreePath)
-
-		if err := markdown.AppendSection(st.LogPath, "Implementation", impl.RawOut); err != nil {
-			return err
-		}
-		if err := markdown.Write(st.FinalPath, impl.Summary); err != nil {
-			return err
-		}
-
-		st.Status = ticketdomain.StateValidating
-		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
-			return err
-		}
-		ok, checkOutput, err := o.runChecks(ctx, *st)
-		if err != nil {
-			return err
-		}
-		if ok {
-			_ = markdown.AppendSection(st.LogPath, "Validation", "All checks passed.")
+			scriptErr = err
 			break
 		}
+	}
 
-		failureContext = checkOutput
-		_ = markdown.AppendSection(st.LogPath, "Validation Failed", checkOutput)
-		st.FixAttempts++
-		if st.FixAttempts > o.Cfg.MaxFixAttempts {
-			st.Status = ticketdomain.StateFailed
-			st.LastError = "checks failed after max attempts"
-			_ = o.Store.SaveState(st.TicketNumber, *st)
-			return fmt.Errorf("ticket %s: checks failed after %d attempts", st.TicketNumber, st.FixAttempts)
+	captured := strings.TrimSpace(out.String())
+
+	if scriptErr == nil && action.OnSuccess != nil {
+		if err := o.dispatchSubAction(ctx, st, wf, *action.OnSuccess, captured); err != nil {
+			return err
 		}
-		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+	} else if scriptErr != nil && action.OnFailure != nil {
+		if err := o.dispatchSubAction(ctx, st, wf, *action.OnFailure, captured); err != nil {
 			return err
 		}
 	}
 
-	st.Status = ticketdomain.StatePRReady
-	if err := o.ensureCommitForTicket(ctx, *st, ticket); err != nil {
-		st.Status = ticketdomain.StateFailed
-		st.LastError = err.Error()
-		_ = o.Store.SaveState(st.TicketNumber, *st)
-		_ = markdown.AppendSection(st.LogPath, "Commit Failed", err.Error())
-		return err
+	if action.Always != nil {
+		if err := o.dispatchSubAction(ctx, st, wf, *action.Always, captured); err != nil {
+			return err
+		}
 	}
-	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
-		return err
-	}
-	if err := o.generatePR(ctx, st, ticket); err != nil {
-		return err
-	}
-	st.Status = ticketdomain.StateDone
-	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
-		return err
-	}
-	fmt.Printf("ticket %s done. PR markdown: %s\n", st.TicketNumber, st.PRPath)
+
 	return nil
 }
 
-func (o *Orchestrator) generatePR(ctx context.Context, st *ticketdomain.State, ticket ticketdomain.Ticket) error {
-	pr, err := o.Provider.SummarizePR(ctx, providers.PRRequest{
-		Ticket:            ticket,
-		WorktreePath:      st.WorktreePath,
-		LogPath:           st.LogPath,
-		ProposalPath:      st.ProposalPath,
-		FinalSolutionPath: st.FinalPath,
-		ChecksLogPath:     st.ChecksLogPath,
-	}, st.ProviderDirPath)
-	if err != nil {
-		fallback, ferr := o.localPR(ticket, *st)
-		if ferr != nil {
-			return err
+func (o *Orchestrator) dispatchSubAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
+	switch action.Type {
+	case workflow.ActionProvideFeedback:
+		if strings.TrimSpace(message) == "" {
+			return nil // no script output to feed back
 		}
-		pr.Body = fallback
+		return o.writeFeedbackAndRerun(ctx, st, wf, message)
+	case workflow.ActionMoveToState:
+		return o.transitionTo(ctx, st, wf, action.Target)
+	default:
+		return fmt.Errorf("unsupported sub-action type: %s", action.Type)
 	}
-	pr.Body = markdown.NormalizeRepoLinks(pr.Body, o.RepoRoot, st.WorktreePath)
-	if err := markdown.Write(st.PRPath, pr.Body); err != nil {
-		return err
-	}
-	_ = markdown.AppendSection(st.LogPath, "PR Description", fmt.Sprintf("generated at %s", st.PRPath))
-
-	if o.Cfg.CreatePR {
-		title := fmt.Sprintf("sc-%s: %s", ticket.Number, ticket.Title)
-		if err := o.ensureBranchHasCommits(ctx, *st); err != nil {
-			_ = markdown.AppendSection(st.LogPath, "PR Create Failed", err.Error())
-			return err
-		}
-		if err := gitutil.PushBranch(ctx, st.WorktreePath, st.BranchName); err != nil {
-			msg := fmt.Sprintf("failed to push branch %s before PR creation: %v\n\nNext steps:\n  1. Verify remote/auth: git -C %s remote -v && gh auth status\n  2. Push manually: git -C %s push -u origin %s\n  3. Retry: auto-pr pr %s", st.BranchName, err, st.WorktreePath, st.WorktreePath, st.BranchName, st.TicketNumber)
-			_ = markdown.AppendSection(st.LogPath, "PR Push Failed", msg)
-			return fmt.Errorf(msg)
-		}
-		url, err := gitutil.CreatePR(ctx, st.WorktreePath, title, st.PRPath, o.Cfg.BaseBranch)
-		if err != nil {
-			msg := fmt.Sprintf("failed to create PR for ticket %s on branch %s: %v\n\nNext steps:\n  1. Verify auth: gh auth status\n  2. Ensure branch is pushed: git -C %s push -u origin %s\n  3. Retry: auto-pr pr %s", st.TicketNumber, st.BranchName, err, st.WorktreePath, st.BranchName, st.TicketNumber)
-			_ = markdown.AppendSection(st.LogPath, "PR Create Failed", msg)
-			return fmt.Errorf(msg)
-		}
-		st.PRURL = strings.TrimSpace(url)
-		_ = markdown.AppendSection(st.LogPath, "PR Created", url)
-	}
-	return nil
 }
 
-func (o *Orchestrator) runChecks(ctx context.Context, st ticketdomain.State) (bool, string, error) {
-	commands := make([]string, 0, len(o.Cfg.FormatCommands)+len(o.Cfg.LintCommands)+len(o.Cfg.CheckCommands))
-	commands = append(commands, o.Cfg.FormatCommands...)
-	commands = append(commands, o.Cfg.LintCommands...)
-	commands = append(commands, o.Cfg.CheckCommands...)
+func (o *Orchestrator) runCommands(ctx context.Context, worktreePath string, commands []string, logPath, section string) error {
 	if len(commands) == 0 {
-		return true, "no checks configured", nil
+		return nil
 	}
-
 	var b strings.Builder
-	allOK := true
 	for _, cmd := range commands {
-		res, err := shell.Run(ctx, st.WorktreePath, nil, "", "/bin/zsh", "-lc", cmd)
-		fmt.Fprintf(&b, "\n$ %s\n", cmd)
-		b.WriteString(res.Stdout)
-		if strings.TrimSpace(res.Stderr) != "" {
-			b.WriteString("\n[stderr]\n")
-			b.WriteString(res.Stderr)
-		}
+		res, err := shell.Run(ctx, worktreePath, nil, "", "/bin/sh", "-c", cmd)
+		fmt.Fprintf(&b, "$ %s\n%s\n", cmd, res.Stdout)
 		if err != nil {
-			allOK = false
-			fmt.Fprintf(&b, "\n[exit] failed: %v\n", err)
+			_ = markdown.AppendSection(logPath, section+" Failed", b.String()+"\nerror: "+err.Error())
+			return fmt.Errorf("command %q: %w", cmd, err)
 		}
 	}
-	if err := os.WriteFile(st.ChecksLogPath, []byte(b.String()), 0o644); err != nil {
-		return false, "", err
-	}
-	return allOK, b.String(), nil
+	_ = markdown.AppendSection(logPath, section, b.String())
+	return nil
 }
 
 func (o *Orchestrator) printStatus(ticketNumber string) error {
@@ -603,110 +457,98 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 		return err
 	}
 	fmt.Printf("ticket %s\n", ticketNumber)
-	fmt.Printf("  state: %s\n", st.Status)
-	fmt.Printf("  approved: %v\n", st.Approved)
-	fmt.Printf("  branch: %s\n", st.BranchName)
+	fmt.Printf("  status:   %s\n", st.FlowStatus)
+	fmt.Printf("  state:    %s\n", st.CurrentState)
+	fmt.Printf("  branch:   %s\n", st.BranchName)
 	fmt.Printf("  worktree: %s\n", st.WorktreePath)
-	fmt.Printf("  proposal: %s\n", st.ProposalPath)
-	fmt.Printf("  pr: %s\n", st.PRPath)
-	if strings.TrimSpace(st.PRURL) != "" {
-		fmt.Printf("  pr_url: %s\n", st.PRURL)
+	if st.PRURL != "" {
+		fmt.Printf("  pr_url:   %s\n", st.PRURL)
 	}
 	if st.LastError != "" {
-		fmt.Printf("  last_error: %s\n", st.LastError)
-	}
-	tail := strings.TrimSpace(markdown.Tail(st.LogPath, 12))
-	if tail != "" {
-		fmt.Printf("  log_tail:\n%s\n", indent(tail, "    "))
+		fmt.Printf("  error:    %s\n", st.LastError)
 	}
 	return nil
 }
 
-func (o *Orchestrator) localPR(ticket ticketdomain.Ticket, st ticketdomain.State) (string, error) {
-	proposal, _ := os.ReadFile(st.ProposalPath)
-	final, _ := os.ReadFile(st.FinalPath)
-	checks, _ := os.ReadFile(st.ChecksLogPath)
-	checksText := strings.TrimSpace(string(checks))
-	testFailuresSection := ""
-	if hasCheckFailures(checksText) {
-		testFailuresSection = fmt.Sprintf(`
-# Test Failures / Blockers
-
-`+"```"+`
-%s
-`+"```"+`
-`, checksText)
+func (o *Orchestrator) loadStateAndWorkflow(ticketNumber string) (ticketdomain.State, workflow.WorkflowConfig, error) {
+	st, err := o.Store.LoadState(ticketNumber)
+	if err != nil {
+		return ticketdomain.State{}, workflow.WorkflowConfig{}, err
 	}
-	body := fmt.Sprintf(`# Summary
-
-Ticket #%s: %s
-
-# Problem Being Solved
-
-%s
-
-# Implementation Overview
-
-%s
-
-# Risks / Follow-ups
-
-See final solution notes.
-%s
-`, ticket.Number, ticket.Title, strings.TrimSpace(string(proposal)), strings.TrimSpace(string(final)), testFailuresSection)
-	return body, nil
+	wf, err := workflow.Load(o.RepoRoot)
+	if err != nil {
+		return ticketdomain.State{}, workflow.WorkflowConfig{}, fmt.Errorf("load workflow: %w", err)
+	}
+	return st, wf, nil
 }
 
-func hasCheckFailures(checks string) bool {
-	if checks == "" || checks == "no checks configured" {
-		return false
+func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
+	switch st.FlowStatus {
+	case ticketdomain.FlowStatusPending:
+		return "Run the ticket to start the workflow: auto-pr run " + st.TicketNumber
+	case ticketdomain.FlowStatusRunning:
+		return "Ticket is currently running."
+	case ticketdomain.FlowStatusWaiting:
+		stateCfg, ok := wf.StateByName(st.CurrentState)
+		if !ok {
+			return fmt.Sprintf("Waiting for action in state %q.", st.CurrentState)
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "State: %s\nAvailable actions:\n", st.CurrentState)
+		for _, a := range stateCfg.Actions {
+			fmt.Fprintf(&b, "  - %s\n", a.Label)
+		}
+		return strings.TrimSpace(b.String())
+	case ticketdomain.FlowStatusDone:
+		return "Ticket is done."
+	case ticketdomain.FlowStatusFailed:
+		return fmt.Sprintf("Ticket failed: %s\n\nRetry: auto-pr run %s", st.LastError, st.TicketNumber)
+	case ticketdomain.FlowStatusCancelled:
+		return "Ticket was cancelled."
 	}
-	s := strings.ToLower(checks)
-	return strings.Contains(s, "[exit] failed:") || strings.Contains(s, "failed")
+	return ""
 }
 
-func branchName(ticket ticketdomain.Ticket) string {
-	slug := slugify(ticket.Title)
-	if slug == "" {
-		slug = "ticket"
+func firstForwardActionLabel(wf workflow.WorkflowConfig, stateName string) (string, error) {
+	state, ok := wf.StateByName(stateName)
+	if !ok {
+		return "", fmt.Errorf("state %q not found in workflow", stateName)
 	}
-	return fmt.Sprintf("sc-%s-%s", ticket.Number, slug)
+	for _, a := range state.Actions {
+		if a.Type == workflow.ActionMoveToState && !workflow.IsTerminal(a.Target) {
+			return a.Label, nil
+		}
+	}
+	return "", fmt.Errorf("no forward action found in state %q", stateName)
 }
 
-var slugNonAlphaNum = regexp.MustCompile(`[^a-z0-9\s-]`)
-var slugSpace = regexp.MustCompile(`\s+`)
-var slugDashes = regexp.MustCompile(`-+`)
-
-func slugify(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = slugNonAlphaNum.ReplaceAllString(s, "")
-	s = slugSpace.ReplaceAllString(s, "-")
-	s = slugDashes.ReplaceAllString(s, "-")
-	return strings.Trim(s, "-")
+func firstCancelActionLabel(wf workflow.WorkflowConfig, stateName string) (string, error) {
+	state, ok := wf.StateByName(stateName)
+	if !ok {
+		return "", fmt.Errorf("state %q not found in workflow", stateName)
+	}
+	for _, a := range state.Actions {
+		if a.Type == workflow.ActionMoveToState && workflow.IsTerminal(a.Target) {
+			return a.Label, nil
+		}
+	}
+	return "", fmt.Errorf("no cancel action found in state %q", stateName)
 }
 
-func indent(s, pref string) string {
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		lines[i] = pref + l
+func firstFeedbackActionLabel(wf workflow.WorkflowConfig, stateName string) (string, error) {
+	state, ok := wf.StateByName(stateName)
+	if !ok {
+		return "", fmt.Errorf("state %q not found in workflow", stateName)
 	}
-	return strings.Join(lines, "\n")
+	for _, a := range state.Actions {
+		if a.Type == workflow.ActionProvideFeedback {
+			return a.Label, nil
+		}
+	}
+	return "", fmt.Errorf("no feedback action found in state %q", stateName)
 }
 
-func relatedContextSummary(ticket ticketdomain.Ticket) string {
-	var parts []string
-	if ticket.ParentTicket != nil {
-		parts = append(parts, fmt.Sprintf("Parent Ticket: %s (%s)", ticket.ParentTicket.Title, ticket.ParentTicket.URL))
-	}
-	if ticket.Epic != nil {
-		parts = append(parts, fmt.Sprintf("Epic: %s (%s)", ticket.Epic.Title, ticket.Epic.URL))
-	}
-	if len(parts) == 0 {
-		return "None"
-	}
-	return strings.Join(parts, "\n")
-}
-
+// EnsureStateIgnored ensures the state directory is listed in .gitignore.
 func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	ignorePath := filepath.Join(repoRoot, ".gitignore")
 	entry := stateDirName + "/"
@@ -729,200 +571,4 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	}
 	_, err = f.WriteString(entry + "\n")
 	return err
-}
-
-func (o *Orchestrator) ensureCommitForTicket(ctx context.Context, st ticketdomain.State, ticket ticketdomain.Ticket) error {
-	hasChanges, err := gitutil.HasChanges(ctx, st.WorktreePath)
-	if err != nil {
-		return fmt.Errorf("check git status before commit: %w", err)
-	}
-	if !hasChanges {
-		return fmt.Errorf("implementation finished but produced no file changes to commit for ticket %s", st.TicketNumber)
-	}
-	msg := fmt.Sprintf("sc-%s: %s", ticket.Number, ticket.Title)
-	if err := gitutil.CommitAll(ctx, st.WorktreePath, msg); err != nil {
-		return fmt.Errorf("create commit: %w", err)
-	}
-	_ = markdown.AppendSection(st.LogPath, "Commit Created", msg)
-	return nil
-}
-
-func (o *Orchestrator) validatePRPrereqs(ctx context.Context, st ticketdomain.State) error {
-	if st.Status == ticketdomain.StateWaitingForHuman && !st.Approved {
-		return fmt.Errorf("ticket %s is waiting for human approval.\n\nNext steps:\n  1. Review proposal: %s\n  2. Approve to continue: auto-pr approve %s\n  3. Or send more feedback: auto-pr feedback %s --message \"...\"", st.TicketNumber, st.ProposalPath, st.TicketNumber, st.TicketNumber)
-	}
-	if st.Status == ticketdomain.StateFailed {
-		return fmt.Errorf("ticket %s is in failed state.\n\nNext steps:\n  1. Inspect log: %s\n  2. Fix issue or provide feedback: auto-pr feedback %s --message \"...\"\n  3. Resume: auto-pr resume %s", st.TicketNumber, st.LogPath, st.TicketNumber, st.TicketNumber)
-	}
-	// If work is not done yet, guide users to resume instead of forcing PR creation.
-	if st.Status != ticketdomain.StatePRReady && st.Status != ticketdomain.StateDone {
-		return fmt.Errorf("ticket %s is in state %s and not ready for PR yet.\n\nNext steps:\n  1. Continue workflow: auto-pr resume %s\n  2. Check progress: auto-pr status %s", st.TicketNumber, st.Status, st.TicketNumber, st.TicketNumber)
-	}
-	return nil
-}
-
-type ghReviewThreadComment struct {
-	Author struct {
-		Login string `json:"login"`
-	} `json:"author"`
-	Body string `json:"body"`
-	Path string `json:"path"`
-}
-
-type ghReviewThread struct {
-	IsResolved bool `json:"isResolved"`
-	Comments   struct {
-		Nodes []ghReviewThreadComment `json:"nodes"`
-	} `json:"comments"`
-}
-
-type ghReviewThreadsResponse struct {
-	Errors []struct {
-		Message string `json:"message"`
-	} `json:"errors"`
-	Data struct {
-		Repository struct {
-			PullRequest struct {
-				ReviewThreads struct {
-					Nodes []ghReviewThread `json:"nodes"`
-				} `json:"reviewThreads"`
-			} `json:"pullRequest"`
-		} `json:"repository"`
-	} `json:"data"`
-}
-
-type prComment struct {
-	Author string
-	Path   string
-	Body   string
-}
-
-func (o *Orchestrator) fetchOpenPRComments(ctx context.Context, prURL, worktreePath string) ([]prComment, error) {
-	owner, repo, number, err := parsePRURL(prURL)
-	if err != nil {
-		return nil, err
-	}
-	query := `query($owner:String!, $repo:String!, $number:Int!) {
-  repository(owner:$owner, name:$repo) {
-    pullRequest(number:$number) {
-      reviewThreads(first:100) {
-        nodes {
-          isResolved
-          comments(first:20) {
-            nodes {
-              author { login }
-              body
-              path
-            }
-          }
-        }
-      }
-    }
-  }
-}`
-	var payload struct {
-		Query     string                 `json:"query"`
-		Variables map[string]interface{} `json:"variables"`
-	}
-	payload.Query = query
-	payload.Variables = map[string]interface{}{
-		"owner":  owner,
-		"repo":   repo,
-		"number": number,
-	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	res, err := shell.Run(ctx, worktreePath, nil, string(b), "gh", "api", "graphql", "--input", "-")
-	if err != nil {
-		return nil, fmt.Errorf("fetch open PR comments: %w", err)
-	}
-
-	var out ghReviewThreadsResponse
-	if err := json.Unmarshal([]byte(res.Stdout), &out); err != nil {
-		return nil, fmt.Errorf("parse PR comments response: %w", err)
-	}
-	if len(out.Errors) > 0 {
-		msg := strings.TrimSpace(out.Errors[0].Message)
-		if msg == "" {
-			msg = "unknown graphql error"
-		}
-		return nil, fmt.Errorf("fetch open PR comments: %s", msg)
-	}
-	threads := out.Data.Repository.PullRequest.ReviewThreads.Nodes
-	comments := make([]prComment, 0)
-	for _, t := range threads {
-		if t.IsResolved {
-			continue
-		}
-		for _, c := range t.Comments.Nodes {
-			body := strings.TrimSpace(c.Body)
-			if body == "" {
-				continue
-			}
-			comments = append(comments, prComment{
-				Author: strings.TrimSpace(c.Author.Login),
-				Path:   strings.TrimSpace(c.Path),
-				Body:   body,
-			})
-		}
-	}
-	return comments, nil
-}
-
-var prURLPattern = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+)`)
-
-func parsePRURL(u string) (owner, repo string, number int, err error) {
-	m := prURLPattern.FindStringSubmatch(strings.TrimSpace(u))
-	if len(m) != 4 {
-		return "", "", 0, fmt.Errorf("unsupported PR URL format: %s", u)
-	}
-	n, convErr := strconv.Atoi(m[3])
-	if convErr != nil {
-		return "", "", 0, fmt.Errorf("parse PR number: %w", convErr)
-	}
-	return m[1], m[2], n, nil
-}
-
-func formatPRCommentContext(comments []prComment) string {
-	var b strings.Builder
-	for i, c := range comments {
-		fmt.Fprintf(&b, "%d. ", i+1)
-		if c.Path != "" {
-			fmt.Fprintf(&b, "[%s] ", c.Path)
-		}
-		if c.Author != "" {
-			fmt.Fprintf(&b, "@%s: ", c.Author)
-		}
-		b.WriteString(c.Body)
-		b.WriteString("\n")
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func (o *Orchestrator) ensureBranchHasCommits(ctx context.Context, st ticketdomain.State) error {
-	candidates := []string{}
-	if strings.TrimSpace(o.Cfg.BaseBranch) != "" {
-		candidates = append(candidates, strings.TrimSpace(o.Cfg.BaseBranch))
-	}
-	candidates = append(candidates, "origin/HEAD", "origin/main", "main")
-
-	for _, base := range candidates {
-		ahead, err := gitutil.AheadCount(ctx, st.WorktreePath, base)
-		if err != nil {
-			continue
-		}
-		if ahead > 0 {
-			return nil
-		}
-		return fmt.Errorf("branch %s has no commits ahead of %s, so a PR cannot be created.\n\nNext steps:\n  1. Check whether implementation actually changed code in %s\n  2. If code is missing, request another pass: auto-pr feedback %s --message \"implementation produced no branch changes; please apply code changes\" && auto-pr resume %s\n  3. If changes exist but are uncommitted, commit/push manually: git -C %s add -A && git -C %s commit -m \"sc-%s: implement\" && git -C %s push -u origin %s\n  4. Retry PR: auto-pr pr %s", st.BranchName, base, st.WorktreePath, st.TicketNumber, st.TicketNumber, st.WorktreePath, st.WorktreePath, st.TicketNumber, st.WorktreePath, st.BranchName, st.TicketNumber)
-	}
-
-	// If base detection failed, fall back to checking any changes in working tree.
-	res, err := shell.Run(ctx, st.WorktreePath, nil, "", "git", "status", "--short")
-	if err == nil && strings.TrimSpace(res.Stdout) != "" {
-		return nil
-	}
-	return fmt.Errorf("could not confirm branch %s has commits suitable for PR creation.\n\nNext steps:\n  1. Ensure there is committed work on branch %s\n  2. Push branch: git -C %s push -u origin %s\n  3. Retry: auto-pr pr %s", st.BranchName, st.BranchName, st.WorktreePath, st.BranchName, st.TicketNumber)
 }

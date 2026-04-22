@@ -31,6 +31,7 @@ const (
 	jobApprove         = "approve"
 	jobReject          = "reject"
 	jobFeedback        = "feedback"
+	jobAction          = "action"
 	jobPR              = "pr"
 	jobApplyPRComments = "apply_pr_comments"
 	jobCleanup         = "cleanup_ticket"
@@ -45,8 +46,9 @@ type repoRuntime struct {
 }
 
 type queuedJob struct {
-	record  servermeta.JobRecord
-	message string
+	record      servermeta.JobRecord
+	message     string
+	actionLabel string // used by jobAction
 }
 
 type server struct {
@@ -117,6 +119,7 @@ func main() {
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/resume", s.handleResumeTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/action", s.handleActionTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/approve", s.handleApproveTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/reject", s.handleRejectTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/feedback", s.handleFeedbackTicket)
@@ -156,6 +159,57 @@ func (s *server) handleResumeTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.enqueueAndRespond(w, jobResume, repoID, repoRoot, ticket, "", "")
+}
+
+func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	var req api.ActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if strings.TrimSpace(req.RepoPath) == "" {
+		writeError(w, http.StatusBadRequest, "repo_path is required")
+		return
+	}
+	if strings.TrimSpace(req.Label) == "" {
+		writeError(w, http.StatusBadRequest, "label is required")
+		return
+	}
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	job, jobErr := s.meta.NewJob(jobAction, repoID, repoRoot, ticket, "")
+	if jobErr != nil {
+		writeError(w, http.StatusInternalServerError, jobErr.Error())
+		return
+	}
+	qj := queuedJob{record: job, message: req.Message, actionLabel: req.Label}
+	s.broadcast(serverEvent{
+		Type:         "job",
+		RepoID:       repoID,
+		RepoPath:     repoRoot,
+		TicketNumber: ticket,
+		JobID:        job.ID,
+		Action:       jobAction,
+		Status:       "queued",
+	})
+	select {
+	case s.jobs <- qj:
+		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
+			Status:       "accepted",
+			JobID:        job.ID,
+			Action:       jobAction,
+			RepoID:       repoID,
+			RepoPath:     repoRoot,
+			TicketNumber: ticket,
+		})
+	default:
+		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
+		writeError(w, http.StatusServiceUnavailable, "job queue is full")
+	}
 }
 
 func (s *server) handleApproveTicket(w http.ResponseWriter, r *http.Request) {
