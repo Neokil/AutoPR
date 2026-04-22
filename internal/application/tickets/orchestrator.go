@@ -92,7 +92,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	contextPath := st.ArtifactPath("context.md")
 	if _, statErr := os.Stat(contextPath); os.IsNotExist(statErr) {
 		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
-		content := fmt.Sprintf("Ticket: %s\nGuidelines: %s\nRepo: %s\n", ticketNumber, guidelinesPath, o.RepoRoot)
+		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", ticketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
 		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil {
 			return err
 		}

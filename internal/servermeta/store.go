@@ -242,11 +242,8 @@ func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
 	switch status {
 	case "running":
 		rec.StartedAt = &now
-	case "failed":
+	case "done", "failed":
 		rec.FinishedAt = &now
-	case "done":
-		delete(s.data.Jobs, id)
-		return s.saveLocked()
 	}
 	rec.Status = status
 	rec.Error = strings.TrimSpace(errMsg)
