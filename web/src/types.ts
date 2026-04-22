@@ -1,13 +1,14 @@
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
+export type FlowStatus = "pending" | "running" | "waiting" | "done" | "failed" | "cancelled";
+
 export interface TicketSummary {
   repo_id: string;
   repo_path: string;
   ticket_number: string;
   title?: string;
-  status: string;
+  status: FlowStatus;
   busy: boolean;
-  approved: boolean;
   last_error?: string;
   updated_at: string;
   pr_url?: string;
@@ -16,23 +17,19 @@ export interface TicketSummary {
 
 export interface TicketState {
   ticket_number: string;
+  flow_status: FlowStatus;
+  current_state: string;
   branch_name: string;
   worktree_path: string;
-  status: string;
-  approved: boolean;
-  fix_attempts: number;
   last_error?: string;
-  last_feedback?: string;
+  pr_url?: string;
   created_at: string;
   updated_at: string;
-  proposal_path: string;
-  final_solution_path: string;
-  log_path: string;
-  pr_path: string;
-  checks_log_path: string;
-  ticket_json_path: string;
-  provider_dir_path: string;
-  pr_url?: string;
+}
+
+export interface ActionInfo {
+  label: string;
+  type: string;
 }
 
 export interface TicketDetails {
@@ -45,6 +42,7 @@ export interface TicketDetails {
     title?: string;
   };
   next_steps?: string;
+  available_actions: ActionInfo[];
 }
 
 export interface EventItem {

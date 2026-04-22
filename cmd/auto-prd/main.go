@@ -22,6 +22,7 @@ import (
 	"ai-ticket-worker/internal/ports"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/state"
+	"ai-ticket-worker/internal/workflow"
 	"ai-ticket-worker/web"
 )
 
@@ -414,13 +415,32 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	nextSteps, _ := rt.svc.NextSteps(ticket)
 	githubBlobBase, _ := gitutil.GitHubBlobBase(r.Context(), repoRoot, s.cfg.BaseBranch)
+
+	var availableActions []actionInfo
+	if st.FlowStatus == ticketdomain.FlowStatusWaiting {
+		if wf, wfErr := workflow.Load(repoRoot); wfErr == nil {
+			if stateCfg, ok := wf.StateByName(st.CurrentState); ok {
+				for _, a := range stateCfg.Actions {
+					availableActions = append(availableActions, actionInfo{
+						Label: a.Label,
+						Type:  string(a.Type),
+					})
+				}
+			}
+		}
+	}
+	if availableActions == nil {
+		availableActions = []actionInfo{}
+	}
+
 	resp := ticketDetails{
-		RepoID:         repoID,
-		RepoPath:       repoRoot,
-		TicketNumber:   ticket,
-		GitHubBlobBase: githubBlobBase,
-		State:          st,
-		NextSteps:      nextSteps,
+		RepoID:           repoID,
+		RepoPath:         repoRoot,
+		TicketNumber:     ticket,
+		GitHubBlobBase:   githubBlobBase,
+		State:            st,
+		NextSteps:        nextSteps,
+		AvailableActions: availableActions,
 	}
 	if err == nil {
 		resp.Ticket = t

@@ -1,20 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  approveTicket,
-  applyPRComments,
+  applyAction,
   cleanupAll,
   cleanupDone,
   cleanupTicket,
   connectEvents,
-  createPR,
-  feedbackTicket,
   getArtifact,
   getJob,
   getTicket,
   listTickets,
   listRepositories,
-  rejectTicket,
-  resumeTicket,
   runTicket
 } from "./api";
 import { MarkdownView } from "./MarkdownView";
@@ -29,28 +24,6 @@ function pendingTicketKey(repoPath: string, ticketNumber: string): string {
   return `${repoPath}::${ticketNumber}`;
 }
 
-type Action = "run" | "resume" | "approve" | "reject" | "pr" | "apply_pr_comments" | "cleanup";
-
-function allowedActions(status: string): Action[] {
-  switch (status) {
-    case "queued":
-      return ["run", "cleanup"];
-    case "proposal_ready":
-    case "waiting_for_human":
-      return ["approve", "reject"];
-    case "failed":
-      return ["resume", "cleanup"];
-    case "pr_ready":
-      return ["pr", "apply_pr_comments", "cleanup"];
-    case "done":
-      return ["apply_pr_comments", "cleanup"];
-    case "investigating":
-    case "implementing":
-    case "validating":
-    default:
-      return ["resume", "cleanup"];
-  }
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -321,7 +294,7 @@ export function App() {
           return {
             ...t,
             title: evt.title ?? t.title,
-            status: evt.status ?? t.status,
+            status: (evt.status as TicketSummary["status"]) ?? t.status,
             last_error: evt.error ?? t.last_error,
             pr_url: evt.pr_url ?? t.pr_url,
             updated_at: new Date().toISOString()
@@ -459,51 +432,31 @@ export function App() {
                   )}
                 </h2>
                 <div className="button-row detail-actions">
-                {allowedActions(selectedSummary.status).includes("run") ? (
-                  <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Run
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("resume") ? (
-                  <button onClick={() => void queueAction(() => resumeTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Resume
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("approve") ? (
-                  <button onClick={() => void queueAction(() => approveTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Approve
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("reject") ? (
-                  <button onClick={() => void queueAction(() => rejectTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Reject
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("pr") ? (
-                  <button onClick={() => void queueAction(() => createPR(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Create PR
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("apply_pr_comments") ? (
-                  <button
-                    onClick={() =>
-                      void queueAction(() => applyPRComments(selectedSummary.repo_path, selectedSummary.ticket_number))
-                    }
-                    disabled={!selectedSummary.pr_url}
-                  >
-                    Apply PR Comments
-                  </button>
-                ) : null}
-                {selectedSummary.pr_url ? (
-                  <a href={selectedSummary.pr_url} target="_blank" rel="noreferrer">
-                    <button>Open PR</button>
-                  </a>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("cleanup") ? (
+                  {(selectedSummary.status === "pending" || selectedSummary.status === "failed") ? (
+                    <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
+                      Run
+                    </button>
+                  ) : null}
+                  {selectedSummary.status === "waiting"
+                    ? (details?.available_actions ?? [])
+                        .filter((a) => a.type !== "provide_feedback")
+                        .map((a) => (
+                          <button
+                            key={a.label}
+                            onClick={() => void queueAction(() => applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, a.label))}
+                          >
+                            {a.label}
+                          </button>
+                        ))
+                    : null}
+                  {selectedSummary.pr_url ? (
+                    <a href={selectedSummary.pr_url} target="_blank" rel="noreferrer">
+                      <button>Open PR</button>
+                    </a>
+                  ) : null}
                   <button onClick={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
                     Cleanup
                   </button>
-                ) : null}
                 </div>
               </div>
 
@@ -598,29 +551,34 @@ export function App() {
 
               {activeTab === "proposal" ? (
                 <>
-                  {selectedSummary.status === "proposal_ready" || selectedSummary.status === "waiting_for_human" ? (
-                    <form
-                      className="feedback-form"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!feedbackMessage.trim()) {
-                          return;
-                        }
-                        void queueAction(() =>
-                          feedbackTicket(selectedSummary.repo_path, selectedSummary.ticket_number, feedbackMessage)
-                        ).then(() => setFeedbackMessage(""));
-                      }}
-                    >
-                      <input
-                        value={feedbackMessage}
-                        onChange={(e) => setFeedbackMessage(e.target.value)}
-                        placeholder="Send feedback on proposal"
-                      />
-                      <button type="submit">Send Feedback</button>
-                    </form>
-                  ) : (
-                    <p className="meta">Feedback is available in proposal phase only.</p>
-                  )}
+                  {(() => {
+                    const feedbackAction = selectedSummary.status === "waiting"
+                      ? (details?.available_actions ?? []).find((a) => a.type === "provide_feedback")
+                      : undefined;
+                    return feedbackAction ? (
+                      <form
+                        className="feedback-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!feedbackMessage.trim()) {
+                            return;
+                          }
+                          void queueAction(() =>
+                            applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, feedbackAction.label, feedbackMessage)
+                          ).then(() => setFeedbackMessage(""));
+                        }}
+                      >
+                        <input
+                          value={feedbackMessage}
+                          onChange={(e) => setFeedbackMessage(e.target.value)}
+                          placeholder={`Send feedback (${feedbackAction.label})`}
+                        />
+                        <button type="submit">{feedbackAction.label}</button>
+                      </form>
+                    ) : (
+                      <p className="meta">Feedback is available when the workflow is waiting for input.</p>
+                    );
+                  })()}
                   <article className="card">
                     <h4>Proposal</h4>
                     <MarkdownView

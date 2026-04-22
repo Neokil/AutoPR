@@ -13,14 +13,20 @@ import (
 	"ai-ticket-worker/internal/contracts/api"
 )
 
+type actionInfo struct {
+	Label string `json:"label"`
+	Type  string `json:"type"`
+}
+
 type ticketDetails struct {
-	RepoID         string      `json:"repo_id"`
-	RepoPath       string      `json:"repo_path"`
-	TicketNumber   string      `json:"ticket_number"`
-	GitHubBlobBase string      `json:"github_blob_base,omitempty"`
-	State          interface{} `json:"state"`
-	Ticket         interface{} `json:"ticket,omitempty"`
-	NextSteps      string      `json:"next_steps,omitempty"`
+	RepoID           string       `json:"repo_id"`
+	RepoPath         string       `json:"repo_path"`
+	TicketNumber     string       `json:"ticket_number"`
+	GitHubBlobBase   string       `json:"github_blob_base,omitempty"`
+	State            interface{}  `json:"state"`
+	Ticket           interface{}  `json:"ticket,omitempty"`
+	NextSteps        string       `json:"next_steps,omitempty"`
+	AvailableActions []actionInfo `json:"available_actions"`
 }
 
 type logEvent struct {

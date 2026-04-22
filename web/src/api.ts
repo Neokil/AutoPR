@@ -121,6 +121,14 @@ export function feedbackTicket(repoPath: string, ticket: string, message: string
   });
 }
 
+export function applyAction(repoPath: string, ticket: string, label: string, message?: string): Promise<AcceptedJob> {
+  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/action`, {
+    repo_path: repoPath,
+    label,
+    message: message ?? ""
+  });
+}
+
 export function cleanupDone(repoPath: string): Promise<AcceptedJob> {
   return postAccepted("/api/cleanup", { repo_path: repoPath, scope: "done" });
 }
