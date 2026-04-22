@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"ai-ticket-worker/internal/application/orchestrator"
 	"ai-ticket-worker/internal/config"
@@ -109,7 +110,8 @@ func main() {
 	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
 	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
 	mux.HandleFunc("GET /api/tickets/{id}/events", s.handleTicketEvents)
-	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name}", s.handleTicketArtifact)
+	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name...}", s.handleTicketArtifact)
+	mux.HandleFunc("GET /api/tickets/{id}/execution-logs", s.handleExecutionLogs)
 	mux.HandleFunc("GET /api/jobs/{id}", s.handleGetJob)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
@@ -383,7 +385,7 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 	st, stErr := rt.store.LoadState(ticket)
 	var logPath string
 	if stErr == nil && st.WorktreePath != "" && st.CurrentState != "" {
-		logPath = st.ArtifactPath(st.CurrentState + ".log")
+		logPath = currentRunLogPath(st)
 	}
 	events, err := parseLogEvents(logPath)
 	if err != nil {
@@ -453,6 +455,51 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 		"name":          name,
 		"path":          path,
 		"content":       string(data),
+	})
+}
+
+func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+	if repoPath == "" {
+		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		return
+	}
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	st, err := rt.store.LoadState(ticket)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "ticket not found")
+		return
+	}
+	logs := make([]executionLog, 0, len(st.StateHistory))
+	for _, run := range st.StateHistory {
+		runPath := filepath.ToSlash(filepath.Join("runs", run.ID, "raw-provider.log"))
+		content, readErr := os.ReadFile(st.ResolveRef(runPath))
+		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+			writeError(w, http.StatusInternalServerError, readErr.Error())
+			return
+		}
+		logs = append(logs, executionLog{
+			RunID:            run.ID,
+			State:            run.StateName,
+			StateDisplayName: run.StateDisplayName,
+			Timestamp:        run.StartedAt.Format(time.RFC3339),
+			Path:             runPath,
+			Content:          string(content),
+		})
+	}
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].Timestamp < logs[j].Timestamp
+	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"repo_id":       repoID,
+		"repo_path":     repoRoot,
+		"ticket_number": ticket,
+		"logs":          logs,
 	})
 }
 
@@ -536,6 +583,9 @@ func parseLogEvents(path string) ([]logEvent, error) {
 }
 
 func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (string, bool) {
+	if path, ok := resolveArtifactRef(st, name); ok {
+		return path, true
+	}
 	switch name {
 	case "state":
 		if st.WorktreePath != "" {
@@ -544,27 +594,50 @@ func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (
 		return paths.State, true
 	case "ticket":
 		if st.WorktreePath != "" {
-			return st.ArtifactPath("ticket.md"), true
+			return "", false
 		}
 		return paths.Ticket, true
 	case "log":
 		if st.WorktreePath != "" && st.CurrentState != "" {
-			return st.ArtifactPath(st.CurrentState + ".log"), true
+			return currentRunLogPath(st), true
 		}
 		return "", false
 	case "proposal", "investigation":
-		if st.WorktreePath != "" {
-			return st.ArtifactPath("investigation.md"), true
-		}
 		return "", false
 	case "final", "implementation":
-		if st.WorktreePath != "" {
-			return st.ArtifactPath("implementation.md"), true
-		}
 		return "", false
 	default:
 		return "", false
 	}
+}
+
+func resolveArtifactRef(st ticketdomain.State, name string) (string, bool) {
+	if st.WorktreePath == "" || strings.TrimSpace(name) == "" {
+		return "", false
+	}
+	clean := filepath.Clean(strings.TrimSpace(name))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	parts := strings.Split(filepath.ToSlash(clean), "/")
+	if len(parts) < 2 || parts[0] != "runs" {
+		return "", false
+	}
+	return st.ResolveRef(filepath.ToSlash(clean)), true
+}
+
+func currentRunLogPath(st ticketdomain.State) string {
+	if st.CurrentRunID != "" {
+		for _, run := range st.StateHistory {
+			if run.ID == st.CurrentRunID && run.LogRef != "" {
+				return st.ResolveRef(run.LogRef)
+			}
+		}
+	}
+	if st.WorktreePath != "" && st.CurrentState != "" {
+		return st.ArtifactPath(st.CurrentState + ".log")
+	}
+	return ""
 }
 
 func fatalIf(err error) {

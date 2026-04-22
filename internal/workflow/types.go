@@ -22,7 +22,9 @@ type WorkflowConfig struct {
 
 type StateConfig struct {
 	Name               string         `yaml:"name"`
+	DisplayName        string         `yaml:"display_name,omitempty"`
 	Prompt             string         `yaml:"prompt"`
+	PrimaryArtifact    string         `yaml:"primary_artifact,omitempty"`
 	PrePromptCommands  []string       `yaml:"pre_prompt_commands"`
 	PostPromptCommands []string       `yaml:"post_prompt_commands"`
 	Actions            []ActionConfig `yaml:"actions"`
@@ -148,4 +150,11 @@ func (c WorkflowConfig) FirstState() (StateConfig, bool) {
 // IsTerminal reports whether name is a built-in terminal state name.
 func IsTerminal(name string) bool {
 	return terminalStateNames[name]
+}
+
+func (s StateConfig) TimelineLabel() string {
+	if s.DisplayName != "" {
+		return s.DisplayName
+	}
+	return s.Name
 }

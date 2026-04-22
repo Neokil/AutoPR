@@ -1,8 +1,10 @@
-Read the ticket number from `.auto-pr/context.md`.
+Read `.auto-pr/run-context.md`.
+
+Read the ticket number from the `Ticket Number` field in `.auto-pr/run-context.md`.
 
 Fetch the Shortcut ticket details for that ticket number using your configured MCP integration.
 
-Write the full ticket details as a markdown document to `.auto-pr/ticket.md`. Include all available information:
+Write the full ticket details as a markdown document to the `Current Primary Artifact` path listed in `.auto-pr/run-context.md`. Include all available information:
 - Title
 - Description
 - Acceptance criteria

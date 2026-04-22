@@ -2,6 +2,7 @@ package tickets
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"os"
@@ -236,13 +237,20 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 
 func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, stateCfg workflow.StateConfig) error {
 	log.Printf("[%s] running state %q", st.TicketNumber, stateCfg.Name)
-	logPath := st.ArtifactPath(stateCfg.Name + ".log")
+	run, err := startStateRun(st, stateCfg)
+	if err != nil {
+		return err
+	}
+	logPath := st.ResolveRef(run.LogRef)
 
 	st.CurrentState = stateCfg.Name
 	st.FlowStatus = ticketdomain.FlowStatusRunning
 	st.LastError = ""
 	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
 		return err
+	}
+	if err := o.prepareRunContext(*st, stateCfg, run); err != nil {
+		return o.failState(st, err)
 	}
 
 	if err := o.runCommands(ctx, st.WorktreePath, stateCfg.PrePromptCommands, logPath, "Pre-prompt"); err != nil {
@@ -254,12 +262,12 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 		return o.failState(st, fmt.Errorf("read prompt %s: %w", stateCfg.Prompt, err))
 	}
 
-	promptPath := st.ArtifactPath(stateCfg.Name + ".prompt.md")
+	promptPath := st.RunPath(run.ID, "prompt.md")
 	if err := os.WriteFile(promptPath, promptContent, 0o644); err != nil {
 		return o.failState(st, err)
 	}
 
-	runtimeDir := st.ArtifactPath("provider")
+	runtimeDir := st.RunPath(run.ID, "provider")
 	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
 		return o.failState(st, err)
 	}
@@ -270,7 +278,7 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 		WorkDir:    st.WorktreePath,
 		RuntimeDir: runtimeDir,
 	})
-	rawLogPath := st.ArtifactPath(fmt.Sprintf("%s_%s.log", time.Now().UTC().Format("20060102_150405"), stateCfg.Name))
+	rawLogPath := st.RunPath(run.ID, "raw-provider.log")
 	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644)
 	if err != nil {
 		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
@@ -300,7 +308,7 @@ func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
 }
 
 func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
-	logPath := st.ArtifactPath(st.CurrentState + ".log")
+	logPath := currentRunLogPath(*st)
 	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
 
 	switch action.Type {
@@ -353,7 +361,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 }
 
 func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig) error {
-	logPath := st.ArtifactPath(st.CurrentState + ".log")
+	logPath := currentRunLogPath(*st)
 
 	var out strings.Builder
 	var scriptErr error
@@ -479,6 +487,103 @@ func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
 		return "Ticket was cancelled."
 	}
 	return ""
+}
+
+func startStateRun(st *ticketdomain.State, stateCfg workflow.StateConfig) (ticketdomain.StateRun, error) {
+	runID, err := newUUID()
+	if err != nil {
+		return ticketdomain.StateRun{}, fmt.Errorf("generate state run id: %w", err)
+	}
+	artifactName := stateCfg.PrimaryArtifact
+	if strings.TrimSpace(artifactName) == "" {
+		artifactName = stateCfg.Name + ".md"
+	}
+	run := ticketdomain.StateRun{
+		ID:               runID,
+		StateName:        stateCfg.Name,
+		StateDisplayName: stateCfg.TimelineLabel(),
+		StartedAt:        time.Now().UTC(),
+		ArtifactRef:      filepath.ToSlash(filepath.Join("runs", runID, "artifacts", artifactName)),
+		LogRef:           filepath.ToSlash(filepath.Join("runs", runID, "state.log")),
+	}
+	st.CurrentRunID = run.ID
+	st.StateHistory = append(st.StateHistory, run)
+	return run, nil
+}
+
+func currentRunLogPath(st ticketdomain.State) string {
+	if st.CurrentRunID == "" {
+		return st.ArtifactPath(st.CurrentState + ".log")
+	}
+	for _, run := range st.StateHistory {
+		if run.ID == st.CurrentRunID && run.LogRef != "" {
+			return st.ResolveRef(run.LogRef)
+		}
+	}
+	return st.ArtifactPath(st.CurrentState + ".log")
+}
+
+func latestArtifactRef(st ticketdomain.State, stateName string) string {
+	for i := len(st.StateHistory) - 1; i >= 0; i-- {
+		run := st.StateHistory[i]
+		if run.StateName == stateName && run.ArtifactRef != "" {
+			return run.ArtifactRef
+		}
+	}
+	return ""
+}
+
+func (o *Orchestrator) prepareRunContext(st ticketdomain.State, stateCfg workflow.StateConfig, run ticketdomain.StateRun) error {
+	runDir := st.RunPath(run.ID)
+	if err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755); err != nil {
+		return err
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Ticket Number: %s\n", st.TicketNumber)
+	fmt.Fprintf(&b, "Current State: %s\n", stateCfg.Name)
+	fmt.Fprintf(&b, "Current State Display Name: %s\n", stateCfg.TimelineLabel())
+	fmt.Fprintf(&b, "Current Run ID: %s\n", run.ID)
+	fmt.Fprintf(&b, "Current Run Directory: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "runs", run.ID)))
+	fmt.Fprintf(&b, "Current Primary Artifact: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", run.ArtifactRef)))
+	fmt.Fprintf(&b, "Current State Log: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", run.LogRef)))
+	fmt.Fprintf(&b, "Current Raw Provider Log: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "runs", run.ID, "raw-provider.log")))
+	fmt.Fprintf(&b, "Feedback File: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "feedback.md")))
+	fmt.Fprintf(&b, "Shared Context File: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "context.md")))
+	guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
+	if guidelinesPath != "" {
+		fmt.Fprintf(&b, "Guidelines File: %s\n", guidelinesPath)
+	}
+	b.WriteString("\nLatest State Artifacts:\n")
+	seen := map[string]bool{}
+	for i := len(st.StateHistory) - 1; i >= 0; i-- {
+		stateName := st.StateHistory[i].StateName
+		if seen[stateName] {
+			continue
+		}
+		seen[stateName] = true
+		if ref := latestArtifactRef(st, stateName); ref != "" {
+			fmt.Fprintf(&b, "- %s: %s\n", stateName, filepath.ToSlash(filepath.Join(".auto-pr", ref)))
+		}
+	}
+
+	return os.WriteFile(st.ArtifactPath("run-context.md"), []byte(b.String()), 0o644)
+}
+
+func newUUID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4],
+		b[4:6],
+		b[6:8],
+		b[8:10],
+		b[10:16],
+	), nil
 }
 
 // EnsureStateIgnored ensures the state directory is listed in .gitignore.

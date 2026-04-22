@@ -35,6 +35,15 @@ type logEvent struct {
 	Body      string `json:"body"`
 }
 
+type executionLog struct {
+	RunID            string `json:"run_id"`
+	State            string `json:"state"`
+	StateDisplayName string `json:"state_display_name,omitempty"`
+	Timestamp        string `json:"timestamp"`
+	Path             string `json:"path"`
+	Content          string `json:"content"`
+}
+
 func (s *server) handleFrontend(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		http.NotFound(w, r)

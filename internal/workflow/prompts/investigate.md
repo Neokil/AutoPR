@@ -1,14 +1,16 @@
 You are assisting with software ticket investigation.
 
-Read the ticket details from `.auto-pr/ticket.md`.
+Read `.auto-pr/run-context.md`.
 
-If `.auto-pr/feedback.md` exists, incorporate that feedback into your analysis.
+Read the ticket details from the latest `fetch-ticket-data` artifact path listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`.
 
-If a guidelines file path is listed in `.auto-pr/context.md`, read and follow those guidelines.
+If the `Feedback File` listed in `.auto-pr/run-context.md` exists, incorporate that feedback into your analysis.
+
+If a `Guidelines File` is listed in `.auto-pr/run-context.md`, read and follow those guidelines.
 
 Thoroughly explore the codebase to understand the scope of the work needed. Look at relevant files, dependencies, and potential impact areas.
 
-Write a detailed investigation proposal to `.auto-pr/investigation.md` with the following sections:
+Write a detailed investigation proposal to the `Current Primary Artifact` path listed in `.auto-pr/run-context.md` with the following sections:
 - Problem Summary
 - Suggested Solution
 - Likely Files To Change

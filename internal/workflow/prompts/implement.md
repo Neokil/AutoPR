@@ -1,11 +1,13 @@
 Implement the approved solution for the ticket in this worktree.
 
-Read the ticket details from `.auto-pr/ticket.md`.
-Read the approved proposal from `.auto-pr/investigation.md`.
+Read `.auto-pr/run-context.md`.
 
-If `.auto-pr/feedback.md` exists, incorporate that feedback into your implementation.
+Read the ticket details from the latest `fetch-ticket-data` artifact path listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`.
+Read the approved proposal from the latest `investigation` artifact path listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`.
 
-If a guidelines file path is listed in `.auto-pr/context.md`, read and follow those guidelines.
+If the `Feedback File` listed in `.auto-pr/run-context.md` exists, incorporate that feedback into your implementation.
+
+If a `Guidelines File` is listed in `.auto-pr/run-context.md`, read and follow those guidelines.
 
 Implement all changes described in the proposal. Then:
 1. Automatically detect and run this project's formatting and linting commands directly in the worktree.
@@ -14,7 +16,7 @@ Implement all changes described in the proposal. Then:
 
 If the repository is connected to GitHub, create a pull request for the changes.
 
-Write a summary to `.auto-pr/implementation.md` with the following sections:
+Write a summary to the `Current Primary Artifact` path listed in `.auto-pr/run-context.md` with the following sections:
 - Changes Made
 - Notable Files Changed
 - Remaining Risks
