@@ -20,15 +20,7 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 		return err
 	}
 
-	paths := rt.store.Paths(ticket)
 	st := ticketdomain.NewState(ticket)
-	st.ProposalPath = paths.Proposal
-	st.FinalPath = paths.Final
-	st.LogPath = paths.Log
-	st.PRPath = paths.PR
-	st.ChecksLogPath = paths.Checks
-	st.TicketJSONPath = paths.Ticket
-	st.ProviderDirPath = paths.ProviderDir
 	if err := rt.store.SaveState(ticket, st); err != nil {
 		return err
 	}
@@ -60,8 +52,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		RepoPath:     repoRoot,
 		TicketNumber: ticket,
 		Title:        strings.TrimSpace(t.Title),
-		Status:       string(st.Status),
-		Approved:     st.Approved,
+		Status:       string(st.FlowStatus),
 		LastError:    strings.TrimSpace(st.LastError),
 		UpdatedAt:    st.UpdatedAt.UTC(),
 		PRURL:        st.PRURL,
@@ -101,8 +92,7 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 			RepoPath:     repoRoot,
 			TicketNumber: t,
 			Title:        strings.TrimSpace(ticketData.Title),
-			Status:       string(st.Status),
-			Approved:     st.Approved,
+			Status:       string(st.FlowStatus),
 			LastError:    strings.TrimSpace(st.LastError),
 			UpdatedAt:    st.UpdatedAt.UTC(),
 			PRURL:        st.PRURL,

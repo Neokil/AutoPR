@@ -14,24 +14,16 @@ func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, rt *repoR
 		return nil
 	}
 
-	paths := rt.store.Paths(ticket)
 	st, err := rt.store.LoadState(ticket)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
 		st = ticketdomain.NewState(ticket)
-		st.ProposalPath = paths.Proposal
-		st.FinalPath = paths.Final
-		st.LogPath = paths.Log
-		st.PRPath = paths.PR
-		st.ChecksLogPath = paths.Checks
-		st.TicketJSONPath = paths.Ticket
-		st.ProviderDirPath = paths.ProviderDir
 	}
 
 	msg := strings.TrimSpace(cause.Error())
-	st.Status = ticketdomain.StateFailed
+	st.FlowStatus = ticketdomain.FlowStatusFailed
 	st.LastError = msg
 	if saveErr := rt.store.SaveState(ticket, st); saveErr != nil {
 		return saveErr
@@ -41,8 +33,9 @@ func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, rt *repoR
 	if job.record.Action != "" {
 		body = fmt.Sprintf("Action: %s\n\n%s", job.record.Action, msg)
 	}
-	if logErr := markdown.AppendSection(st.LogPath, "Job Failed", body); logErr != nil {
-		return logErr
+	if st.WorktreePath != "" && st.CurrentState != "" {
+		logPath := st.ArtifactPath(st.CurrentState + ".log")
+		_ = markdown.AppendSection(logPath, "Job Failed", body)
 	}
 
 	return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)

@@ -1,19 +1,19 @@
 package ticket
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
-type WorkflowState string
+type FlowStatus string
 
 const (
-	StateQueued          WorkflowState = "queued"
-	StateInvestigating   WorkflowState = "investigating"
-	StateProposalReady   WorkflowState = "proposal_ready"
-	StateWaitingForHuman WorkflowState = "waiting_for_human"
-	StateImplementing    WorkflowState = "implementing"
-	StateValidating      WorkflowState = "validating"
-	StatePRReady         WorkflowState = "pr_ready"
-	StateDone            WorkflowState = "done"
-	StateFailed          WorkflowState = "failed"
+	FlowStatusPending   FlowStatus = "pending"   // ticket exists, flow not yet started
+	FlowStatusRunning   FlowStatus = "running"   // prompt or commands currently executing
+	FlowStatusWaiting   FlowStatus = "waiting"   // waiting for human action
+	FlowStatusDone      FlowStatus = "done"
+	FlowStatusFailed    FlowStatus = "failed"
+	FlowStatusCancelled FlowStatus = "cancelled"
 )
 
 type Ticket struct {
@@ -39,31 +39,22 @@ type TicketContext struct {
 }
 
 type State struct {
-	TicketNumber    string        `json:"ticket_number"`
-	BranchName      string        `json:"branch_name"`
-	WorktreePath    string        `json:"worktree_path"`
-	Status          WorkflowState `json:"status"`
-	Approved        bool          `json:"approved"`
-	FixAttempts     int           `json:"fix_attempts"`
-	LastError       string        `json:"last_error,omitempty"`
-	LastFeedback    string        `json:"last_feedback,omitempty"`
-	CreatedAt       time.Time     `json:"created_at"`
-	UpdatedAt       time.Time     `json:"updated_at"`
-	ProposalPath    string        `json:"proposal_path"`
-	FinalPath       string        `json:"final_solution_path"`
-	LogPath         string        `json:"log_path"`
-	PRPath          string        `json:"pr_path"`
-	ChecksLogPath   string        `json:"checks_log_path"`
-	TicketJSONPath  string        `json:"ticket_json_path"`
-	ProviderDirPath string        `json:"provider_dir_path"`
-	PRURL           string        `json:"pr_url,omitempty"`
+	TicketNumber string     `json:"ticket_number"`
+	CurrentState string     `json:"current_state"` // matches a StateConfig.Name from workflow
+	FlowStatus   FlowStatus `json:"flow_status"`
+	BranchName   string     `json:"branch_name"`
+	WorktreePath string     `json:"worktree_path"`
+	LastError    string     `json:"last_error,omitempty"`
+	PRURL        string     `json:"pr_url,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 func NewState(ticketNumber string) State {
 	now := time.Now().UTC()
 	return State{
 		TicketNumber: ticketNumber,
-		Status:       StateQueued,
+		FlowStatus:   FlowStatusPending,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -71,4 +62,9 @@ func NewState(ticketNumber string) State {
 
 func (s *State) Touch() {
 	s.UpdatedAt = time.Now().UTC()
+}
+
+// ArtifactPath returns the path to a named file within the worktree's .auto-pr directory.
+func (s State) ArtifactPath(name string) string {
+	return filepath.Join(s.WorktreePath, ".auto-pr", name)
 }

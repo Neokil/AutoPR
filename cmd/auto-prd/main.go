@@ -17,6 +17,7 @@ import (
 	"ai-ticket-worker/internal/application/orchestrator"
 	"ai-ticket-worker/internal/config"
 	"ai-ticket-worker/internal/contracts/api"
+	ticketdomain "ai-ticket-worker/internal/domain/ticket"
 	"ai-ticket-worker/internal/gitutil"
 	"ai-ticket-worker/internal/ports"
 	"ai-ticket-worker/internal/servermeta"
@@ -385,8 +386,12 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	paths := rt.store.Paths(ticket)
-	events, err := parseLogEvents(paths.Log)
+	st, stErr := rt.store.LoadState(ticket)
+	var logPath string
+	if stErr == nil && st.WorktreePath != "" && st.CurrentState != "" {
+		logPath = st.ArtifactPath(st.CurrentState + ".log")
+	}
+	events, err := parseLogEvents(logPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -421,7 +426,12 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	path, ok := artifactPath(rt.store.Paths(ticket), name)
+	st, stErr := rt.store.LoadState(ticket)
+	if stErr != nil {
+		writeError(w, http.StatusNotFound, "ticket not found")
+		return
+	}
+	path, ok := artifactPath(st, rt.store.Paths(ticket), name)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown artifact")
 		return
@@ -531,22 +541,30 @@ func parseLogEvents(path string) ([]logEvent, error) {
 	return events, nil
 }
 
-func artifactPath(paths ports.TicketPaths, name string) (string, bool) {
+func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (string, bool) {
 	switch name {
 	case "state":
 		return paths.State, true
 	case "ticket":
+		if st.WorktreePath != "" {
+			return st.ArtifactPath("ticket.md"), true
+		}
 		return paths.Ticket, true
 	case "log":
-		return paths.Log, true
-	case "proposal":
-		return paths.Proposal, true
-	case "final":
-		return paths.Final, true
-	case "pr":
-		return paths.PR, true
-	case "checks":
-		return paths.Checks, true
+		if st.WorktreePath != "" && st.CurrentState != "" {
+			return st.ArtifactPath(st.CurrentState + ".log"), true
+		}
+		return "", false
+	case "proposal", "investigation":
+		if st.WorktreePath != "" {
+			return st.ArtifactPath("investigation.md"), true
+		}
+		return "", false
+	case "final", "implementation":
+		if st.WorktreePath != "" {
+			return st.ArtifactPath("implementation.md"), true
+		}
+		return "", false
 	default:
 		return "", false
 	}

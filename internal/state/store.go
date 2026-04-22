@@ -10,6 +10,13 @@ import (
 	"ai-ticket-worker/internal/ports"
 )
 
+// v2StateValues are the old WorkflowState constants that indicate a pre-v3 state file.
+var v2StateValues = map[string]bool{
+	"queued": true, "investigating": true, "proposal_ready": true,
+	"waiting_for_human": true, "implementing": true, "validating": true,
+	"pr_ready": true,
+}
+
 const (
 	StateFileName         = "state.json"
 	TicketFileName        = "ticket.json"
@@ -55,11 +62,31 @@ func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 	if err != nil {
 		return ticket.State{}, err
 	}
+	if isV2StateJSON(data) {
+		return ticket.State{}, fmt.Errorf("ticket %s has a v2 state file; v3 flows must be started fresh (cleanup and re-run)", ticketNumber)
+	}
 	var st ticket.State
 	if err := json.Unmarshal(data, &st); err != nil {
 		return ticket.State{}, fmt.Errorf("parse state file: %w", err)
 	}
 	return st, nil
+}
+
+func isV2StateJSON(data []byte) bool {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	rawStatus, hasStatus := raw["status"]
+	_, hasFlowStatus := raw["flow_status"]
+	if !hasStatus || hasFlowStatus {
+		return false
+	}
+	var statusStr string
+	if err := json.Unmarshal(rawStatus, &statusStr); err != nil {
+		return false
+	}
+	return v2StateValues[statusStr]
 }
 
 func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
