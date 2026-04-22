@@ -1,4 +1,4 @@
-import type { AcceptedJob, EventItem, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { AcceptedJob, EventItem, ExecutionLog, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -45,6 +45,13 @@ export async function getArtifact(repoPath: string, ticket: string, name: string
     `/api/tickets/${encodeURIComponent(ticket)}/artifacts/${encodeURIComponent(name)}?repo_path=${encodeURIComponent(repoPath)}`
   );
   return data.content ?? "";
+}
+
+export async function getExecutionLogs(repoPath: string, ticket: string): Promise<ExecutionLog[]> {
+  const data = await requestJSON<{ logs: ExecutionLog[] }>(
+    `/api/tickets/${encodeURIComponent(ticket)}/execution-logs?repo_path=${encodeURIComponent(repoPath)}`
+  );
+  return data.logs ?? [];
 }
 
 export async function getJob(jobId: string): Promise<Job> {

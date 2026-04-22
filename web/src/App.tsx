@@ -6,15 +6,19 @@ import {
   cleanupTicket,
   connectEvents,
   getArtifact,
+  getExecutionLogs,
   getJob,
   getTicket,
-  listTickets,
   listRepositories,
+  listTickets,
   runTicket
 } from "./api";
+import { ExecutionLogsModal } from "./ExecutionLogsModal";
 import { MarkdownView } from "./MarkdownView";
+import { StateTimeline } from "./StateTimeline";
 import { TicketList } from "./TicketList";
-import type { Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import { TicketMenu } from "./TicketMenu";
+import type { ExecutionLog, Job, ServerEvent, StateRun, TicketDetails, TicketSummary } from "./types";
 
 function ticketKey(t: TicketSummary): string {
   return `${t.repo_id}::${t.ticket_number}`;
@@ -23,7 +27,6 @@ function ticketKey(t: TicketSummary): string {
 function pendingTicketKey(repoPath: string, ticketNumber: string): string {
   return `${repoPath}::${ticketNumber}`;
 }
-
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -53,20 +56,53 @@ function firstLinkedItem(ticket: Record<string, unknown> | null, keys: string[])
   return null;
 }
 
+function normalizeStateRuns(details: TicketDetails | null): StateRun[] {
+  const history = details?.state.state_history ?? [];
+  if (history.length > 0) {
+    return history;
+  }
+  if (!details?.state.current_state) {
+    return [];
+  }
+  return [
+    {
+      id: details.state.current_run_id || `current-${details.state.current_state}`,
+      state_name: details.state.current_state,
+      state_display_name: details.state.current_state,
+      started_at: details.state.updated_at,
+      artifact_ref: "",
+      log_ref: ""
+    }
+  ];
+}
+
+function runDisplayLabel(run: StateRun, runs: StateRun[]): string {
+  const base = run.state_display_name || run.state_name;
+  const matching = runs.filter((candidate) => candidate.state_name === run.state_name);
+  if (matching.length <= 1) {
+    return base;
+  }
+  const index = matching.findIndex((candidate) => candidate.id === run.id);
+  return `${base} ${index + 1}`;
+}
+
 export function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [details, setDetails] = useState<TicketDetails | null>(null);
-  const [proposal, setProposal] = useState("");
-  const [logText, setLogText] = useState("");
-  const [activeTab, setActiveTab] = useState<"details" | "proposal" | "logs">("details");
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [selectedArtifactContent, setSelectedArtifactContent] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [activeJobId, setActiveJobId] = useState<string>("");
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
+  const [artifactLoading, setArtifactLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const [repositoryOptions, setRepositoryOptions] = useState<string[]>([]);
   const [showAddTicketDialog, setShowAddTicketDialog] = useState(false);
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  const [executionLogsLoading, setExecutionLogsLoading] = useState(false);
   const [newTicketRepoPath, setNewTicketRepoPath] = useState("");
   const [newTicketNumber, setNewTicketNumber] = useState("");
   const [pendingAddedTickets, setPendingAddedTickets] = useState<string[]>([]);
@@ -97,8 +133,18 @@ export function App() {
   const epicTicket = firstLinkedItem(ticketRecord, ["epic", "epic_ticket", "parent_epic", "epic_story"]);
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
   const activeJobIdRef = useRef<string>("");
+  const showLogsModalRef = useRef(false);
   const fullRefreshScheduledRef = useRef(false);
   const reconnectErrorMessage = "event stream connection lost; reconnecting";
+  const stateRuns = useMemo(() => normalizeStateRuns(details), [details]);
+  const selectedRun = useMemo(
+    () => stateRuns.find((run) => run.id === selectedRunId) ?? null,
+    [stateRuns, selectedRunId]
+  );
+  const feedbackAction =
+    selectedSummary?.status === "waiting"
+      ? (details?.available_actions ?? []).find((action) => action.type === "provide_feedback")
+      : undefined;
 
   useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
@@ -107,6 +153,10 @@ export function App() {
   useEffect(() => {
     activeJobIdRef.current = activeJobId;
   }, [activeJobId]);
+
+  useEffect(() => {
+    showLogsModalRef.current = showLogsModal;
+  }, [showLogsModal]);
 
   useEffect(() => {
     void refreshTickets();
@@ -128,13 +178,92 @@ export function App() {
   useEffect(() => {
     if (!selectedSummary) {
       setDetails(null);
-      setProposal("");
-      setLogText("");
+      setSelectedRunId("");
+      setSelectedArtifactContent("");
+      setShowLogsModal(false);
+      setExecutionLogs([]);
       return;
     }
     void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
-    setActiveTab("details");
   }, [selectedSummary?.repo_path, selectedSummary?.ticket_number]);
+
+  useEffect(() => {
+    if (stateRuns.length === 0) {
+      setSelectedRunId("");
+      return;
+    }
+    const currentRunId = details?.state.current_run_id;
+    setSelectedRunId((current) => {
+      if (current && stateRuns.some((run) => run.id === current)) {
+        return current;
+      }
+      if (currentRunId && stateRuns.some((run) => run.id === currentRunId)) {
+        return currentRunId;
+      }
+      return stateRuns[stateRuns.length - 1]?.id ?? "";
+    });
+  }, [details?.state.current_run_id, stateRuns]);
+
+  useEffect(() => {
+    if (!selectedSummary || !selectedRun) {
+      setSelectedArtifactContent("");
+      return;
+    }
+    const artifactRef = selectedRun.artifact_ref || selectedRun.log_ref;
+    if (!artifactRef) {
+      setSelectedArtifactContent("");
+      return;
+    }
+    let cancelled = false;
+    setArtifactLoading(true);
+    void getArtifact(selectedSummary.repo_path, selectedSummary.ticket_number, artifactRef)
+      .then((content) => {
+        if (!cancelled) {
+          setSelectedArtifactContent(content);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "failed to load artifact");
+          setSelectedArtifactContent("");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setArtifactLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRun?.artifact_ref, selectedRun?.id, selectedRun?.log_ref, selectedSummary?.repo_path, selectedSummary?.ticket_number]);
+
+  useEffect(() => {
+    if (!showLogsModal || !selectedSummary) {
+      return;
+    }
+    let cancelled = false;
+    setExecutionLogsLoading(true);
+    void getExecutionLogs(selectedSummary.repo_path, selectedSummary.ticket_number)
+      .then((logs) => {
+        if (!cancelled) {
+          setExecutionLogs(logs);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "failed to load execution logs");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setExecutionLogsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showLogsModal, selectedSummary?.repo_path, selectedSummary?.ticket_number]);
 
   async function refreshTickets(showLoader = true) {
     if (showLoader) {
@@ -176,19 +305,12 @@ export function App() {
     }
     setError("");
     try {
-      const [ticketDetails, proposalText, logs] = await Promise.all([
-        getTicket(repoPath, ticket),
-        getArtifact(repoPath, ticket, "proposal"),
-        getArtifact(repoPath, ticket, "log")
-      ]);
+      const ticketDetails = await getTicket(repoPath, ticket);
       setDetails(ticketDetails);
-      setProposal(proposalText);
-      setLogText(logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load ticket details");
       setDetails(null);
-      setProposal("");
-      setLogText("");
+      setSelectedArtifactContent("");
     } finally {
       if (showLoader) {
         setLoading(false);
@@ -236,6 +358,14 @@ export function App() {
       evt.ticket_number === selected.ticket_number
     ) {
       await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
+      if (showLogsModalRef.current) {
+        try {
+          const logs = await getExecutionLogs(selected.repo_path, selected.ticket_number);
+          setExecutionLogs(logs);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "failed to refresh execution logs");
+        }
+      }
     }
   }
 
@@ -258,29 +388,20 @@ export function App() {
         if (evt.type === "job") {
           const nextJobs = [...(t.jobs ?? [])];
           const jobIndex = evt.job_id ? nextJobs.findIndex((job) => job.id === evt.job_id) : -1;
-          const nextJob: Job = jobIndex >= 0
-            ? {
-                ...nextJobs[jobIndex],
-                status: evt.status === "queued" || evt.status === "running" || evt.status === "done" || evt.status === "failed"
-                  ? evt.status
-                  : nextJobs[jobIndex].status,
-                action: evt.action ?? nextJobs[jobIndex].action,
-                error: evt.error ?? nextJobs[jobIndex].error
-              }
-            : {
-                id: evt.job_id ?? "",
-                action: evt.action ?? "",
-                repo_id: evt.repo_id ?? t.repo_id,
-                repo_path: evt.repo_path ?? t.repo_path,
-                ticket_number: evt.ticket_number ?? t.ticket_number,
-                status:
-                  evt.status === "queued" || evt.status === "running" || evt.status === "done" || evt.status === "failed"
-                    ? evt.status
-                    : "queued",
-                scope: evt.scope,
-                error: evt.error,
-                created_at: new Date().toISOString()
-              };
+          const nextJob =
+            jobIndex >= 0
+              ? { ...nextJobs[jobIndex], status: (evt.status as Job["status"]) ?? nextJobs[jobIndex].status, error: evt.error }
+              : {
+                  id: evt.job_id ?? "",
+                  action: evt.action ?? "",
+                  repo_id: evt.repo_id ?? t.repo_id,
+                  repo_path: evt.repo_path ?? t.repo_path,
+                  ticket_number: evt.ticket_number,
+                  status: (evt.status as Job["status"]) ?? "queued",
+                  scope: evt.scope,
+                  error: evt.error,
+                  created_at: new Date().toISOString()
+                };
           if (jobIndex >= 0) {
             nextJobs[jobIndex] = nextJob;
           } else if (nextJob.id) {
@@ -431,179 +552,164 @@ export function App() {
                     </>
                   )}
                 </h2>
-                <div className="button-row detail-actions">
-                  {(selectedSummary.status === "pending" || selectedSummary.status === "failed") ? (
-                    <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                      Run
-                    </button>
-                  ) : null}
-                  {selectedSummary.status === "waiting"
-                    ? (details?.available_actions ?? [])
-                        .filter((a) => a.type !== "provide_feedback")
-                        .map((a) => (
-                          <button
-                            key={a.label}
-                            onClick={() => void queueAction(() => applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, a.label))}
-                          >
-                            {a.label}
-                          </button>
-                        ))
-                    : null}
-                  {selectedSummary.pr_url ? (
-                    <a href={selectedSummary.pr_url} target="_blank" rel="noreferrer">
-                      <button>Open PR</button>
-                    </a>
-                  ) : null}
-                  <button onClick={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Cleanup
-                  </button>
+                <div className="detail-actions-wrap">
+                  <div className="button-row detail-actions">
+                    {selectedSummary.status === "waiting"
+                      ? (details?.available_actions ?? [])
+                          .filter((action) => action.type !== "provide_feedback")
+                          .map((action) => (
+                            <button
+                              key={action.label}
+                              onClick={() =>
+                                void queueAction(() =>
+                                  applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, action.label)
+                                )
+                              }
+                            >
+                              {action.label}
+                            </button>
+                          ))
+                      : null}
+                    {selectedSummary.pr_url ? (
+                      <a href={selectedSummary.pr_url} target="_blank" rel="noreferrer">
+                        <button type="button">Open PR</button>
+                      </a>
+                    ) : null}
+                  </div>
+                  <TicketMenu
+                    onLogs={() => setShowLogsModal(true)}
+                    onRerun={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}
+                    onCleanup={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}
+                    rerunDisabled={selectedSummary.status === "running"}
+                    cleanupDisabled={selectedSummary.status === "running"}
+                  />
                 </div>
               </div>
 
-              <div className="tabs">
-                <button className={activeTab === "details" ? "tab active" : "tab"} onClick={() => setActiveTab("details")}>
-                  Details
-                </button>
-                <button className={activeTab === "proposal" ? "tab active" : "tab"} onClick={() => setActiveTab("proposal")}>
-                  Proposal
-                </button>
-                <button className={activeTab === "logs" ? "tab active" : "tab"} onClick={() => setActiveTab("logs")}>
-                  Logs
-                </button>
-              </div>
-
-              {activeTab === "details" ? (
-                <article className="card">
-                  <div className="ticket-fields">
-                    <section className="ticket-section">
-                      <span className="field-label">Epic</span>
-                      {epicTicket && readString(epicTicket, "url") ? (
-                        <a href={readString(epicTicket, "url")} target="_blank" rel="noreferrer">
-                          {readString(epicTicket, "title") || "(no title)"}
-                        </a>
-                      ) : (
-                        <span className="meta">No epic ticket</span>
-                      )}
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Parent Ticket</span>
-                      {parentTicket && readString(parentTicket, "url") ? (
-                        <a href={readString(parentTicket, "url")} target="_blank" rel="noreferrer">
-                          {readString(parentTicket, "title") || "(no title)"}
-                        </a>
-                      ) : (
-                        <span className="meta">No parent ticket</span>
-                      )}
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Description</span>
-                      <MarkdownView
-                        content={ticketDescription}
-                        emptyText="No description."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Acceptance Criteria</span>
-                      <MarkdownView
-                        content={acceptanceCriteria}
-                        emptyText="No acceptance criteria."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Priority</span>
-                      <span>{priority || "-"}</span>
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Last Error</span>
-                      <MarkdownView
-                        content={details?.state.last_error ?? ""}
-                        emptyText="No error recorded."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Next Steps</span>
-                      <MarkdownView
-                        content={details?.next_steps ?? ""}
-                        emptyText="No next steps available."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-                  </div>
-                </article>
-              ) : null}
-
-              {activeTab === "proposal" ? (
-                <>
-                  {(() => {
-                    const feedbackAction = selectedSummary.status === "waiting"
-                      ? (details?.available_actions ?? []).find((a) => a.type === "provide_feedback")
-                      : undefined;
-                    return feedbackAction ? (
-                      <form
-                        className="feedback-form"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (!feedbackMessage.trim()) {
-                            return;
-                          }
-                          void queueAction(() =>
-                            applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, feedbackAction.label, feedbackMessage)
-                          ).then(() => setFeedbackMessage(""));
-                        }}
-                      >
-                        <input
-                          value={feedbackMessage}
-                          onChange={(e) => setFeedbackMessage(e.target.value)}
-                          placeholder={`Send feedback (${feedbackAction.label})`}
-                        />
-                        <button type="submit">{feedbackAction.label}</button>
-                      </form>
+              <article className="card">
+                <div className="ticket-fields">
+                  <section className="ticket-section">
+                    <span className="field-label">Epic</span>
+                    {epicTicket && readString(epicTicket, "url") ? (
+                      <a href={readString(epicTicket, "url")} target="_blank" rel="noreferrer">
+                        {readString(epicTicket, "title") || "(no title)"}
+                      </a>
                     ) : (
-                      <p className="meta">Feedback is available when the workflow is waiting for input.</p>
-                    );
-                  })()}
-                  <article className="card">
-                    <h4>Proposal</h4>
+                      <span className="meta">No epic ticket</span>
+                    )}
+                  </section>
+
+                  <section className="ticket-section">
+                    <span className="field-label">Parent Ticket</span>
+                    {parentTicket && readString(parentTicket, "url") ? (
+                      <a href={readString(parentTicket, "url")} target="_blank" rel="noreferrer">
+                        {readString(parentTicket, "title") || "(no title)"}
+                      </a>
+                    ) : (
+                      <span className="meta">No parent ticket</span>
+                    )}
+                  </section>
+
+                  <section className="ticket-section">
+                    <span className="field-label">Description</span>
                     <MarkdownView
-                      content={proposal}
-                      emptyText="No proposal available."
+                      content={ticketDescription}
+                      emptyText="No description."
                       githubBlobBase={details?.github_blob_base}
                       repoPath={details?.repo_path}
                       worktreePath={details?.state.worktree_path}
                     />
-                  </article>
-                </>
-              ) : null}
+                  </section>
 
-              {activeTab === "logs" ? (
-                <article className="card">
-                  <h4>Logs</h4>
-                  <MarkdownView
-                    content={logText}
-                    emptyText="No logs available."
-                    githubBlobBase={details?.github_blob_base}
-                    repoPath={details?.repo_path}
-                    worktreePath={details?.state.worktree_path}
-                  />
-                </article>
-              ) : null}
+                  <section className="ticket-section">
+                    <span className="field-label">Acceptance Criteria</span>
+                    <MarkdownView
+                      content={acceptanceCriteria}
+                      emptyText="No acceptance criteria."
+                      githubBlobBase={details?.github_blob_base}
+                      repoPath={details?.repo_path}
+                      worktreePath={details?.state.worktree_path}
+                    />
+                  </section>
+
+                  <section className="ticket-section">
+                    <span className="field-label">Priority</span>
+                    <span>{priority || "-"}</span>
+                  </section>
+
+                  <section className="ticket-section">
+                    <span className="field-label">Last Error</span>
+                    <MarkdownView
+                      content={details?.state.last_error ?? ""}
+                      emptyText="No error recorded."
+                      githubBlobBase={details?.github_blob_base}
+                      repoPath={details?.repo_path}
+                      worktreePath={details?.state.worktree_path}
+                    />
+                  </section>
+
+                  <section className="ticket-section">
+                    <span className="field-label">Next Steps</span>
+                    <MarkdownView
+                      content={details?.next_steps ?? ""}
+                      emptyText="No next steps available."
+                      githubBlobBase={details?.github_blob_base}
+                      repoPath={details?.repo_path}
+                      worktreePath={details?.state.worktree_path}
+                    />
+                  </section>
+                </div>
+              </article>
+
+              <article className="card">
+                <span className="field-label">Timeline</span>
+                <StateTimeline runs={stateRuns} selectedRunId={selectedRunId} onSelectRun={setSelectedRunId} />
+                {feedbackAction ? (
+                  <form
+                    className="feedback-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (!feedbackMessage.trim()) {
+                        return;
+                      }
+                      void queueAction(() =>
+                        applyAction(
+                          selectedSummary.repo_path,
+                          selectedSummary.ticket_number,
+                          feedbackAction.label,
+                          feedbackMessage
+                        )
+                      ).then(() => setFeedbackMessage(""));
+                    }}
+                  >
+                    <input
+                      value={feedbackMessage}
+                      onChange={(event) => setFeedbackMessage(event.target.value)}
+                      placeholder={`Send feedback (${feedbackAction.label})`}
+                    />
+                    <button type="submit">{feedbackAction.label}</button>
+                  </form>
+                ) : null}
+                {selectedRun ? (
+                  <div className="timeline-content">
+                    <div className="timeline-content-header">
+                      <h4>{runDisplayLabel(selectedRun, stateRuns)}</h4>
+                      <span className="meta">{new Date(selectedRun.started_at).toLocaleString()}</span>
+                    </div>
+                    <p className="meta artifact-path">{selectedRun.artifact_ref || selectedRun.log_ref || "No artifact path available."}</p>
+                    {artifactLoading ? <p className="meta">Loading artifact...</p> : null}
+                    <MarkdownView
+                      content={selectedArtifactContent}
+                      emptyText="No run artifact available."
+                      githubBlobBase={details?.github_blob_base}
+                      repoPath={details?.repo_path}
+                      worktreePath={details?.state.worktree_path}
+                    />
+                  </div>
+                ) : (
+                  <p className="meta">No workflow runs available yet.</p>
+                )}
+              </article>
             </>
           ) : (
             <p>Select a ticket to continue.</p>
@@ -673,6 +779,25 @@ export function App() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {showLogsModal ? (
+        executionLogsLoading ? (
+          <div className="modal-backdrop" onClick={() => setShowLogsModal(false)}>
+            <div className="modal" onClick={(event) => event.stopPropagation()}>
+              <h3>Execution Logs</h3>
+              <p className="meta">Loading logs...</p>
+            </div>
+          </div>
+        ) : (
+          <ExecutionLogsModal
+            logs={executionLogs}
+            onClose={() => setShowLogsModal(false)}
+            githubBlobBase={details?.github_blob_base}
+            repoPath={details?.repo_path}
+            worktreePath={details?.state.worktree_path}
+          />
+        )
       ) : null}
     </div>
   );

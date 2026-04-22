@@ -19,12 +19,23 @@ export interface TicketState {
   ticket_number: string;
   flow_status: FlowStatus;
   current_state: string;
+  current_run_id?: string;
   branch_name: string;
   worktree_path: string;
   last_error?: string;
   pr_url?: string;
+  state_history?: StateRun[];
   created_at: string;
   updated_at: string;
+}
+
+export interface StateRun {
+  id: string;
+  state_name: string;
+  state_display_name?: string;
+  started_at: string;
+  artifact_ref?: string;
+  log_ref?: string;
 }
 
 export interface ActionInfo {
@@ -49,6 +60,15 @@ export interface EventItem {
   title: string;
   timestamp: string;
   body: string;
+}
+
+export interface ExecutionLog {
+  run_id: string;
+  state: string;
+  state_display_name?: string;
+  timestamp: string;
+  path: string;
+  content: string;
 }
 
 export interface Job {
