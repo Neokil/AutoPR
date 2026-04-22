@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"ai-ticket-worker/internal/config"
 	ticketdomain "ai-ticket-worker/internal/domain/ticket"
@@ -269,6 +270,8 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 		WorkDir:    st.WorktreePath,
 		RuntimeDir: runtimeDir,
 	})
+	rawLogPath := st.ArtifactPath(fmt.Sprintf("%s_%s.log", time.Now().UTC().Format("20060102_150405"), stateCfg.Name))
+	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644)
 	if err != nil {
 		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
 		return o.failState(st, err)

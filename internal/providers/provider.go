@@ -12,6 +12,7 @@ type ExecuteRequest struct {
 
 type ExecuteResult struct {
 	RawOutput string
+	Stderr    string
 }
 
 type AIProvider interface {

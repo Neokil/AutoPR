@@ -16,20 +16,20 @@ type PromptCommandRunner struct {
 	args         []string
 }
 
-func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, error) {
+func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, string, error) {
 	if err := writePromptArtifacts(runtimeDir, phase, prompt, "", ""); err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	res, err := shell.Run(ctx, worktreePath, nil, prompt, r.command, r.args...)
 	_ = writePromptArtifacts(runtimeDir, phase, prompt, res.Stdout, res.Stderr)
 	if err != nil {
-		return "", fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, err)
+		return res.Stdout, res.Stderr, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, err)
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
-		return "", fmt.Errorf("provider %s phase %s returned empty output", r.providerName, phase)
+		return "", res.Stderr, fmt.Errorf("provider %s phase %s returned empty output", r.providerName, phase)
 	}
-	return res.Stdout, nil
+	return res.Stdout, res.Stderr, nil
 }
 
 func writePromptArtifacts(runtimeDir, phase, prompt, stdout, stderr string) error {

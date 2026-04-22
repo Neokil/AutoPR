@@ -44,9 +44,9 @@ func (p *CLIProvider) Execute(ctx context.Context, req ExecuteRequest) (ExecuteR
 		return ExecuteResult{}, fmt.Errorf("read prompt %s: %w", req.PromptPath, err)
 	}
 	phase := strings.TrimSuffix(filepath.Base(req.PromptPath), ".md")
-	out, err := p.runner.Run(ctx, req.WorkDir, req.RuntimeDir, phase, string(content))
+	stdout, stderr, err := p.runner.Run(ctx, req.WorkDir, req.RuntimeDir, phase, string(content))
 	if err != nil {
-		return ExecuteResult{}, err
+		return ExecuteResult{RawOutput: stdout, Stderr: stderr}, err
 	}
-	return ExecuteResult{RawOutput: out}, nil
+	return ExecuteResult{RawOutput: stdout, Stderr: stderr}, nil
 }

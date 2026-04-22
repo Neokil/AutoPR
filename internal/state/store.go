@@ -44,6 +44,10 @@ func (s *Store) TicketDir(ticketNumber string) string {
 	return filepath.Join(s.StateRoot, ticketNumber)
 }
 
+func (s *Store) worktreePath(ticketNumber string) string {
+	return filepath.Join(s.StateRoot, "worktrees", ticketNumber)
+}
+
 func (s *Store) EnsureTicketDir(ticketNumber string) (string, error) {
 	dir := s.TicketDir(ticketNumber)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -57,11 +61,20 @@ func (s *Store) EnsureTicketDir(ticketNumber string) (string, error) {
 }
 
 func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
-	path := filepath.Join(s.TicketDir(ticketNumber), StateFileName)
-	data, err := os.ReadFile(path)
+	// Prefer the worktree location when it exists.
+	wtStatePath := filepath.Join(s.worktreePath(ticketNumber), ".auto-pr", StateFileName)
+	if data, err := os.ReadFile(wtStatePath); err == nil {
+		return parseStateJSON(ticketNumber, data)
+	}
+	// Fall back to the pre-worktree location.
+	data, err := os.ReadFile(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
 	if err != nil {
 		return ticket.State{}, err
 	}
+	return parseStateJSON(ticketNumber, data)
+}
+
+func parseStateJSON(ticketNumber string, data []byte) (ticket.State, error) {
 	if isV2StateJSON(data) {
 		return ticket.State{}, fmt.Errorf("ticket %s has a v2 state file; v3 flows must be started fresh (cleanup and re-run)", ticketNumber)
 	}
@@ -90,17 +103,31 @@ func isV2StateJSON(data []byte) bool {
 }
 
 func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
-	dir, err := s.EnsureTicketDir(ticketNumber)
-	if err != nil {
-		return err
-	}
 	st.Touch()
-	path := filepath.Join(dir, StateFileName)
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode state: %w", err)
 	}
-	return os.WriteFile(path, data, 0o644)
+
+	if st.WorktreePath != "" {
+		// Once the worktree exists, state lives inside it.
+		autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
+		if err := os.MkdirAll(autoPRDir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644); err != nil {
+			return err
+		}
+		// Remove the pre-worktree copy so there is only one source of truth.
+		_ = os.Remove(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
+		return nil
+	}
+
+	dir, err := s.EnsureTicketDir(ticketNumber)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644)
 }
 
 func (s *Store) SaveTicket(ticketNumber string, t ticket.Ticket) (string, error) {
@@ -148,20 +175,44 @@ func (s *Store) Paths(ticketNumber string) ports.TicketPaths {
 }
 
 func (s *Store) ListTicketDirs() ([]string, error) {
+	seen := map[string]struct{}{}
+	var out []string
+
+	// Tickets with state still in the pre-worktree location.
 	entries, err := os.ReadDir(s.StateRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []string{}, nil
-		}
+	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
-	out := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() || e.Name() == "worktrees" {
 			continue
 		}
-		out = append(out, e.Name())
+		if _, err := os.Stat(filepath.Join(s.StateRoot, e.Name(), StateFileName)); err == nil {
+			seen[e.Name()] = struct{}{}
+			out = append(out, e.Name())
+		}
 	}
+
+	// Tickets whose state has moved into the worktree.
+	worktreesDir := filepath.Join(s.StateRoot, "worktrees")
+	wtEntries, err := os.ReadDir(worktreesDir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	for _, e := range wtEntries {
+		if !e.IsDir() {
+			continue
+		}
+		statePath := filepath.Join(worktreesDir, e.Name(), ".auto-pr", StateFileName)
+		if _, err := os.Stat(statePath); err != nil {
+			continue
+		}
+		if _, ok := seen[e.Name()]; !ok {
+			seen[e.Name()] = struct{}{}
+			out = append(out, e.Name())
+		}
+	}
+
 	return out, nil
 }
 

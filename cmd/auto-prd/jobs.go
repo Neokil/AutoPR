@@ -78,6 +78,14 @@ func (s *server) executeJob(job queuedJob) error {
 		err = rt.svc.CleanupTicket(context.Background(), ticket)
 		if err == nil {
 			err = s.meta.DeleteTicket(repoID, ticket)
+			if err == nil {
+				s.broadcast(serverEvent{
+					Type:         "ticket_deleted",
+					RepoID:       repoID,
+					RepoPath:     repoRoot,
+					TicketNumber: ticket,
+				})
+			}
 		}
 	case jobCleanupDone:
 		err = rt.svc.CleanupDone(context.Background())

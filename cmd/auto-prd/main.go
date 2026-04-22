@@ -538,6 +538,9 @@ func parseLogEvents(path string) ([]logEvent, error) {
 func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (string, bool) {
 	switch name {
 	case "state":
+		if st.WorktreePath != "" {
+			return st.ArtifactPath("state.json"), true
+		}
 		return paths.State, true
 	case "ticket":
 		if st.WorktreePath != "" {
