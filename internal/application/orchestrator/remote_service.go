@@ -44,24 +44,6 @@ func (s *RemoteService) ApplyAction(_ context.Context, ticketNumber, actionLabel
 	return err
 }
 
-func (s *RemoteService) Approve(_ context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/approve", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "approve", ticketNumber)
-	return err
-}
-
-func (s *RemoteService) Reject(ticketNumber string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/reject", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "reject", ticketNumber)
-	return err
-}
-
-func (s *RemoteService) Feedback(ticketNumber, message string) error {
-	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/feedback", url.PathEscape(ticketNumber)), api.FeedbackRequest{
-		RepoPath: s.repoPath,
-		Message:  message,
-	}, "feedback", ticketNumber)
-	return err
-}
-
 func (s *RemoteService) Status(ticketNumber string) error {
 	if strings.TrimSpace(ticketNumber) == "" {
 		var out struct {

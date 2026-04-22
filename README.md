@@ -4,7 +4,7 @@
 
 From issue to PR in one loop.
 
-AutoPR runs a ticket workflow around a local daemon, a CLI, and an embedded web UI. It stores ticket state inside each repository, executes your configured coding agent provider, and lets you review, approve, resume, and clean up work without leaving your machine.
+AutoPR runs a config-driven ticket workflow around a local daemon, a CLI, and an embedded web UI. It stores ticket state inside each repository, executes your configured coding agent provider, and lets you review, approve, and clean up work without leaving your machine.
 
 Current validation status:
 
@@ -23,9 +23,9 @@ At a high level, the workflow looks like this:
 
 1. Start the daemon.
 2. Point AutoPR at one or more local repositories.
-3. Run a ticket.
+3. Run a ticket — the daemon creates a worktree, writes context, and executes the first workflow state.
 4. Review progress or artifacts in the CLI or web UI.
-5. Approve, reject, resume, generate the PR, or clean up.
+5. Apply a workflow action (advance the state, provide feedback, etc.) or clean up.
 
 Runtime data is stored in two places:
 
@@ -52,11 +52,10 @@ source ~/.zshrc
 - builds `auto-pr` and `auto-prd`
 - registers shell aliases / PATH wiring
 - creates `~/.auto-pr/config.yaml` if it does not exist
-- creates default prompt templates in `~/.auto-pr/prompts/`
 
 Notes:
 
-- Existing config and prompt files are kept as-is.
+- Existing config files are kept as-is.
 - Service-management targets currently no-op with a message because `launchd` / `systemd` integration is intentionally disabled.
 
 ### 2. Configure your repositories and provider
@@ -89,7 +88,7 @@ Web UI:
 - Open `http://127.0.0.1:8080`
 - Select a repository
 - Add or open a ticket
-- Trigger actions from the UI
+- Use the dynamic action buttons shown while the ticket is waiting
 
 ## Configuration
 
@@ -107,21 +106,40 @@ Default / notable settings:
 - `state_dir_name`: per-repo working directory name, default `.auto-pr`
 - `server_port`: daemon port, default `8080`
 - `server_workers`: number of background workers, default `4`
-- `create_pr`: whether PR creation is enabled
-- `max_fix_attempts`: retry budget for fix loops
 - `base_branch`: optional override for the target branch
-- `check_commands`: commands used for validation
-- `format_commands`: commands used for formatting
-- `lint_commands`: commands used for linting
 
-Prompt templates are stored in:
+## Workflow Config
 
-- `~/.auto-pr/prompts/ticket.md.tmpl`
-- `~/.auto-pr/prompts/investigate.md.tmpl`
-- `~/.auto-pr/prompts/implement.md.tmpl`
-- `~/.auto-pr/prompts/pr.md.tmpl`
+The workflow is driven by a YAML config that defines states, prompts, and actions. AutoPR resolves config using a three-level hierarchy (first match wins):
 
-These are scaffolded automatically and can be edited to tune the agent prompts.
+1. `<repo>/.auto-pr/workflow.yaml`
+2. `~/.auto-pr/workflow.yaml`
+3. Embedded binary default
+
+Example state:
+
+```yaml
+states:
+  - name: investigation
+    prompt: prompts/investigate.md
+    actions:
+      - label: "Provide Feedback"
+        type: provide_feedback
+      - label: "Approve"
+        type: move_to_state
+        target: implementation
+      - label: "Decline"
+        type: move_to_state
+        target: cancelled
+```
+
+Action types:
+
+- `provide_feedback`: collects a message and reruns the current state with that context
+- `move_to_state`: transitions to the named target state (`done`/`cancelled` are terminal)
+- `run_script`: runs commands then dispatches a sub-action based on exit code
+
+Prompt templates follow the same three-level hierarchy. Paths in the `prompt` field are relative to `.auto-pr/` in the repo, global config directory, or embedded defaults.
 
 Server URL override for the CLI:
 
@@ -139,29 +157,16 @@ Main commands:
 auto-pr run <ticket-number> [<ticket-number>...]
 auto-pr wait-for-job <job-id>
 auto-pr status [<ticket-number>]
-auto-pr approve <ticket-number>
-auto-pr feedback <ticket-number> --message "..."
-auto-pr reject <ticket-number>
-auto-pr resume <ticket-number>
-auto-pr pr <ticket-number>
-auto-pr apply-pr-comments <ticket-number>
+auto-pr action <ticket-number> --label "<action-label>" [--message "..."]
 auto-pr cleanup <ticket-number>
 auto-pr cleanup --done
 auto-pr cleanup --all
 ```
 
-Typical CLI flow:
-
-```bash
-cd /path/to/repo
-auto-pr run 12345
-auto-pr status 12345
-auto-pr approve 12345
-auto-pr pr 12345
-```
-
 Notes:
 
+- `auto-pr run` starts (or restarts) a ticket from the beginning of the workflow.
+- `auto-pr action` applies a named workflow action to a waiting ticket. Use `auto-pr status <ticket>` to see available actions and their labels.
 - Mutating commands schedule background jobs and return a job id.
 - `auto-pr wait-for-job <job-id>` blocks until the job finishes.
 - `auto-pr status <ticket-number>` prints next steps when available.
@@ -177,7 +182,7 @@ The UI is best for repository-level visibility and review:
 - browse discovered repositories
 - list tracked tickets across repositories
 - inspect ticket details, proposals, and logs
-- run ticket actions such as approve, reject, resume, PR generation, PR comment application, and cleanup
+- apply workflow actions using dynamic buttons driven by the workflow config
 - follow live progress through server-sent events
 
 The UI depends on the daemon being running and on `repository_directories` being configured correctly.

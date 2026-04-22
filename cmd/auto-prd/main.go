@@ -27,17 +27,11 @@ import (
 )
 
 const (
-	jobRun             = "run"
-	jobResume          = "resume"
-	jobApprove         = "approve"
-	jobReject          = "reject"
-	jobFeedback        = "feedback"
-	jobAction          = "action"
-	jobPR              = "pr"
-	jobApplyPRComments = "apply_pr_comments"
-	jobCleanup         = "cleanup_ticket"
-	jobCleanupDone     = "cleanup_done"
-	jobCleanupAll      = "cleanup_all"
+	jobRun         = "run"
+	jobAction      = "action"
+	jobCleanup     = "cleanup_ticket"
+	jobCleanupDone = "cleanup_done"
+	jobCleanupAll  = "cleanup_all"
 )
 
 type repoRuntime struct {
@@ -119,13 +113,7 @@ func main() {
 	mux.HandleFunc("GET /api/jobs/{id}", s.handleGetJob)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/resume", s.handleResumeTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/action", s.handleActionTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/approve", s.handleApproveTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/reject", s.handleRejectTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/feedback", s.handleFeedbackTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/pr", s.handlePRTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/apply-pr-comments", s.handleApplyPRComments)
 	mux.HandleFunc("POST /api/tickets/{id}/cleanup", s.handleCleanupTicket)
 	mux.HandleFunc("POST /api/cleanup", s.handleCleanupScope)
 	mux.HandleFunc("/", s.handleFrontend)
@@ -151,15 +139,6 @@ func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.enqueueAndRespond(w, jobRun, repoID, repoRoot, ticket, "", "")
-}
-
-func (s *server) handleResumeTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
-	if !ok {
-		return
-	}
-	s.enqueueAndRespond(w, jobResume, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
@@ -213,47 +192,6 @@ func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) handleApproveTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
-	if !ok {
-		return
-	}
-	s.enqueueAndRespond(w, jobApprove, repoID, repoRoot, ticket, "", "")
-}
-
-func (s *server) handleRejectTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
-	if !ok {
-		return
-	}
-	s.enqueueAndRespond(w, jobReject, repoID, repoRoot, ticket, "", "")
-}
-
-func (s *server) handleFeedbackTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	var req api.FeedbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-	if strings.TrimSpace(req.RepoPath) == "" {
-		writeError(w, http.StatusBadRequest, "repo_path is required")
-		return
-	}
-	if strings.TrimSpace(req.Message) == "" {
-		writeError(w, http.StatusBadRequest, "message is required")
-		return
-	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	s.enqueueAndRespond(w, jobFeedback, repoID, repoRoot, ticket, req.Message, "")
-}
-
 func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
 	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
@@ -261,24 +199,6 @@ func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.enqueueAndRespond(w, jobCleanup, repoID, repoRoot, ticket, "", "")
-}
-
-func (s *server) handlePRTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
-	if !ok {
-		return
-	}
-	s.enqueueAndRespond(w, jobPR, repoID, repoRoot, ticket, "", "")
-}
-
-func (s *server) handleApplyPRComments(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
-	if !ok {
-		return
-	}
-	s.enqueueAndRespond(w, jobApplyPRComments, repoID, repoRoot, ticket, "", "")
 }
 
 func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {

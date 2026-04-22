@@ -12,12 +12,6 @@ import (
 type Service interface {
 	StartFlow(ctx context.Context, ticketNumber string) error
 	ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error
-
-	// Legacy wrappers — map to ApplyAction using convention-based label detection.
-	Approve(ctx context.Context, ticketNumber string) error
-	Reject(ticketNumber string) error
-	Feedback(ticketNumber, message string) error
-
 	Status(ticketNumber string) error
 	NextSteps(ticketNumber string) (string, error)
 	CleanupDone(ctx context.Context) error
@@ -39,18 +33,6 @@ func (s *WorkflowService) StartFlow(ctx context.Context, ticketNumber string) er
 
 func (s *WorkflowService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
 	return s.orch.ApplyAction(ctx, ticketNumber, actionLabel, message)
-}
-
-func (s *WorkflowService) Approve(ctx context.Context, ticketNumber string) error {
-	return s.orch.Approve(ctx, ticketNumber)
-}
-
-func (s *WorkflowService) Reject(ticketNumber string) error {
-	return s.orch.Reject(ticketNumber)
-}
-
-func (s *WorkflowService) Feedback(ticketNumber, message string) error {
-	return s.orch.Feedback(ticketNumber, message)
 }
 
 func (s *WorkflowService) Status(ticketNumber string) error {

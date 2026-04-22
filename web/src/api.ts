@@ -90,35 +90,8 @@ export function runTicket(repoPath: string, ticket: string): Promise<AcceptedJob
   return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/run`, { repo_path: repoPath });
 }
 
-export function resumeTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/resume`, { repo_path: repoPath });
-}
-
-export function approveTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/approve`, { repo_path: repoPath });
-}
-
-export function rejectTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/reject`, { repo_path: repoPath });
-}
-
-export function createPR(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/pr`, { repo_path: repoPath });
-}
-
-export function applyPRComments(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/apply-pr-comments`, { repo_path: repoPath });
-}
-
 export function cleanupTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
   return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/cleanup`, { repo_path: repoPath });
-}
-
-export function feedbackTicket(repoPath: string, ticket: string, message: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/feedback`, {
-    repo_path: repoPath,
-    message
-  });
 }
 
 export function applyAction(repoPath: string, ticket: string, label: string, message?: string): Promise<AcceptedJob> {

@@ -64,7 +64,7 @@ func (s *server) executeJob(job queuedJob) error {
 	}
 
 	switch job.record.Action {
-	case jobRun, jobResume:
+	case jobRun:
 		err = rt.svc.StartFlow(context.Background(), ticket)
 		if err == nil {
 			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
@@ -74,23 +74,6 @@ func (s *server) executeJob(job queuedJob) error {
 		if err == nil {
 			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
-	case jobApprove:
-		err = rt.svc.Approve(context.Background(), ticket)
-		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
-		}
-	case jobReject:
-		err = rt.svc.Reject(ticket)
-		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
-		}
-	case jobFeedback:
-		err = rt.svc.Feedback(ticket, job.message)
-		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
-		}
-	case jobPR, jobApplyPRComments:
-		err = fmt.Errorf("action %q is not supported in v3; use the /action endpoint with the appropriate workflow action label", job.record.Action)
 	case jobCleanup:
 		err = rt.svc.CleanupTicket(context.Background(), ticket)
 		if err == nil {

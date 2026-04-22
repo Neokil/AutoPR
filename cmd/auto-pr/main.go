@@ -46,20 +46,6 @@ func main() {
 		statusCmd(svc, os.Args[2:])
 	case "action":
 		actionCmd(ctx, svc, os.Args[2:])
-	case "approve":
-		requireArgs("approve", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.Approve(ctx, ticket))
-	case "feedback":
-		feedbackCmd(svc, os.Args[2:])
-	case "reject":
-		requireArgs("reject", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.Reject(ticket))
-	case "resume":
-		requireArgs("resume", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.StartFlow(ctx, ticket))
 	case "cleanup":
 		cleanupCmd(ctx, svc, os.Args[2:])
 	default:
@@ -102,20 +88,6 @@ func actionCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 		fatalIf(errors.New("action requires --label"))
 	}
 	fatalIf(svc.ApplyAction(ctx, ticket, *label, *message))
-}
-
-func feedbackCmd(svc orchestrator.Service, args []string) {
-	requireArgs("feedback", args, 1)
-	ticket := args[0]
-
-	fs := flag.NewFlagSet("feedback", flag.ExitOnError)
-	message := fs.String("message", "", "feedback message")
-	_ = fs.Parse(args[1:])
-
-	if strings.TrimSpace(*message) == "" {
-		fatalIf(errors.New("feedback requires --message"))
-	}
-	fatalIf(svc.Feedback(ticket, *message))
 }
 
 func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string) {
@@ -176,10 +148,6 @@ Commands:
   auto-pr wait-for-job <job-id>
   auto-pr status [<ticket-number>]
   auto-pr action <ticket-number> --label "<action-label>" [--message "..."]
-  auto-pr approve <ticket-number>
-  auto-pr feedback <ticket-number> --message "..."
-  auto-pr reject <ticket-number>
-  auto-pr resume <ticket-number>
   auto-pr cleanup <ticket-number>
   auto-pr cleanup --done
   auto-pr cleanup --all`)

@@ -154,48 +154,6 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 	return o.dispatchAction(ctx, &st, wf, *action, message)
 }
 
-// Approve applies the first forward (non-terminal move_to_state) action in the current state.
-// Legacy wrapper for backward compatibility with v2 API clients.
-func (o *Orchestrator) Approve(ctx context.Context, ticketNumber string) error {
-	st, wf, err := o.loadStateAndWorkflow(ticketNumber)
-	if err != nil {
-		return err
-	}
-	label, err := firstForwardActionLabel(wf, st.CurrentState)
-	if err != nil {
-		return err
-	}
-	return o.ApplyAction(ctx, ticketNumber, label, "")
-}
-
-// Reject applies the first terminal move_to_state action in the current state.
-// Legacy wrapper for backward compatibility with v2 API clients.
-func (o *Orchestrator) Reject(ticketNumber string) error {
-	st, wf, err := o.loadStateAndWorkflow(ticketNumber)
-	if err != nil {
-		return err
-	}
-	label, err := firstCancelActionLabel(wf, st.CurrentState)
-	if err != nil {
-		return err
-	}
-	return o.ApplyAction(context.Background(), ticketNumber, label, "")
-}
-
-// Feedback applies the first provide_feedback action in the current state with the given message.
-// Legacy wrapper for backward compatibility with v2 API clients.
-func (o *Orchestrator) Feedback(ticketNumber, message string) error {
-	st, wf, err := o.loadStateAndWorkflow(ticketNumber)
-	if err != nil {
-		return err
-	}
-	label, err := firstFeedbackActionLabel(wf, st.CurrentState)
-	if err != nil {
-		return err
-	}
-	return o.ApplyAction(context.Background(), ticketNumber, label, message)
-}
-
 func (o *Orchestrator) Status(ticketNumber string) error {
 	if ticketNumber != "" {
 		return o.printStatus(ticketNumber)
@@ -507,45 +465,6 @@ func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
 		return "Ticket was cancelled."
 	}
 	return ""
-}
-
-func firstForwardActionLabel(wf workflow.WorkflowConfig, stateName string) (string, error) {
-	state, ok := wf.StateByName(stateName)
-	if !ok {
-		return "", fmt.Errorf("state %q not found in workflow", stateName)
-	}
-	for _, a := range state.Actions {
-		if a.Type == workflow.ActionMoveToState && !workflow.IsTerminal(a.Target) {
-			return a.Label, nil
-		}
-	}
-	return "", fmt.Errorf("no forward action found in state %q", stateName)
-}
-
-func firstCancelActionLabel(wf workflow.WorkflowConfig, stateName string) (string, error) {
-	state, ok := wf.StateByName(stateName)
-	if !ok {
-		return "", fmt.Errorf("state %q not found in workflow", stateName)
-	}
-	for _, a := range state.Actions {
-		if a.Type == workflow.ActionMoveToState && workflow.IsTerminal(a.Target) {
-			return a.Label, nil
-		}
-	}
-	return "", fmt.Errorf("no cancel action found in state %q", stateName)
-}
-
-func firstFeedbackActionLabel(wf workflow.WorkflowConfig, stateName string) (string, error) {
-	state, ok := wf.StateByName(stateName)
-	if !ok {
-		return "", fmt.Errorf("state %q not found in workflow", stateName)
-	}
-	for _, a := range state.Actions {
-		if a.Type == workflow.ActionProvideFeedback {
-			return a.Label, nil
-		}
-	}
-	return "", fmt.Errorf("no feedback action found in state %q", stateName)
 }
 
 // EnsureStateIgnored ensures the state directory is listed in .gitignore.
