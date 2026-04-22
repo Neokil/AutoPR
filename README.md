@@ -121,7 +121,9 @@ Example state:
 ```yaml
 states:
   - name: investigation
+    display_name: Investigation
     prompt: prompts/investigate.md
+    primary_artifact: investigation.md
     actions:
       - label: "Provide Feedback"
         type: provide_feedback
@@ -132,6 +134,8 @@ states:
         type: move_to_state
         target: cancelled
 ```
+
+`name` is the stable backend identifier. `display_name` is the label shown in the web timeline. `primary_artifact` is the per-run markdown artifact written for that state under `.auto-pr/runs/<uuid>/artifacts/`.
 
 Action types:
 
@@ -165,7 +169,7 @@ auto-pr cleanup --all
 
 Notes:
 
-- `auto-pr run` starts (or restarts) a ticket from the beginning of the workflow.
+- `auto-pr run` starts the workflow or reruns the current state when a ticket is already `waiting` or `failed`.
 - `auto-pr action` applies a named workflow action to a waiting ticket. Use `auto-pr status <ticket>` to see available actions and their labels.
 - Mutating commands schedule background jobs and return a job id.
 - `auto-pr wait-for-job <job-id>` blocks until the job finishes.
@@ -181,7 +185,8 @@ The UI is best for repository-level visibility and review:
 
 - browse discovered repositories
 - list tracked tickets across repositories
-- inspect ticket details, proposals, and logs
+- inspect ticket details and per-run state artifacts in a workflow timeline
+- open execution logs from the ticket menu and inspect each run chronologically
 - apply workflow actions using dynamic buttons driven by the workflow config
 - follow live progress through server-sent events
 

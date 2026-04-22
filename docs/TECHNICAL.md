@@ -35,7 +35,8 @@ The project uses a layered structure to share logic across CLI, server, and web 
 - `GET /api/tickets` (optional `repo_path`)
 - `GET /api/tickets/{id}?repo_path=/abs/path/to/repo`
 - `GET /api/tickets/{id}/events?repo_path=/abs/path/to/repo`
-- `GET /api/tickets/{id}/artifacts/{name}?repo_path=/abs/path/to/repo`
+- `GET /api/tickets/{id}/artifacts/{name...}?repo_path=/abs/path/to/repo`
+- `GET /api/tickets/{id}/execution-logs?repo_path=/abs/path/to/repo`
 - `GET /api/jobs/{id}`
 - `POST /api/tickets/{id}/run` with `{"repo_path":"..."}`
 - `POST /api/tickets/{id}/action` with `{"repo_path":"...","label":"...","message":"..."}`
@@ -44,7 +45,9 @@ The project uses a layered structure to share logic across CLI, server, and web 
 
 The `GET /api/tickets/{id}` response includes an `available_actions` array when the ticket is
 in the `waiting` flow status. Each entry has `label` and `type` fields drawn from the workflow
-config for the current state.
+config for the current state. The nested `state` object also includes `current_run_id` and a
+`state_history` array of run records so the frontend can render a run timeline and load run-scoped
+artifacts.
 
 ## Flow Status
 
@@ -82,7 +85,8 @@ Workflow is configured via a three-level hierarchy (first match wins):
 2. `~/.auto-pr/workflow.yaml`
 3. Embedded binary default (see `internal/workflow/default_workflow.yaml`)
 
-Each state defines a `prompt` (relative path resolved via the same three-level hierarchy),
+Each state defines a `name`, optional `display_name`, a `prompt` (relative path resolved via the same three-level hierarchy),
+optional `primary_artifact`,
 optional `pre_prompt_commands` / `post_prompt_commands`, and an `actions` list.
 
 Action types:
@@ -144,9 +148,26 @@ Artifacts are written into a git worktree created for each ticket:
 Files inside the worktree under `.auto-pr/`:
 
 - `context.md`: initial ticket context (written once on first run)
-- `<state-name>.prompt.md`: prompt sent to the AI provider for that state
-- `<state-name>.log`: structured log of provider output for that state
-- `ticket.md` / additional files written by the provider
+- `run-context.md`: current run metadata and latest artifact references used by prompts
+- `feedback.md`: feedback text passed into a rerun when a feedback action is used
+- `state.json`: persisted ticket state including run history
+
+Each state execution gets its own run directory:
+
+- `.auto-pr/runs/<run-uuid>/prompt.md`: prompt snapshot for that run
+- `.auto-pr/runs/<run-uuid>/state.log`: structured state log for that run
+- `.auto-pr/runs/<run-uuid>/raw-provider.log`: raw provider stdout/stderr for that run
+- `.auto-pr/runs/<run-uuid>/provider/`: provider runtime scratch space for that run
+- `.auto-pr/runs/<run-uuid>/artifacts/<primary-artifact>`: the main markdown artifact produced for that run
+
+Run records are stored in `state.json` with:
+
+- `id`
+- `state_name`
+- `state_display_name`
+- `started_at`
+- `artifact_ref`
+- `log_ref`
 
 ## Environment Variables
 

@@ -330,6 +330,7 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
+	ensureLegacyStateRun(&st)
 	t, err := rt.store.LoadTicket(ticket)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -385,6 +386,7 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 	st, stErr := rt.store.LoadState(ticket)
 	var logPath string
 	if stErr == nil && st.WorktreePath != "" && st.CurrentState != "" {
+		ensureLegacyStateRun(&st)
 		logPath = currentRunLogPath(st)
 	}
 	events, err := parseLogEvents(logPath)
@@ -427,6 +429,7 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
+	ensureLegacyStateRun(&st)
 	path, ok := artifactPath(st, rt.store.Paths(ticket), name)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown artifact")
@@ -475,6 +478,7 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
+	ensureLegacyStateRun(&st)
 	logs := make([]executionLog, 0, len(st.StateHistory))
 	for _, run := range st.StateHistory {
 		runPath := filepath.ToSlash(filepath.Join("runs", run.ID, "raw-provider.log"))
@@ -638,6 +642,26 @@ func currentRunLogPath(st ticketdomain.State) string {
 		return st.ArtifactPath(st.CurrentState + ".log")
 	}
 	return ""
+}
+
+func ensureLegacyStateRun(st *ticketdomain.State) {
+	if st == nil || len(st.StateHistory) > 0 || st.CurrentState == "" {
+		return
+	}
+	runID := "legacy-" + strings.ReplaceAll(st.CurrentState, "/", "-")
+	if !st.UpdatedAt.IsZero() {
+		runID = fmt.Sprintf("legacy-%s-%d", strings.ReplaceAll(st.CurrentState, "/", "-"), st.UpdatedAt.UTC().Unix())
+	}
+	st.CurrentRunID = runID
+	st.StateHistory = []ticketdomain.StateRun{
+		{
+			ID:               runID,
+			StateName:        st.CurrentState,
+			StateDisplayName: st.CurrentState,
+			StartedAt:        st.UpdatedAt,
+			LogRef:           filepath.ToSlash(filepath.Join("runs", runID, "state.log")),
+		},
+	}
 }
 
 func fatalIf(err error) {
