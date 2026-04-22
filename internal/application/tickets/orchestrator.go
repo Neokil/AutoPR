@@ -3,6 +3,7 @@ package tickets
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -59,7 +60,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	}
 
 	if st.FlowStatus == ticketdomain.FlowStatusDone || st.FlowStatus == ticketdomain.FlowStatusCancelled {
-		fmt.Printf("ticket %s is already %s\n", ticketNumber, st.FlowStatus)
+		log.Printf("[%s] already %s, skipping", ticketNumber, st.FlowStatus)
 		return nil
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
@@ -69,6 +70,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	// Ensure worktree exists.
 	if st.WorktreePath == "" {
 		branchName := fmt.Sprintf("auto-pr/%s", ticketNumber)
+		log.Printf("[%s] creating worktree on branch %s", ticketNumber, branchName)
 		wtPath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, ticketNumber, branchName, o.Cfg.BaseBranch)
 		if err != nil {
 			return fmt.Errorf("create worktree: %w", err)
@@ -112,6 +114,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 		stateCfg = cfg
 	}
 
+	log.Printf("[%s] starting flow, entering state %q", ticketNumber, stateCfg.Name)
 	return o.runState(ctx, &st, stateCfg)
 }
 
@@ -151,6 +154,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 		return fmt.Errorf("action %q not found in state %q (available: %s)", actionLabel, st.CurrentState, strings.Join(labels, ", "))
 	}
 
+	log.Printf("[%s] applying action %q in state %q", ticketNumber, actionLabel, st.CurrentState)
 	return o.dispatchAction(ctx, &st, wf, *action, message)
 }
 
@@ -230,6 +234,7 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 // --- internal helpers ---
 
 func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, stateCfg workflow.StateConfig) error {
+	log.Printf("[%s] running state %q", st.TicketNumber, stateCfg.Name)
 	logPath := st.ArtifactPath(stateCfg.Name + ".log")
 
 	st.CurrentState = stateCfg.Name
@@ -258,6 +263,7 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 		return o.failState(st, err)
 	}
 
+	log.Printf("[%s] executing provider for state %q", st.TicketNumber, stateCfg.Name)
 	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
 		PromptPath: promptPath,
 		WorkDir:    st.WorktreePath,
@@ -277,11 +283,13 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 	// Remove feedback.md so stale feedback is not visible to the next run.
 	_ = os.Remove(st.ArtifactPath("feedback.md"))
 
+	log.Printf("[%s] state %q done, waiting for action", st.TicketNumber, stateCfg.Name)
 	st.FlowStatus = ticketdomain.FlowStatusWaiting
 	return o.Store.SaveState(st.TicketNumber, *st)
 }
 
 func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
+	log.Printf("[%s] state %q failed: %v", st.TicketNumber, st.CurrentState, cause)
 	st.FlowStatus = ticketdomain.FlowStatusFailed
 	st.LastError = cause.Error()
 	_ = o.Store.SaveState(st.TicketNumber, *st)
@@ -306,6 +314,7 @@ func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.Stat
 
 func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string) error {
 	if workflow.IsTerminal(target) {
+		log.Printf("[%s] reached terminal state %q", st.TicketNumber, target)
 		switch target {
 		case "done":
 			st.FlowStatus = ticketdomain.FlowStatusDone
@@ -316,6 +325,7 @@ func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State,
 		}
 		return o.Store.SaveState(st.TicketNumber, *st)
 	}
+	log.Printf("[%s] transitioning to state %q", st.TicketNumber, target)
 	stateCfg, ok := wf.StateByName(target)
 	if !ok {
 		return fmt.Errorf("target state %q not found in workflow", target)
@@ -327,6 +337,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 	if strings.TrimSpace(message) == "" {
 		return fmt.Errorf("feedback message is required")
 	}
+	log.Printf("[%s] applying feedback, rerunning state %q", st.TicketNumber, st.CurrentState)
 	feedbackPath := st.ArtifactPath("feedback.md")
 	if err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644); err != nil {
 		return err
