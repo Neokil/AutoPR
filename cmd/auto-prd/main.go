@@ -331,11 +331,6 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ensureLegacyStateRun(&st)
-	t, err := rt.store.LoadTicket(ticket)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	nextSteps, _ := rt.svc.NextSteps(ticket)
 	githubBlobBase, _ := gitutil.GitHubBlobBase(r.Context(), repoRoot, s.cfg.BaseBranch)
 
@@ -364,9 +359,6 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		State:            st,
 		NextSteps:        nextSteps,
 		AvailableActions: availableActions,
-	}
-	if err == nil {
-		resp.Ticket = t
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -596,11 +588,6 @@ func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (
 			return st.ArtifactPath("state.json"), true
 		}
 		return paths.State, true
-	case "ticket":
-		if st.WorktreePath != "" {
-			return "", false
-		}
-		return paths.Ticket, true
 	case "log":
 		if st.WorktreePath != "" && st.CurrentState != "" {
 			return currentRunLogPath(st), true

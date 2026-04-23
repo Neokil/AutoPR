@@ -46,12 +46,13 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		}
 		return err
 	}
-	t, _ := rt.store.LoadTicket(ticket)
+	ensureLegacyStateRun(&st)
+	title := ticketTitleForDisplay(st)
 	rec := servermeta.TicketRecord{
 		RepoID:       repoID,
 		RepoPath:     repoRoot,
 		TicketNumber: ticket,
-		Title:        strings.TrimSpace(t.Title),
+		Title:        title,
 		Status:       string(st.FlowStatus),
 		LastError:    strings.TrimSpace(st.LastError),
 		UpdatedAt:    st.UpdatedAt.UTC(),
@@ -86,12 +87,12 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 		if err != nil {
 			continue
 		}
-		ticketData, _ := rt.store.LoadTicket(t)
+		ensureLegacyStateRun(&st)
 		records = append(records, servermeta.TicketRecord{
 			RepoID:       repoID,
 			RepoPath:     repoRoot,
 			TicketNumber: t,
-			Title:        strings.TrimSpace(ticketData.Title),
+			Title:        ticketTitleForDisplay(st),
 			Status:       string(st.FlowStatus),
 			LastError:    strings.TrimSpace(st.LastError),
 			UpdatedAt:    st.UpdatedAt.UTC(),
@@ -112,4 +113,52 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 		})
 	}
 	return nil
+}
+
+func ticketTitleForDisplay(st ticketdomain.State) string {
+	artifactRef := latestStateArtifactRef(st, "fetch-ticket-data")
+	if artifactRef == "" {
+		return ""
+	}
+	data, err := os.ReadFile(st.ResolveRef(artifactRef))
+	if err != nil {
+		return ""
+	}
+	return extractMarkdownTitle(string(data))
+}
+
+func latestStateArtifactRef(st ticketdomain.State, stateName string) string {
+	for i := len(st.StateHistory) - 1; i >= 0; i-- {
+		run := st.StateHistory[i]
+		if run.StateName == stateName && strings.TrimSpace(run.ArtifactRef) != "" {
+			return run.ArtifactRef
+		}
+	}
+	return ""
+}
+
+func extractMarkdownTitle(content string) string {
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
+			title := strings.TrimSpace(strings.TrimLeft(line, "#"))
+			if title != "" {
+				return title
+			}
+		}
+		for _, prefix := range []string{"Title:", "**Title:**", "- Title:", "* Title:"} {
+			if strings.HasPrefix(line, prefix) {
+				title := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+				title = strings.Trim(title, "*_` ")
+				if title != "" {
+					return title
+				}
+			}
+		}
+		return strings.Trim(line, "*_` ")
+	}
+	return ""
 }

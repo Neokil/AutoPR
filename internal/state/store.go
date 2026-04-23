@@ -19,7 +19,6 @@ var v2StateValues = map[string]bool{
 
 const (
 	StateFileName         = "state.json"
-	TicketFileName        = "ticket.json"
 	LogFileName           = "log.md"
 	ProposalFileName      = "proposal.md"
 	FinalSolutionFileName = "final_solution.md"
@@ -130,41 +129,11 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 	return os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644)
 }
 
-func (s *Store) SaveTicket(ticketNumber string, t ticket.Ticket) (string, error) {
-	dir, err := s.EnsureTicketDir(ticketNumber)
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, TicketFileName)
-	data, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("encode ticket: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-func (s *Store) LoadTicket(ticketNumber string) (ticket.Ticket, error) {
-	path := filepath.Join(s.TicketDir(ticketNumber), TicketFileName)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ticket.Ticket{}, err
-	}
-	var t ticket.Ticket
-	if err := json.Unmarshal(data, &t); err != nil {
-		return ticket.Ticket{}, fmt.Errorf("parse ticket file: %w", err)
-	}
-	return t, nil
-}
-
 func (s *Store) Paths(ticketNumber string) ports.TicketPaths {
 	dir := s.TicketDir(ticketNumber)
 	return ports.TicketPaths{
 		Dir:         dir,
 		State:       filepath.Join(dir, StateFileName),
-		Ticket:      filepath.Join(dir, TicketFileName),
 		Log:         filepath.Join(dir, LogFileName),
 		Proposal:    filepath.Join(dir, ProposalFileName),
 		Final:       filepath.Join(dir, FinalSolutionFileName),
