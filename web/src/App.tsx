@@ -392,16 +392,16 @@ export function App() {
             jobIndex >= 0
               ? { ...nextJobs[jobIndex], status: (evt.status as Job["status"]) ?? nextJobs[jobIndex].status, error: evt.error }
               : {
-                  id: evt.job_id ?? "",
-                  action: evt.action ?? "",
-                  repo_id: evt.repo_id ?? t.repo_id,
-                  repo_path: evt.repo_path ?? t.repo_path,
-                  ticket_number: evt.ticket_number,
-                  status: (evt.status as Job["status"]) ?? "queued",
-                  scope: evt.scope,
-                  error: evt.error,
-                  created_at: new Date().toISOString()
-                };
+                id: evt.job_id ?? "",
+                action: evt.action ?? "",
+                repo_id: evt.repo_id ?? t.repo_id,
+                repo_path: evt.repo_path ?? t.repo_path,
+                ticket_number: evt.ticket_number,
+                status: (evt.status as Job["status"]) ?? "queued",
+                scope: evt.scope,
+                error: evt.error,
+                created_at: new Date().toISOString()
+              };
           if (jobIndex >= 0) {
             nextJobs[jobIndex] = nextJob;
           } else if (nextJob.id) {
@@ -556,19 +556,19 @@ export function App() {
                   <div className="button-row detail-actions">
                     {selectedSummary.status === "waiting"
                       ? (details?.available_actions ?? [])
-                          .filter((action) => action.type !== "provide_feedback")
-                          .map((action) => (
-                            <button
-                              key={action.label}
-                              onClick={() =>
-                                void queueAction(() =>
-                                  applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, action.label)
-                                )
-                              }
-                            >
-                              {action.label}
-                            </button>
-                          ))
+                        .filter((action) => action.type !== "provide_feedback")
+                        .map((action) => (
+                          <button
+                            key={action.label}
+                            onClick={() =>
+                              void queueAction(() =>
+                                applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, action.label)
+                              )
+                            }
+                          >
+                            {action.label}
+                          </button>
+                        ))
                       : null}
                     {selectedSummary.pr_url ? (
                       <a href={selectedSummary.pr_url} target="_blank" rel="noreferrer">
@@ -585,81 +585,6 @@ export function App() {
                   />
                 </div>
               </div>
-
-              <article className="card">
-                <div className="ticket-fields">
-                  <section className="ticket-section">
-                    <span className="field-label">Epic</span>
-                    {epicTicket && readString(epicTicket, "url") ? (
-                      <a href={readString(epicTicket, "url")} target="_blank" rel="noreferrer">
-                        {readString(epicTicket, "title") || "(no title)"}
-                      </a>
-                    ) : (
-                      <span className="meta">No epic ticket</span>
-                    )}
-                  </section>
-
-                  <section className="ticket-section">
-                    <span className="field-label">Parent Ticket</span>
-                    {parentTicket && readString(parentTicket, "url") ? (
-                      <a href={readString(parentTicket, "url")} target="_blank" rel="noreferrer">
-                        {readString(parentTicket, "title") || "(no title)"}
-                      </a>
-                    ) : (
-                      <span className="meta">No parent ticket</span>
-                    )}
-                  </section>
-
-                  <section className="ticket-section">
-                    <span className="field-label">Description</span>
-                    <MarkdownView
-                      content={ticketDescription}
-                      emptyText="No description."
-                      githubBlobBase={details?.github_blob_base}
-                      repoPath={details?.repo_path}
-                      worktreePath={details?.state.worktree_path}
-                    />
-                  </section>
-
-                  <section className="ticket-section">
-                    <span className="field-label">Acceptance Criteria</span>
-                    <MarkdownView
-                      content={acceptanceCriteria}
-                      emptyText="No acceptance criteria."
-                      githubBlobBase={details?.github_blob_base}
-                      repoPath={details?.repo_path}
-                      worktreePath={details?.state.worktree_path}
-                    />
-                  </section>
-
-                  <section className="ticket-section">
-                    <span className="field-label">Priority</span>
-                    <span>{priority || "-"}</span>
-                  </section>
-
-                  <section className="ticket-section">
-                    <span className="field-label">Last Error</span>
-                    <MarkdownView
-                      content={details?.state.last_error ?? ""}
-                      emptyText="No error recorded."
-                      githubBlobBase={details?.github_blob_base}
-                      repoPath={details?.repo_path}
-                      worktreePath={details?.state.worktree_path}
-                    />
-                  </section>
-
-                  <section className="ticket-section">
-                    <span className="field-label">Next Steps</span>
-                    <MarkdownView
-                      content={details?.next_steps ?? ""}
-                      emptyText="No next steps available."
-                      githubBlobBase={details?.github_blob_base}
-                      repoPath={details?.repo_path}
-                      worktreePath={details?.state.worktree_path}
-                    />
-                  </section>
-                </div>
-              </article>
 
               <article className="card">
                 <span className="field-label">Timeline</span>
