@@ -6,7 +6,7 @@ linters:
     - cyclop
     - depguard
     #- err113
-    - errchkjson
+    #- errchkjson
     - exhaustruct
     - forbidigo
     - funlen

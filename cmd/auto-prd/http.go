@@ -99,9 +99,14 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("json marshal: %v", err), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(data)
 }
 
 type statusRecorder struct {
