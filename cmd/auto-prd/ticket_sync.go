@@ -114,7 +114,7 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 }
 
 func ticketTitleForDisplay(st ticketdomain.State) string {
-	artifactRef := latestStateArtifactRef(st, "fetch-ticket-data")
+	artifactRef := st.LatestArtifactRef("fetch-ticket-data")
 	if artifactRef == "" {
 		return ""
 	}
@@ -125,15 +125,6 @@ func ticketTitleForDisplay(st ticketdomain.State) string {
 	return extractMarkdownTitle(string(data))
 }
 
-func latestStateArtifactRef(st ticketdomain.State, stateName string) string {
-	for i := len(st.StateHistory) - 1; i >= 0; i-- {
-		run := st.StateHistory[i]
-		if run.StateName == stateName && strings.TrimSpace(run.ArtifactRef) != "" {
-			return run.ArtifactRef
-		}
-	}
-	return ""
-}
 
 func extractMarkdownTitle(content string) string {
 	for _, rawLine := range strings.Split(content, "\n") {

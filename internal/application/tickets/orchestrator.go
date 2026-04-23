@@ -328,7 +328,7 @@ func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
 }
 
 func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
-	logPath := currentRunLogPath(*st)
+	logPath := st.CurrentRunLogPath()
 	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
 
 	switch action.Type {
@@ -381,7 +381,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 }
 
 func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig) error {
-	logPath := currentRunLogPath(*st)
+	logPath := st.CurrentRunLogPath()
 
 	var out strings.Builder
 	var scriptErr error
@@ -470,18 +470,6 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 	return nil
 }
 
-func (o *Orchestrator) loadStateAndWorkflow(ticketNumber string) (ticketdomain.State, workflow.WorkflowConfig, error) {
-	st, err := o.Store.LoadState(ticketNumber)
-	if err != nil {
-		return ticketdomain.State{}, workflow.WorkflowConfig{}, err
-	}
-	wf, err := workflow.Load(o.RepoRoot)
-	if err != nil {
-		return ticketdomain.State{}, workflow.WorkflowConfig{}, fmt.Errorf("load workflow: %w", err)
-	}
-	return st, wf, nil
-}
-
 func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
 	switch st.FlowStatus {
 	case ticketdomain.FlowStatusPending:
@@ -546,25 +534,6 @@ func startStateRun(st *ticketdomain.State, stateCfg workflow.StateConfig) (ticke
 	return run, nil
 }
 
-func currentRunLogPath(st ticketdomain.State) string {
-	for _, run := range st.StateHistory {
-		if run.ID == st.CurrentRunID && run.LogRef != "" {
-			return st.ResolveRef(run.LogRef)
-		}
-	}
-	return ""
-}
-
-func latestArtifactRef(st ticketdomain.State, stateName string) string {
-	for i := len(st.StateHistory) - 1; i >= 0; i-- {
-		run := st.StateHistory[i]
-		if run.StateName == stateName && run.ArtifactRef != "" {
-			return run.ArtifactRef
-		}
-	}
-	return ""
-}
-
 func (o *Orchestrator) prepareRunContext(st ticketdomain.State, stateCfg workflow.StateConfig, run ticketdomain.StateRun) error {
 	runDir := st.RunPath(run.ID)
 	if err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755); err != nil {
@@ -594,7 +563,7 @@ func (o *Orchestrator) prepareRunContext(st ticketdomain.State, stateCfg workflo
 			continue
 		}
 		seen[stateName] = true
-		if ref := latestArtifactRef(st, stateName); ref != "" {
+		if ref := st.LatestArtifactRef(stateName); ref != "" {
 			fmt.Fprintf(&b, "- %s: %s\n", stateName, filepath.ToSlash(filepath.Join(".auto-pr", ref)))
 		}
 	}

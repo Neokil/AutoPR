@@ -62,12 +62,6 @@ export interface TicketDetails {
   available_actions: ActionInfo[];
 }
 
-export interface EventItem {
-  title: string;
-  timestamp: string;
-  body: string;
-}
-
 export interface ExecutionLog {
   run_id: string;
   state: string;

@@ -398,7 +398,7 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 	st, stErr := rt.store.LoadState(ticket)
 	var logPath string
 	if stErr == nil && st.WorktreePath != "" && st.CurrentState != "" {
-		logPath = currentRunLogPath(st)
+		logPath = st.CurrentRunLogPath()
 	}
 	events, err := parseLogEvents(logPath)
 	if err != nil {
@@ -612,12 +612,8 @@ func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (
 		return paths.State, true
 	case "log":
 		if st.WorktreePath != "" && st.CurrentState != "" {
-			return currentRunLogPath(st), true
+			return st.CurrentRunLogPath(), true
 		}
-		return "", false
-	case "proposal", "investigation":
-		return "", false
-	case "final", "implementation":
 		return "", false
 	default:
 		return "", false
@@ -637,15 +633,6 @@ func resolveArtifactRef(st ticketdomain.State, name string) (string, bool) {
 		return "", false
 	}
 	return st.ResolveRef(filepath.ToSlash(clean)), true
-}
-
-func currentRunLogPath(st ticketdomain.State) string {
-	for _, run := range st.StateHistory {
-		if run.ID == st.CurrentRunID && run.LogRef != "" {
-			return st.ResolveRef(run.LogRef)
-		}
-	}
-	return ""
 }
 
 func fatalIf(err error) {

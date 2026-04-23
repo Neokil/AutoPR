@@ -89,3 +89,22 @@ func (s State) RunPath(runID string, parts ...string) string {
 func (s State) ResolveRef(ref string) string {
 	return filepath.Join(s.WorktreePath, ".auto-pr", ref)
 }
+
+func (s State) CurrentRunLogPath() string {
+	for _, run := range s.StateHistory {
+		if run.ID == s.CurrentRunID && run.LogRef != "" {
+			return s.ResolveRef(run.LogRef)
+		}
+	}
+	return ""
+}
+
+func (s State) LatestArtifactRef(stateName string) string {
+	for i := len(s.StateHistory) - 1; i >= 0; i-- {
+		run := s.StateHistory[i]
+		if run.StateName == stateName && run.ArtifactRef != "" {
+			return run.ArtifactRef
+		}
+	}
+	return ""
+}

@@ -4,6 +4,7 @@ import type { ExecutionLog } from "./types";
 
 type Props = {
   logs: ExecutionLog[];
+  loading?: boolean;
   onClose: () => void;
   githubBlobBase?: string;
   repoPath?: string;
@@ -14,7 +15,7 @@ function logLabel(log: ExecutionLog): string {
   return log.state_display_name || log.state;
 }
 
-export function ExecutionLogsModal({ logs, onClose, githubBlobBase, repoPath, worktreePath }: Props) {
+export function ExecutionLogsModal({ logs, loading, onClose, githubBlobBase, repoPath, worktreePath }: Props) {
   const [expandedRunIds, setExpandedRunIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export function ExecutionLogsModal({ logs, onClose, githubBlobBase, repoPath, wo
             Close
           </button>
         </div>
-        {logs.length === 0 ? <p className="meta">No execution logs available yet.</p> : null}
+        {loading ? <p className="meta">Loading logs...</p> : logs.length === 0 ? <p className="meta">No execution logs available yet.</p> : null}
         <div className="logs-list">
           {logs.map((log) => {
             const expanded = expandedRunIds.includes(log.run_id);

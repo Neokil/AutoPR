@@ -26,19 +26,11 @@ export function pendingTicketKey(repoPath: string, ticketNumber: string): string
 export function knownRepoPaths(repositoryOptions: string[], tickets: TicketSummary[]): string[] {
   const seen = new Set<string>();
   const paths: string[] = [];
-  for (const path of repositoryOptions) {
-    if (seen.has(path)) {
-      continue;
+  for (const path of [...repositoryOptions, ...tickets.map((t) => t.repo_path)]) {
+    if (!seen.has(path)) {
+      seen.add(path);
+      paths.push(path);
     }
-    seen.add(path);
-    paths.push(path);
-  }
-  for (const ticket of tickets) {
-    if (seen.has(ticket.repo_path)) {
-      continue;
-    }
-    seen.add(ticket.repo_path);
-    paths.push(ticket.repo_path);
   }
   return paths;
 }

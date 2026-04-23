@@ -34,7 +34,7 @@ func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, rt *repoR
 		body = fmt.Sprintf("Action: %s\n\n%s", job.record.Action, msg)
 	}
 	if st.WorktreePath != "" && st.CurrentState != "" {
-		logPath := currentRunLogPath(st)
+		logPath := st.CurrentRunLogPath()
 		_ = markdown.AppendSection(logPath, "Job Failed", body)
 	}
 

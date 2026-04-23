@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/executionlogsmodal.tsx","./src/markdownview.tsx","./src/statetimeline.tsx","./src/ticketlist.tsx","./src/ticketmenu.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts"],"version":"5.9.3"}
+{"root":["./src/addticketdialog.tsx","./src/app.tsx","./src/executionlogsmodal.tsx","./src/markdownview.tsx","./src/statetimeline.tsx","./src/ticketdetailpanel.tsx","./src/ticketlist.tsx","./src/ticketmenu.tsx","./src/api.ts","./src/main.tsx","./src/tickets.ts","./src/types.ts","./src/vite-env.d.ts"],"version":"5.9.3"}

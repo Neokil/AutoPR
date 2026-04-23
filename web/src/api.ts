@@ -1,4 +1,4 @@
-import type { AcceptedJob, EventItem, ExecutionLog, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { AcceptedJob, ExecutionLog, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -31,13 +31,6 @@ export async function getTicket(repoPath: string, ticket: string): Promise<Ticke
   return requestJSON<TicketDetails>(
     `/api/tickets/${encodeURIComponent(ticket)}?repo_path=${encodeURIComponent(repoPath)}`
   );
-}
-
-export async function getEvents(repoPath: string, ticket: string): Promise<EventItem[]> {
-  const data = await requestJSON<{ events: EventItem[] }>(
-    `/api/tickets/${encodeURIComponent(ticket)}/events?repo_path=${encodeURIComponent(repoPath)}`
-  );
-  return data.events ?? [];
 }
 
 export async function getArtifact(repoPath: string, ticket: string, name: string): Promise<string> {

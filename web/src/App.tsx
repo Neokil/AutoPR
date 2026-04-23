@@ -498,22 +498,14 @@ export function App() {
       ) : null}
 
       {showLogsModal ? (
-        executionLogsLoading ? (
-          <div className="modal-backdrop" onClick={() => setShowLogsModal(false)}>
-            <div className="modal" onClick={(event) => event.stopPropagation()}>
-              <h3>Execution Logs</h3>
-              <p className="meta">Loading logs...</p>
-            </div>
-          </div>
-        ) : (
-          <ExecutionLogsModal
-            logs={executionLogs}
-            onClose={() => setShowLogsModal(false)}
-            githubBlobBase={details?.github_blob_base}
-            repoPath={details?.repo_path}
-            worktreePath={details?.state.worktree_path}
-          />
-        )
+        <ExecutionLogsModal
+          logs={executionLogs}
+          loading={executionLogsLoading}
+          onClose={() => setShowLogsModal(false)}
+          githubBlobBase={details?.github_blob_base}
+          repoPath={details?.repo_path}
+          worktreePath={details?.state.worktree_path}
+        />
       ) : null}
     </div>
   );
