@@ -59,7 +59,7 @@ func (s *server) isPullRequestOpen(repoPath, prURL string) (bool, error) {
 	return state == "open", nil
 }
 
-func parseGitHubPRURL(prURL string) (owner, repo string, number int, err error) {
+func parseGitHubPRURL(prURL string) (string, string, int, error) {
 	m := githubPRURLPattern.FindStringSubmatch(strings.TrimSpace(prURL))
 	if len(m) != 4 {
 		return "", "", 0, fmt.Errorf("unsupported PR URL format: %s", prURL)

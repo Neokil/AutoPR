@@ -127,7 +127,7 @@ func ticketTitleForDisplay(st ticketdomain.State) string {
 
 
 func extractMarkdownTitle(content string) string {
-	for _, rawLine := range strings.Split(content, "\n") {
+	for rawLine := range strings.SplitSeq(content, "\n") {
 		line := strings.TrimSpace(rawLine)
 		if line == "" {
 			continue
@@ -139,8 +139,8 @@ func extractMarkdownTitle(content string) string {
 			}
 		}
 		for _, prefix := range []string{"Title:", "**Title:**", "- Title:", "* Title:"} {
-			if strings.HasPrefix(line, prefix) {
-				title := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			if rest, ok := strings.CutPrefix(line, prefix); ok {
+				title := strings.TrimSpace(rest)
 				title = strings.Trim(title, "*_` ")
 				if title != "" {
 					return title

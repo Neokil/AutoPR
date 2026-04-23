@@ -11,13 +11,16 @@ import (
 
 func Ensure(ctx context.Context, repoRoot, stateDirName, ticketNumber, branchName, baseBranch string) (string, error) {
 	path := gitutil.WorktreePath(repoRoot, stateDirName, ticketNumber)
-	if _, err := os.Stat(path); err == nil {
+	_, err := os.Stat(path)
+	if err == nil {
 		return path, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	err = os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
 		return "", fmt.Errorf("prepare worktree parent: %w", err)
 	}
-	if err := gitutil.WorktreeAdd(ctx, repoRoot, branchName, path, baseBranch); err != nil {
+	err = gitutil.WorktreeAdd(ctx, repoRoot, branchName, path, baseBranch)
+	if err != nil {
 		return "", fmt.Errorf("create worktree: %w", err)
 	}
 	return path, nil

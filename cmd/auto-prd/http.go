@@ -28,8 +28,8 @@ type ticketDetails struct {
 	RepoPath         string              `json:"repo_path"`
 	TicketNumber     string              `json:"ticket_number"`
 	GitHubBlobBase   string              `json:"github_blob_base,omitempty"`
-	State            interface{}         `json:"state"`
-	Ticket           interface{}         `json:"ticket,omitempty"`
+	State            any         `json:"state"`
+	Ticket           any         `json:"ticket,omitempty"`
 	NextSteps        string              `json:"next_steps,omitempty"`
 	WorkflowStates   []workflowStateInfo `json:"workflow_states,omitempty"`
 	AvailableActions []actionInfo        `json:"available_actions"`
@@ -98,7 +98,7 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, api.ErrorResponse{Error: msg})
 }
 
-func writeJSON(w http.ResponseWriter, code int, v interface{}) {
+func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
@@ -106,6 +106,7 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 
 type statusRecorder struct {
 	http.ResponseWriter
+
 	status int
 }
 

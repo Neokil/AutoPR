@@ -34,58 +34,19 @@ func (s *Store) TicketDir(ticketNumber string) string {
 	return filepath.Join(s.StateRoot, ticketNumber)
 }
 
-func (s *Store) worktreePath(ticketNumber string) string {
-	return filepath.Join(s.StateRoot, "worktrees", ticketNumber)
-}
-
-func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
-	dir := s.TicketDir(ticketNumber)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("create ticket runtime dir: %w", err)
-	}
-	return dir, nil
-}
-
 func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 	// Prefer the worktree location when it exists.
 	wtStatePath := filepath.Join(s.worktreePath(ticketNumber), ".auto-pr", StateFileName)
-	if data, err := os.ReadFile(wtStatePath); err == nil {
+	data, err := os.ReadFile(wtStatePath)
+	if err == nil {
 		return parseStateJSON(ticketNumber, data)
 	}
 	// Fall back to the pre-worktree location.
-	data, err := os.ReadFile(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
+	data, err = os.ReadFile(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
 	if err != nil {
 		return ticket.State{}, err
 	}
 	return parseStateJSON(ticketNumber, data)
-}
-
-func parseStateJSON(ticketNumber string, data []byte) (ticket.State, error) {
-	if isV2StateJSON(data) {
-		return ticket.State{}, fmt.Errorf("ticket %s has a v2 state file; v3 flows must be started fresh (cleanup and re-run)", ticketNumber)
-	}
-	var st ticket.State
-	if err := json.Unmarshal(data, &st); err != nil {
-		return ticket.State{}, fmt.Errorf("parse state file: %w", err)
-	}
-	return st, nil
-}
-
-func isV2StateJSON(data []byte) bool {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return false
-	}
-	rawStatus, hasStatus := raw["status"]
-	_, hasFlowStatus := raw["flow_status"]
-	if !hasStatus || hasFlowStatus {
-		return false
-	}
-	var statusStr string
-	if err := json.Unmarshal(rawStatus, &statusStr); err != nil {
-		return false
-	}
-	return v2StateValues[statusStr]
 }
 
 func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
@@ -98,10 +59,12 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 	if st.WorktreePath != "" {
 		// Once the worktree exists, state lives inside it.
 		autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
-		if err := os.MkdirAll(autoPRDir, 0o755); err != nil {
+		err = os.MkdirAll(autoPRDir, 0o755)
+		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644); err != nil {
+		err = os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644)
+		if err != nil {
 			return err
 		}
 		// Remove the pre-worktree copy so there is only one source of truth.
@@ -129,7 +92,8 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 		if !e.IsDir() || e.Name() == "worktrees" {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(s.StateRoot, e.Name(), StateFileName)); err == nil {
+		_, statErr := os.Stat(filepath.Join(s.StateRoot, e.Name(), StateFileName))
+		if statErr == nil {
 			seen[e.Name()] = struct{}{}
 			out = append(out, e.Name())
 		}
@@ -146,7 +110,8 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 			continue
 		}
 		statePath := filepath.Join(worktreesDir, e.Name(), ".auto-pr", StateFileName)
-		if _, err := os.Stat(statePath); err != nil {
+		_, statErr := os.Stat(statePath)
+		if statErr != nil {
 			continue
 		}
 		if _, ok := seen[e.Name()]; !ok {
@@ -160,4 +125,47 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 
 func (s *Store) RemoveTicketDir(ticketNumber string) error {
 	return os.RemoveAll(s.TicketDir(ticketNumber))
+}
+
+func (s *Store) worktreePath(ticketNumber string) string {
+	return filepath.Join(s.StateRoot, "worktrees", ticketNumber)
+}
+
+func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
+	dir := s.TicketDir(ticketNumber)
+	err := os.MkdirAll(dir, 0o755)
+	if err != nil {
+		return "", fmt.Errorf("create ticket runtime dir: %w", err)
+	}
+	return dir, nil
+}
+
+func parseStateJSON(ticketNumber string, data []byte) (ticket.State, error) {
+	if isV2StateJSON(data) {
+		return ticket.State{}, fmt.Errorf("ticket %s has a v2 state file; v3 flows must be started fresh (cleanup and re-run)", ticketNumber)
+	}
+	var st ticket.State
+	err := json.Unmarshal(data, &st)
+	if err != nil {
+		return ticket.State{}, fmt.Errorf("parse state file: %w", err)
+	}
+	return st, nil
+}
+
+func isV2StateJSON(data []byte) bool {
+	var raw map[string]json.RawMessage
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		return false
+	}
+	rawStatus, hasStatus := raw["status"]
+	_, hasFlowStatus := raw["flow_status"]
+	if !hasStatus || hasFlowStatus {
+		return false
+	}
+	var statusStr string
+	if err := json.Unmarshal(rawStatus, &statusStr); err != nil {
+		return false
+	}
+	return v2StateValues[statusStr]
 }

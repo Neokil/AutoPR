@@ -126,9 +126,9 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	fatalIf(svc.CleanupTicket(ctx, rest[0]))
 }
 
-func requireArgs(cmd string, args []string, min int) {
-	if len(args) < min {
-		fatalIf(fmt.Errorf("usage: auto-pr %s ...", cmd))
+func requireArgs(cmd string, args []string, minArgs int) {
+	if len(args) < minArgs {
+		fatalIf(fmt.Errorf("usage: auto-pr %s", cmd))
 	}
 }
 

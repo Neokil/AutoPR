@@ -17,7 +17,8 @@ type PromptCommandRunner struct {
 }
 
 func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, string, error) {
-	if err := writePromptArtifacts(runtimeDir, phase, prompt, "", ""); err != nil {
+	err := writePromptArtifacts(runtimeDir, phase, prompt, "", "")
+	if err != nil {
 		return "", "", err
 	}
 
@@ -33,10 +34,11 @@ func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir,
 }
 
 func writePromptArtifacts(runtimeDir, phase, prompt, stdout, stderr string) error {
-	inputPath := filepath.Join(runtimeDir, fmt.Sprintf("%s-input.md", phase))
-	outputPath := filepath.Join(runtimeDir, fmt.Sprintf("%s-output.md", phase))
-	stderrPath := filepath.Join(runtimeDir, fmt.Sprintf("%s-stderr.log", phase))
-	if err := os.WriteFile(inputPath, []byte(prompt), 0o644); err != nil {
+	inputPath := filepath.Join(runtimeDir, phase+"-input.md")
+	outputPath := filepath.Join(runtimeDir, phase+"-output.md")
+	stderrPath := filepath.Join(runtimeDir, phase+"-stderr.log")
+	err := os.WriteFile(inputPath, []byte(prompt), 0o644)
+	if err != nil {
 		return err
 	}
 	_ = os.WriteFile(outputPath, []byte(stdout), 0o644)

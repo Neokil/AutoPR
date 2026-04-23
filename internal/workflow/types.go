@@ -1,6 +1,9 @@
 package workflow
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type ActionType string
 
@@ -52,7 +55,7 @@ func (c WorkflowConfig) Validate() error {
 	}
 	for _, state := range c.States {
 		if state.Name == "" {
-			return fmt.Errorf("state has empty name")
+			return errors.New("state has empty name")
 		}
 		if state.Prompt == "" {
 			return fmt.Errorf("state %q has empty prompt", state.Name)
@@ -76,48 +79,48 @@ func validateHandler(a ActionConfig, stateNames map[string]bool) error {
 
 func validateActionNode(a ActionConfig, stateNames map[string]bool, requireLabel bool) error {
 	if requireLabel && a.Label == "" {
-		return fmt.Errorf("action has empty label")
+		return errors.New("action has empty label")
 	}
 	switch a.Type {
 	case ActionProvideFeedback:
 		if len(a.Commands) > 0 {
-			return fmt.Errorf("provide_feedback must not have commands")
+			return errors.New("provide_feedback must not have commands")
 		}
 		if a.OnSuccess != nil || a.OnFailure != nil || a.Always != nil {
-			return fmt.Errorf("provide_feedback must not have script handlers")
+			return errors.New("provide_feedback must not have script handlers")
 		}
 		if a.Target != "" {
-			return fmt.Errorf("provide_feedback must not have a target")
+			return errors.New("provide_feedback must not have a target")
 		}
 	case ActionMoveToState:
 		if a.Target == "" {
-			return fmt.Errorf("move_to_state requires a target")
+			return errors.New("move_to_state requires a target")
 		}
 		if !stateNames[a.Target] && !terminalStateNames[a.Target] {
 			return fmt.Errorf("target %q is not a defined state or known terminal name (done, cancelled, failed)", a.Target)
 		}
 		if len(a.Commands) > 0 {
-			return fmt.Errorf("move_to_state must not have commands")
+			return errors.New("move_to_state must not have commands")
 		}
 		if a.OnSuccess != nil || a.OnFailure != nil || a.Always != nil {
-			return fmt.Errorf("move_to_state must not have script handlers")
+			return errors.New("move_to_state must not have script handlers")
 		}
 	case ActionRunScript:
 		if len(a.Commands) == 0 {
-			return fmt.Errorf("run_script requires at least one command")
+			return errors.New("run_script requires at least one command")
 		}
 		if a.OnSuccess == nil && a.OnFailure == nil && a.Always == nil {
-			return fmt.Errorf("run_script requires at least one handler (on_success, on_failure, or always)")
+			return errors.New("run_script requires at least one handler (on_success, on_failure, or always)")
 		}
 		if a.Target != "" {
-			return fmt.Errorf("run_script must not have a target; use on_success/on_failure/always instead")
+			return errors.New("run_script must not have a target; use on_success/on_failure/always instead")
 		}
 		for _, sub := range []*ActionConfig{a.OnSuccess, a.OnFailure, a.Always} {
 			if sub == nil {
 				continue
 			}
 			if sub.Type == ActionRunScript {
-				return fmt.Errorf("nested run_script is not supported; add multiple commands to the commands list")
+				return errors.New("nested run_script is not supported; add multiple commands to the commands list")
 			}
 			if err := validateHandler(*sub, stateNames); err != nil {
 				return fmt.Errorf("handler: %w", err)

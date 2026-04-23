@@ -76,7 +76,8 @@ func NewStore(path string) (*Store, error) {
 		Tickets: map[string]TicketRecord{},
 		Jobs:    map[string]JobRecord{},
 	}}
-	if err := s.load(); err != nil {
+	err := s.load()
+	if err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -92,7 +93,8 @@ func (s *Store) UpsertRepo(repoPath string) (RepoRecord, error) {
 		UpdatedAt: time.Now().UTC(),
 	}
 	s.data.Repos[id] = rec
-	if err := s.saveLocked(); err != nil {
+	err := s.saveLocked()
+	if err != nil {
 		return RepoRecord{}, err
 	}
 	return rec, nil
@@ -103,7 +105,8 @@ func (s *Store) UpsertTicket(rec TicketRecord) error {
 	defer s.mu.Unlock()
 	rec.UpdatedAt = rec.UpdatedAt.UTC()
 	s.data.Tickets[ticketKey(rec.RepoID, rec.TicketNumber)] = rec
-	if err := s.saveLocked(); err != nil {
+	err := s.saveLocked()
+	if err != nil {
 		return err
 	}
 	return nil

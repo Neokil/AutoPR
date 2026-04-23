@@ -3,6 +3,7 @@ package tickets
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -126,7 +127,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 		return fmt.Errorf("load workflow: %w", err)
 	}
 	if strings.TrimSpace(target) == "" {
-		return fmt.Errorf("target state is required")
+		return errors.New("target state is required")
 	}
 
 	st, err := o.Store.LoadState(ticketNumber)
@@ -224,7 +225,7 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 
 func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketdomain.State) error {
 	if st.WorktreePath == "" {
-		branchName := fmt.Sprintf("auto-pr/%s", st.TicketNumber)
+		branchName := "auto-pr/" + st.TicketNumber
 		log.Printf("[%s] creating worktree on branch %s", st.TicketNumber, branchName)
 		wtPath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, st.TicketNumber, branchName, o.Cfg.BaseBranch)
 		if err != nil {
@@ -366,7 +367,7 @@ func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State,
 
 func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string) error {
 	if strings.TrimSpace(message) == "" {
-		return fmt.Errorf("feedback message is required")
+		return errors.New("feedback message is required")
 	}
 	log.Printf("[%s] applying feedback, rerunning state %q", st.TicketNumber, st.CurrentState)
 	feedbackPath := st.ArtifactPath("feedback.md")
@@ -429,6 +430,8 @@ func (o *Orchestrator) dispatchSubAction(ctx context.Context, st *ticketdomain.S
 		return o.writeFeedbackAndRerun(ctx, st, wf, message)
 	case workflow.ActionMoveToState:
 		return o.transitionTo(ctx, st, wf, action.Target)
+	case workflow.ActionRunScript:
+		return errors.New("scripts cannot be used as sub-actions")
 	default:
 		return fmt.Errorf("unsupported sub-action type: %s", action.Type)
 	}
@@ -501,7 +504,7 @@ func resolveStateForStart(st ticketdomain.State, wf workflow.WorkflowConfig) (wo
 	if st.CurrentState == "" {
 		first, ok := wf.FirstState()
 		if !ok {
-			return workflow.StateConfig{}, fmt.Errorf("workflow has no states defined")
+			return workflow.StateConfig{}, errors.New("workflow has no states defined")
 		}
 		return first, nil
 	}
@@ -602,7 +605,7 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if len(b) > 0 && !strings.HasSuffix(string(b), "\n") {
 		if _, err := f.WriteString("\n"); err != nil {
 			return err

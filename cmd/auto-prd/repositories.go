@@ -18,7 +18,7 @@ import (
 	"github.com/Neokil/AutoPR/internal/state"
 )
 
-func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (repoRoot, repoID string, rt *repoRuntime, ok bool) {
+func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (string, string, *repoRuntime, bool) {
 	var req api.RepoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
@@ -28,7 +28,7 @@ func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (re
 		writeError(w, http.StatusBadRequest, "repo_path is required")
 		return "", "", nil, false
 	}
-	root, id, runtime, err := s.runtimeForRepoPath(req.RepoPath)
+	root, id, runtime, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return "", "", nil, false
@@ -36,8 +36,8 @@ func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (re
 	return root, id, runtime, true
 }
 
-func (s *server) runtimeForRepoPath(repoPath string) (repoRoot, repoID string, rt *repoRuntime, err error) {
-	repoRoot, err = resolveRepoRoot(repoPath)
+func (s *server) runtimeForRepoPath(ctx context.Context, repoPath string) (string, string, *repoRuntime, error) {
+	repoRoot, err := resolveRepoRoot(ctx, repoPath)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -45,7 +45,7 @@ func (s *server) runtimeForRepoPath(repoPath string) (repoRoot, repoID string, r
 	if err != nil {
 		return "", "", nil, err
 	}
-	rt, err = s.runtimeForRepo(repoRoot)
+	rt, err := s.runtimeForRepo(repoRoot)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -71,7 +71,7 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 	return rt, nil
 }
 
-func resolveRepoRoot(repoPath string) (string, error) {
+func resolveRepoRoot(ctx context.Context, repoPath string) (string, error) {
 	if strings.TrimSpace(repoPath) == "" {
 		return "", errors.New("repo_path is empty")
 	}
@@ -84,7 +84,7 @@ func resolveRepoRoot(repoPath string) (string, error) {
 	if err == nil && !info.IsDir() {
 		dir = filepath.Dir(absPath)
 	}
-	root, err := gitutil.RepoRoot(context.Background(), dir)
+	root, err := gitutil.RepoRoot(ctx, dir)
 	if err != nil {
 		return "", fmt.Errorf("repo_path is not a git repository: %w", err)
 	}
@@ -141,9 +141,9 @@ func expandHome(path string) string {
 		}
 		return path
 	}
-	if strings.HasPrefix(path, "~/") {
+	if rest, ok := strings.CutPrefix(path, "~/"); ok {
 		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, strings.TrimPrefix(path, "~/"))
+			return filepath.Join(home, rest)
 		}
 	}
 	return path

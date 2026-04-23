@@ -100,7 +100,7 @@ func main() {
 		webFS:       distFS,
 		subscribers: map[string]chan serverEvent{},
 	}
-	for i := 0; i < cfg.ServerWorkers; i++ {
+	for range cfg.ServerWorkers {
 		go s.workerLoop()
 	}
 	go s.prMonitorLoop()
@@ -131,11 +131,16 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", port)
 	fmt.Printf("AutoPR daemon listening on %s\n", addr)
-	fatalIf(http.ListenAndServe(addr, loggingMiddleware(mux)))
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           loggingMiddleware(mux),
+		ReadHeaderTimeout: 30 * time.Second,
+	}
+	fatalIf(srv.ListenAndServe())
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"status":       "ok",
 		"server_state": "~/.auto-pr/server/state.json",
 		"queue_depth":  len(s.jobs),
@@ -167,7 +172,7 @@ func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "label is required")
 		return
 	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -193,7 +198,7 @@ func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "target is required")
 		return
 	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -226,7 +231,7 @@ func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_path is required")
 		return
 	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -255,12 +260,12 @@ func (s *server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
 	if repoPath == "" {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"tickets": s.meta.ListTickets(""),
 		})
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -269,7 +274,7 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"repo_id":   repoID,
 		"repo_path": repoRoot,
 		"tickets":   s.meta.ListTickets(repoID),
@@ -308,7 +313,7 @@ func (s *server) handleListRepositories(w http.ResponseWriter, r *http.Request) 
 		paths = append(paths, abs)
 	}
 	sort.Strings(paths)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"repositories": paths,
 	})
 }
@@ -320,7 +325,7 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -389,7 +394,7 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -402,7 +407,7 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 	events, err := parseLogEvents(logPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"repo_id":       repoID,
 				"repo_path":     repoRoot,
 				"ticket_number": ticket,
@@ -413,7 +418,7 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"repo_id":       repoID,
 		"repo_path":     repoRoot,
 		"ticket_number": ticket,
@@ -429,7 +434,7 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -477,7 +482,7 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(repoPath)
+	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -507,7 +512,7 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(logs, func(i, j int) bool {
 		return logs[i].Timestamp < logs[j].Timestamp
 	})
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"repo_id":       repoID,
 		"repo_path":     repoRoot,
 		"ticket_number": ticket,

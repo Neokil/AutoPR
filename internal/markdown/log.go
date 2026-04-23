@@ -12,7 +12,7 @@ func AppendSection(path, title, body string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = fmt.Fprintf(f, "\n## %s (%s)\n\n%s\n", title, time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(body))
 	return err
 }

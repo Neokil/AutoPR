@@ -122,7 +122,7 @@ func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (stri
 }
 
 func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
-	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "rev-list", "--count", fmt.Sprintf("%s..HEAD", baseRef))
+	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "rev-list", "--count", baseRef+"..HEAD")
 	if err != nil {
 		return 0, err
 	}
@@ -142,9 +142,10 @@ func HasChanges(ctx context.Context, repoRoot string) (bool, error) {
 }
 
 func CommitAll(ctx context.Context, repoRoot, message string) error {
-	if _, err := shell.Run(ctx, repoRoot, nil, "", "git", "add", "-A"); err != nil {
+	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "add", "-A")
+	if err != nil {
 		return err
 	}
-	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "commit", "-m", message)
+	_, err = shell.Run(ctx, repoRoot, nil, "", "git", "commit", "-m", message)
 	return err
 }

@@ -77,7 +77,8 @@ func Load() (Config, error) {
 			return cfg, fmt.Errorf("read config file %s: %w", path, err)
 		}
 	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	err = yaml.Unmarshal(data, &cfg)
+	if err != nil {
 		return cfg, fmt.Errorf("parse config yaml: %w", err)
 	}
 	if cfg.Provider == "" {
