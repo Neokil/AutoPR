@@ -79,15 +79,6 @@ export function TicketMenu({
           >
             Rerun
           </button>
-          <button
-            type="button"
-            className="menu-item"
-            role="menuitem"
-            disabled={cleanupDisabled}
-            onClick={() => handleSelect(onCleanup)}
-          >
-            Cleanup
-          </button>
           <div className="menu-item menu-submenu-root" role="none">
             <button type="button" className="menu-item submenu-trigger" role="menuitem" disabled={moveDisabled}>
               Move To State
@@ -109,6 +100,15 @@ export function TicketMenu({
               </div>
             ) : null}
           </div>
+          <button
+            type="button"
+            className="menu-item"
+            role="menuitem"
+            disabled={cleanupDisabled}
+            onClick={() => handleSelect(onCleanup)}
+          >
+            Cleanup
+          </button>
         </div>
       ) : null}
     </div>

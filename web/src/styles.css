@@ -387,17 +387,19 @@ button:disabled {
 .submenu-trigger {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .submenu-trigger::after {
-  content: "›";
+  content: "‹";
   color: var(--muted);
+  order: -1;
 }
 
 .menu-submenu {
   position: absolute;
-  left: calc(100% + 6px);
+  right: calc(100% + 6px);
   top: -6px;
   min-width: 180px;
   border: 1px solid var(--panel-border);
