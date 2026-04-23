@@ -20,42 +20,6 @@ type Service interface {
 	CleanupTicket(ctx context.Context, ticketNumber string) error
 }
 
-type WorkflowService struct {
-	orch *tickets.Orchestrator
-}
-
-func NewWorkflowService(cfg config.Config, repoRoot string, provider providers.AIProvider) *WorkflowService {
-	return &WorkflowService{orch: tickets.New(cfg, repoRoot, provider)}
-}
-
-func (s *WorkflowService) StartFlow(ctx context.Context, ticketNumber string) error {
-	return s.orch.StartFlow(ctx, ticketNumber)
-}
-
-func (s *WorkflowService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
-	return s.orch.ApplyAction(ctx, ticketNumber, actionLabel, message)
-}
-
-func (s *WorkflowService) MoveToState(ctx context.Context, ticketNumber, target string) error {
-	return s.orch.MoveToState(ctx, ticketNumber, target)
-}
-
-func (s *WorkflowService) Status(ticketNumber string) error {
-	return s.orch.Status(ticketNumber)
-}
-
-func (s *WorkflowService) NextSteps(ticketNumber string) (string, error) {
-	return s.orch.NextSteps(ticketNumber)
-}
-
-func (s *WorkflowService) CleanupDone(ctx context.Context) error {
-	return s.orch.CleanupDone(ctx)
-}
-
-func (s *WorkflowService) CleanupAll(ctx context.Context) error {
-	return s.orch.CleanupAll(ctx)
-}
-
-func (s *WorkflowService) CleanupTicket(ctx context.Context, ticketNumber string) error {
-	return s.orch.CleanupTicket(ctx, ticketNumber)
+func NewWorkflowService(cfg config.Config, repoRoot string, provider providers.AIProvider) Service {
+	return tickets.New(cfg, repoRoot, provider)
 }

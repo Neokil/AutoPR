@@ -20,7 +20,6 @@ import (
 	"ai-ticket-worker/internal/contracts/api"
 	ticketdomain "ai-ticket-worker/internal/domain/ticket"
 	"ai-ticket-worker/internal/gitutil"
-	"ai-ticket-worker/internal/ports"
 	"ai-ticket-worker/internal/servermeta"
 	"ai-ticket-worker/internal/state"
 	"ai-ticket-worker/internal/workflow"
@@ -440,7 +439,7 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
-	path, ok := artifactPath(st, rt.store.Paths(ticket), name)
+	path, ok := artifactPath(st, filepath.Join(rt.store.TicketDir(ticket), state.StateFileName), name)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown artifact")
 		return
@@ -600,7 +599,7 @@ func parseLogEvents(path string) ([]logEvent, error) {
 	return events, nil
 }
 
-func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (string, bool) {
+func artifactPath(st ticketdomain.State, stateFilePath, name string) (string, bool) {
 	if path, ok := resolveArtifactRef(st, name); ok {
 		return path, true
 	}
@@ -609,7 +608,7 @@ func artifactPath(st ticketdomain.State, paths ports.TicketPaths, name string) (
 		if st.WorktreePath != "" {
 			return st.ArtifactPath("state.json"), true
 		}
-		return paths.State, true
+		return stateFilePath, true
 	case "log":
 		if st.WorktreePath != "" && st.CurrentState != "" {
 			return st.CurrentRunLogPath(), true

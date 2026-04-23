@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"ai-ticket-worker/internal/domain/ticket"
-	"ai-ticket-worker/internal/ports"
 )
 
 // v2StateValues are the old WorkflowState constants that indicate a pre-v3 state file.
@@ -17,15 +16,7 @@ var v2StateValues = map[string]bool{
 	"pr_ready": true,
 }
 
-const (
-	StateFileName         = "state.json"
-	LogFileName           = "log.md"
-	ProposalFileName      = "proposal.md"
-	FinalSolutionFileName = "final_solution.md"
-	PRFileName            = "pr.md"
-	ChecksFileName        = "checks.log"
-	ProviderDirName       = "provider"
-)
+const StateFileName = "state.json"
 
 type Store struct {
 	RepoRoot  string
@@ -47,14 +38,10 @@ func (s *Store) worktreePath(ticketNumber string) string {
 	return filepath.Join(s.StateRoot, "worktrees", ticketNumber)
 }
 
-func (s *Store) EnsureTicketDir(ticketNumber string) (string, error) {
+func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 	dir := s.TicketDir(ticketNumber)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("create ticket runtime dir: %w", err)
-	}
-	providerDir := filepath.Join(dir, ProviderDirName)
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		return "", fmt.Errorf("create provider dir: %w", err)
 	}
 	return dir, nil
 }
@@ -122,25 +109,11 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 		return nil
 	}
 
-	dir, err := s.EnsureTicketDir(ticketNumber)
+	dir, err := s.ensureTicketDir(ticketNumber)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644)
-}
-
-func (s *Store) Paths(ticketNumber string) ports.TicketPaths {
-	dir := s.TicketDir(ticketNumber)
-	return ports.TicketPaths{
-		Dir:         dir,
-		State:       filepath.Join(dir, StateFileName),
-		Log:         filepath.Join(dir, LogFileName),
-		Proposal:    filepath.Join(dir, ProposalFileName),
-		Final:       filepath.Join(dir, FinalSolutionFileName),
-		PR:          filepath.Join(dir, PRFileName),
-		Checks:      filepath.Join(dir, ChecksFileName),
-		ProviderDir: filepath.Join(dir, ProviderDirName),
-	}
 }
 
 func (s *Store) ListTicketDirs() ([]string, error) {
