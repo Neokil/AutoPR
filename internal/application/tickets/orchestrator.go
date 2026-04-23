@@ -67,52 +67,14 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
 		return fmt.Errorf("ticket %s is already running", ticketNumber)
 	}
-
-	// Ensure worktree exists.
-	if st.WorktreePath == "" {
-		branchName := fmt.Sprintf("auto-pr/%s", ticketNumber)
-		log.Printf("[%s] creating worktree on branch %s", ticketNumber, branchName)
-		wtPath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, ticketNumber, branchName, o.Cfg.BaseBranch)
-		if err != nil {
-			return fmt.Errorf("create worktree: %w", err)
-		}
-		st.BranchName = branchName
-		st.WorktreePath = wtPath
-		if err := o.Store.SaveState(ticketNumber, st); err != nil {
-			return err
-		}
-	}
-
-	// Ensure the .auto-pr artifact directory exists inside the worktree.
-	autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
-	if err := os.MkdirAll(autoPRDir, 0o755); err != nil {
-		return fmt.Errorf("create .auto-pr dir: %w", err)
-	}
-
-	// Write context.md once (skip if already present).
-	contextPath := st.ArtifactPath("context.md")
-	if _, statErr := os.Stat(contextPath); os.IsNotExist(statErr) {
-		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
-		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", ticketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
-		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil {
-			return err
-		}
+	if err := o.ensureWorktreeAndContext(ctx, &st); err != nil {
+		return err
 	}
 
 	// Determine which state to run.
-	var stateCfg workflow.StateConfig
-	if st.CurrentState == "" {
-		first, ok := wf.FirstState()
-		if !ok {
-			return fmt.Errorf("workflow has no states defined")
-		}
-		stateCfg = first
-	} else {
-		cfg, ok := wf.StateByName(st.CurrentState)
-		if !ok {
-			return fmt.Errorf("current state %q not found in workflow", st.CurrentState)
-		}
-		stateCfg = cfg
+	stateCfg, err := resolveStateForStart(st, wf)
+	if err != nil {
+		return err
 	}
 
 	log.Printf("[%s] starting flow, entering state %q", ticketNumber, stateCfg.Name)
@@ -545,6 +507,21 @@ func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
 		return "Ticket was cancelled."
 	}
 	return ""
+}
+
+func resolveStateForStart(st ticketdomain.State, wf workflow.WorkflowConfig) (workflow.StateConfig, error) {
+	if st.CurrentState == "" {
+		first, ok := wf.FirstState()
+		if !ok {
+			return workflow.StateConfig{}, fmt.Errorf("workflow has no states defined")
+		}
+		return first, nil
+	}
+	stateCfg, ok := wf.StateByName(st.CurrentState)
+	if !ok {
+		return workflow.StateConfig{}, fmt.Errorf("current state %q not found in workflow", st.CurrentState)
+	}
+	return stateCfg, nil
 }
 
 func startStateRun(st *ticketdomain.State, stateCfg workflow.StateConfig) (ticketdomain.StateRun, error) {

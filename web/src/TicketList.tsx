@@ -1,8 +1,5 @@
 import type { Job, TicketSummary } from "./types";
-
-function ticketKey(t: TicketSummary): string {
-  return `${t.repo_id}::${t.ticket_number}`;
-}
+import { ticketKey } from "./tickets";
 
 function summarizeJobAction(action: string): string {
   switch (action) {

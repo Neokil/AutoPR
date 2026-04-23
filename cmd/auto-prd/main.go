@@ -49,6 +49,13 @@ type queuedJob struct {
 	targetState string // used by jobMoveToState
 }
 
+type enqueueOptions struct {
+	message     string
+	scope       string
+	actionLabel string
+	targetState string
+}
+
 type server struct {
 	cfg      config.Config
 	meta     servermeta.Repository
@@ -143,7 +150,7 @@ func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.enqueueAndRespond(w, jobRun, repoID, repoRoot, ticket, "", "")
+	s.enqueueAndRespond(w, jobRun, repoID, repoRoot, ticket, enqueueOptions{})
 }
 
 func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
@@ -166,35 +173,10 @@ func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	job, jobErr := s.meta.NewJob(jobAction, repoID, repoRoot, ticket, "")
-	if jobErr != nil {
-		writeError(w, http.StatusInternalServerError, jobErr.Error())
-		return
-	}
-	qj := queuedJob{record: job, message: req.Message, actionLabel: req.Label}
-	s.broadcast(serverEvent{
-		Type:         "job",
-		RepoID:       repoID,
-		RepoPath:     repoRoot,
-		TicketNumber: ticket,
-		JobID:        job.ID,
-		Action:       jobAction,
-		Status:       "queued",
+	s.enqueueAndRespond(w, jobAction, repoID, repoRoot, ticket, enqueueOptions{
+		message:     req.Message,
+		actionLabel: req.Label,
 	})
-	select {
-	case s.jobs <- qj:
-		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
-			Status:       "accepted",
-			JobID:        job.ID,
-			Action:       jobAction,
-			RepoID:       repoID,
-			RepoPath:     repoRoot,
-			TicketNumber: ticket,
-		})
-	default:
-		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
-		writeError(w, http.StatusServiceUnavailable, "job queue is full")
-	}
 }
 
 func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request) {
@@ -217,35 +199,9 @@ func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	job, jobErr := s.meta.NewJob(jobMoveToState, repoID, repoRoot, ticket, "")
-	if jobErr != nil {
-		writeError(w, http.StatusInternalServerError, jobErr.Error())
-		return
-	}
-	qj := queuedJob{record: job, targetState: req.Target}
-	s.broadcast(serverEvent{
-		Type:         "job",
-		RepoID:       repoID,
-		RepoPath:     repoRoot,
-		TicketNumber: ticket,
-		JobID:        job.ID,
-		Action:       jobMoveToState,
-		Status:       "queued",
+	s.enqueueAndRespond(w, jobMoveToState, repoID, repoRoot, ticket, enqueueOptions{
+		targetState: req.Target,
 	})
-	select {
-	case s.jobs <- qj:
-		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
-			Status:       "accepted",
-			JobID:        job.ID,
-			Action:       jobMoveToState,
-			RepoID:       repoID,
-			RepoPath:     repoRoot,
-			TicketNumber: ticket,
-		})
-	default:
-		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
-		writeError(w, http.StatusServiceUnavailable, "job queue is full")
-	}
 }
 
 func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +210,7 @@ func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.enqueueAndRespond(w, jobCleanup, repoID, repoRoot, ticket, "", "")
+	s.enqueueAndRespond(w, jobCleanup, repoID, repoRoot, ticket, enqueueOptions{})
 }
 
 func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
@@ -279,9 +235,9 @@ func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
 
 	switch scope {
 	case "done":
-		s.enqueueAndRespond(w, jobCleanupDone, repoID, repoRoot, "", "", scope)
+		s.enqueueAndRespond(w, jobCleanupDone, repoID, repoRoot, "", enqueueOptions{scope: scope})
 	case "all":
-		s.enqueueAndRespond(w, jobCleanupAll, repoID, repoRoot, "", "", scope)
+		s.enqueueAndRespond(w, jobCleanupAll, repoID, repoRoot, "", enqueueOptions{scope: scope})
 	default:
 		writeError(w, http.StatusBadRequest, "scope must be 'done' or 'all'")
 	}
@@ -560,19 +516,24 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket, message, scope string) {
+func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket string, opts enqueueOptions) {
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
 		if err := s.ensureQueuedTicket(repoID, repoPath, ticket); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
-	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, scope)
+	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, opts.scope)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	qj := queuedJob{record: job, message: message}
+	qj := queuedJob{
+		record:      job,
+		message:     opts.message,
+		actionLabel: opts.actionLabel,
+		targetState: opts.targetState,
+	}
 	s.broadcast(serverEvent{
 		Type:         "job",
 		RepoID:       repoID,
@@ -580,7 +541,7 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 		TicketNumber: ticket,
 		JobID:        job.ID,
 		Action:       action,
-		Scope:        scope,
+		Scope:        opts.scope,
 		Status:       "queued",
 	})
 	select {
@@ -602,7 +563,7 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 			TicketNumber: ticket,
 			JobID:        job.ID,
 			Action:       action,
-			Scope:        scope,
+			Scope:        opts.scope,
 			Status:       "failed",
 			Error:        "job queue is full",
 		})
