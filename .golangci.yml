@@ -13,7 +13,7 @@ linters:
     #- gochecknoglobals
     - gocognit
     #- gosec
-    - interfacebloat
+    #- interfacebloat
     - ireturn
     - lll
     - mnd
