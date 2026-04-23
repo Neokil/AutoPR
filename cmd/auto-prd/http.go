@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -131,6 +132,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		fmt.Printf("%s %s -> %d (%s)\n", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
+		slog.Info("request", "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start).Round(time.Millisecond))
 	})
 }

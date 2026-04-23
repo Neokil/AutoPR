@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -61,7 +62,7 @@ func (s *RemoteService) Status(ticketNumber string) error {
 			return err
 		}
 		for _, t := range out.Tickets {
-			fmt.Printf("ticket %v  status=%v  state=%v  updated=%v\n", t["ticket_number"], t["status"], t["current_state"], t["updated_at"])
+			slog.Info("ticket", "ticket", t["ticket_number"], "status", t["status"], "state", t["current_state"], "updated", t["updated_at"])
 		}
 		return nil
 	}
@@ -74,20 +75,23 @@ func (s *RemoteService) Status(ticketNumber string) error {
 	if err := s.doJSON(context.Background(), http.MethodGet, path, nil, &out); err != nil {
 		return err
 	}
-	fmt.Printf("ticket %s\n", out.TicketNumber)
-	fmt.Printf("  status:   %v\n", out.State["flow_status"])
-	fmt.Printf("  state:    %v\n", out.State["current_state"])
-	fmt.Printf("  branch:   %v\n", out.State["branch_name"])
-	fmt.Printf("  worktree: %v\n", out.State["worktree_path"])
+	attrs := []any{
+		"ticket", out.TicketNumber,
+		"status", out.State["flow_status"],
+		"state", out.State["current_state"],
+		"branch", out.State["branch_name"],
+		"worktree", out.State["worktree_path"],
+	}
 	if v := strings.TrimSpace(fmt.Sprintf("%v", out.State["pr_url"])); v != "" && v != "<nil>" {
-		fmt.Printf("  pr_url:   %s\n", v)
+		attrs = append(attrs, "pr_url", v)
 	}
 	if v := strings.TrimSpace(fmt.Sprintf("%v", out.State["last_error"])); v != "" && v != "<nil>" {
-		fmt.Printf("  error:    %s\n", v)
+		attrs = append(attrs, "error", v)
 	}
 	if out.NextSteps != "" {
-		fmt.Printf("\n%s\n", out.NextSteps)
+		attrs = append(attrs, "next_steps", out.NextSteps)
 	}
+	slog.Info("ticket status", attrs...)
 	return nil
 }
 
@@ -153,9 +157,9 @@ func (s *RemoteService) enqueueOnly(ctx context.Context, method, path string, bo
 		return api.ActionAcceptedResponse{}, ErrMissingJobID
 	}
 	if ticket != "" {
-		fmt.Printf("%s scheduled for ticket %s, job id is %s\n", action, ticket, jobID)
+		slog.Info("action scheduled", "action", action, "ticket", ticket, "job_id", jobID)
 	} else {
-		fmt.Printf("%s scheduled, job id is %s\n", action, jobID)
+		slog.Info("action scheduled", "action", action, "job_id", jobID)
 	}
 	return accepted, nil
 }

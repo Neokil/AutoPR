@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -29,17 +30,17 @@ func (s *server) checkPRStatesOnce() {
 		}
 		open, err := s.isPullRequestOpen(rec.RepoPath, rec.PRURL)
 		if err != nil {
-			fmt.Printf("pr monitor: %s #%s check failed: %v\n", rec.RepoPath, rec.TicketNumber, err)
+			slog.Error("pr monitor check failed", "repo", rec.RepoPath, "ticket", rec.TicketNumber, "err", err)
 			continue
 		}
 		if open {
 			continue
 		}
 		if err := s.autoCleanupTicket(rec); err != nil {
-			fmt.Printf("pr monitor: auto-cleanup failed for %s #%s: %v\n", rec.RepoPath, rec.TicketNumber, err)
+			slog.Error("pr monitor auto-cleanup failed", "repo", rec.RepoPath, "ticket", rec.TicketNumber, "err", err)
 			continue
 		}
-		fmt.Printf("pr monitor: auto-cleaned %s #%s because PR is no longer open\n", rec.RepoPath, rec.TicketNumber)
+		slog.Info("pr monitor auto-cleaned ticket", "repo", rec.RepoPath, "ticket", rec.TicketNumber)
 	}
 }
 

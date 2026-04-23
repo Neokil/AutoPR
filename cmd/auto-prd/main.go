@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -81,14 +82,26 @@ func main() {
 	flag.Parse()
 
 	cfg, err := config.Load()
-	fatalIf(err)
+	if err != nil {
+		slog.Error("load config", "err", err)
+		os.Exit(1)
+	}
 
 	metaPath, err := servermeta.DefaultPath()
-	fatalIf(err)
+	if err != nil {
+		slog.Error("resolve server meta path", "err", err)
+		os.Exit(1)
+	}
 	meta, err := servermeta.NewStore(metaPath)
-	fatalIf(err)
+	if err != nil {
+		slog.Error("open server meta store", "err", err)
+		os.Exit(1)
+	}
 	distFS, err := web.Dist()
-	fatalIf(err)
+	if err != nil {
+		slog.Error("load web assets", "err", err)
+		os.Exit(1)
+	}
 
 	s := &server{
 		cfg:         cfg,
@@ -130,13 +143,16 @@ func main() {
 	mux.HandleFunc("/", s.handleFrontend)
 
 	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("AutoPR daemon listening on %s\n", addr)
+	slog.Info("AutoPR daemon listening", "addr", addr)
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           loggingMiddleware(mux),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
-	fatalIf(srv.ListenAndServe())
+	if err := srv.ListenAndServe(); err != nil {
+		slog.Error("server error", "err", err)
+		os.Exit(1)
+	}
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -637,12 +653,4 @@ func resolveArtifactRef(st ticketdomain.State, name string) (string, bool) {
 		return "", false
 	}
 	return st.ResolveRef(filepath.ToSlash(clean)), true
-}
-
-func fatalIf(err error) {
-	if err == nil {
-		return
-	}
-	fmt.Fprintln(os.Stderr, "error:", err)
-	os.Exit(1)
 }

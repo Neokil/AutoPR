@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,7 +61,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 		return err
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusDone || st.FlowStatus == ticketdomain.FlowStatusCancelled {
-		log.Printf("[%s] already %s, skipping", ticketNumber, st.FlowStatus)
+		slog.Info("skipping ticket", "ticket", ticketNumber, "status", st.FlowStatus)
 		return nil
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
@@ -77,7 +77,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 		return err
 	}
 
-	log.Printf("[%s] starting flow, entering state %q", ticketNumber, stateCfg.Name)
+	slog.Info("starting flow", "ticket", ticketNumber, "state", stateCfg.Name)
 	return o.runState(ctx, &st, stateCfg)
 }
 
@@ -116,7 +116,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 		return fmt.Errorf("action %q in state %q (available: %s): %w", actionLabel, st.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
 	}
 
-	log.Printf("[%s] applying action %q in state %q", ticketNumber, actionLabel, st.CurrentState)
+	slog.Info("applying action", "ticket", ticketNumber, "action", actionLabel, "state", st.CurrentState)
 	return o.dispatchAction(ctx, &st, wf, *action, message)
 }
 
@@ -145,7 +145,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 		return err
 	}
 
-	log.Printf("[%s] force moving to state %q", ticketNumber, target)
+	slog.Info("force moving to state", "ticket", ticketNumber, "target", target)
 	return o.transitionTo(ctx, &st, wf, target)
 }
 
@@ -160,7 +160,7 @@ func (o *Orchestrator) Status(ticketNumber string) error {
 	sort.Strings(tickets)
 	for _, t := range tickets {
 		if err := o.printStatus(t); err != nil {
-			fmt.Fprintf(os.Stderr, "status %s: %v\n", t, err)
+			slog.Error("status failed", "ticket", t, "err", err)
 		}
 	}
 	return nil
@@ -184,7 +184,7 @@ func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) e
 	if err := o.Store.RemoveTicketDir(ticketNumber); err != nil {
 		return err
 	}
-	fmt.Printf("cleaned ticket %s\n", ticketNumber)
+	slog.Info("cleaned ticket", "ticket", ticketNumber)
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 		}
 		if st.FlowStatus == ticketdomain.FlowStatusDone {
 			if err := o.CleanupTicket(ctx, ticket); err != nil {
-				fmt.Fprintf(os.Stderr, "cleanup %s: %v\n", ticket, err)
+				slog.Error("cleanup failed", "ticket", ticket, "err", err)
 			}
 		}
 	}
@@ -216,7 +216,7 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	sort.Strings(tickets)
 	for _, ticket := range tickets {
 		if err := o.CleanupTicket(ctx, ticket); err != nil {
-			fmt.Fprintf(os.Stderr, "cleanup %s: %v\n", ticket, err)
+			slog.Error("cleanup failed", "ticket", ticket, "err", err)
 		}
 	}
 	return nil
@@ -225,7 +225,7 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketdomain.State) error {
 	if st.WorktreePath == "" {
 		branchName := "auto-pr/" + st.TicketNumber
-		log.Printf("[%s] creating worktree on branch %s", st.TicketNumber, branchName)
+		slog.Info("creating worktree", "ticket", st.TicketNumber, "branch", branchName)
 		wtPath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, st.TicketNumber, branchName, o.Cfg.BaseBranch)
 		if err != nil {
 			return fmt.Errorf("create worktree: %w", err)
@@ -256,7 +256,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 // --- internal helpers ---
 
 func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, stateCfg workflow.StateConfig) error {
-	log.Printf("[%s] running state %q", st.TicketNumber, stateCfg.Name)
+	slog.Info("running state", "ticket", st.TicketNumber, "state", stateCfg.Name)
 	run, err := startStateRun(st, stateCfg)
 	if err != nil {
 		return err
@@ -292,7 +292,7 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 		return o.failState(st, err)
 	}
 
-	log.Printf("[%s] executing provider for state %q", st.TicketNumber, stateCfg.Name)
+	slog.Info("executing provider", "ticket", st.TicketNumber, "state", stateCfg.Name)
 	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
 		PromptPath: promptPath,
 		WorkDir:    st.WorktreePath,
@@ -314,13 +314,13 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 	// Remove feedback.md so stale feedback is not visible to the next run.
 	_ = os.Remove(st.ArtifactPath("feedback.md"))
 
-	log.Printf("[%s] state %q done, waiting for action", st.TicketNumber, stateCfg.Name)
+	slog.Info("state done, waiting for action", "ticket", st.TicketNumber, "state", stateCfg.Name)
 	st.FlowStatus = ticketdomain.FlowStatusWaiting
 	return o.Store.SaveState(st.TicketNumber, *st)
 }
 
 func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
-	log.Printf("[%s] state %q failed: %v", st.TicketNumber, st.CurrentState, cause)
+	slog.Error("state failed", "ticket", st.TicketNumber, "state", st.CurrentState, "err", cause)
 	st.FlowStatus = ticketdomain.FlowStatusFailed
 	st.LastError = cause.Error()
 	_ = o.Store.SaveState(st.TicketNumber, *st)
@@ -345,7 +345,7 @@ func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.Stat
 
 func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string) error {
 	if workflow.IsTerminal(target) {
-		log.Printf("[%s] reached terminal state %q", st.TicketNumber, target)
+		slog.Info("reached terminal state", "ticket", st.TicketNumber, "state", target)
 		switch target {
 		case "done":
 			st.FlowStatus = ticketdomain.FlowStatusDone
@@ -356,7 +356,7 @@ func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State,
 		}
 		return o.Store.SaveState(st.TicketNumber, *st)
 	}
-	log.Printf("[%s] transitioning to state %q", st.TicketNumber, target)
+	slog.Info("transitioning to state", "ticket", st.TicketNumber, "target", target)
 	stateCfg, ok := wf.StateByName(target)
 	if !ok {
 		return fmt.Errorf("state %q: %w", target, ErrTargetNotFound)
@@ -368,7 +368,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 	if strings.TrimSpace(message) == "" {
 		return ErrFeedbackRequired
 	}
-	log.Printf("[%s] applying feedback, rerunning state %q", st.TicketNumber, st.CurrentState)
+	slog.Info("applying feedback", "ticket", st.TicketNumber, "state", st.CurrentState)
 	feedbackPath := st.ArtifactPath("feedback.md")
 	if err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644); err != nil {
 		return err
@@ -458,17 +458,20 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("ticket %s\n", ticketNumber)
-	fmt.Printf("  status:   %s\n", st.FlowStatus)
-	fmt.Printf("  state:    %s\n", st.CurrentState)
-	fmt.Printf("  branch:   %s\n", st.BranchName)
-	fmt.Printf("  worktree: %s\n", st.WorktreePath)
+	attrs := []any{
+		"ticket", ticketNumber,
+		"status", st.FlowStatus,
+		"state", st.CurrentState,
+		"branch", st.BranchName,
+		"worktree", st.WorktreePath,
+	}
 	if st.PRURL != "" {
-		fmt.Printf("  pr_url:   %s\n", st.PRURL)
+		attrs = append(attrs, "pr_url", st.PRURL)
 	}
 	if st.LastError != "" {
-		fmt.Printf("  error:    %s\n", st.LastError)
+		attrs = append(attrs, "error", st.LastError)
 	}
+	slog.Info("ticket status", attrs...)
 	return nil
 }
 

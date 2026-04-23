@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -29,10 +30,16 @@ func main() {
 	}
 
 	cwd, err := os.Getwd()
-	fatalIf(err)
+	if err != nil {
+		slog.Error("get working directory", "err", err)
+		os.Exit(1)
+	}
 
 	repoRoot, err := gitutil.RepoRoot(ctx, cwd)
-	fatalIf(err)
+	if err != nil {
+		slog.Error("find repository root", "err", err)
+		os.Exit(1)
+	}
 	serverURL := resolveServerURL()
 	svc := orchestrator.NewRemoteService(serverURL, repoRoot)
 
@@ -56,19 +63,26 @@ func main() {
 func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	requireArgs("run", args, 1)
 	for _, ticket := range args {
-		fatalIf(svc.StartFlow(ctx, ticket))
+		if err := svc.StartFlow(ctx, ticket); err != nil {
+			slog.Error("start flow", "err", err)
+			os.Exit(1)
+		}
 	}
 }
 
 func statusCmd(svc orchestrator.Service, args []string) {
 	if len(args) > 1 {
-		fatalIf(errUsageStatus)
+		slog.Error("invalid usage", "err", errUsageStatus)
+		os.Exit(1)
 	}
 	ticket := ""
 	if len(args) == 1 {
 		ticket = args[0]
 	}
-	fatalIf(svc.Status(ticket))
+	if err := svc.Status(ticket); err != nil {
+		slog.Error("status", "err", err)
+		os.Exit(1)
+	}
 	if ticket != "" {
 		printNextSteps(svc, ticket)
 	}
@@ -84,20 +98,28 @@ func actionCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	_ = fs.Parse(args[1:])
 
 	if strings.TrimSpace(*label) == "" {
-		fatalIf(errActionRequiresLabel)
+		slog.Error("invalid usage", "err", errActionRequiresLabel)
+		os.Exit(1)
 	}
-	fatalIf(svc.ApplyAction(ctx, ticket, *label, *message))
+	if err := svc.ApplyAction(ctx, ticket, *label, *message); err != nil {
+		slog.Error("apply action", "err", err)
+		os.Exit(1)
+	}
 }
 
 func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	requireArgs("wait-for-job", args, 1)
 	remote, ok := svc.(*orchestrator.RemoteService)
 	if !ok {
-		fatalIf(errWaitForJobServerOnly)
+		slog.Error("invalid usage", "err", errWaitForJobServerOnly)
+		os.Exit(1)
 	}
 	job, err := remote.WaitForJob(ctx, args[0])
-	fatalIf(err)
-	fmt.Printf("job %s completed with status %s\n", job.ID, job.Status)
+	if err != nil {
+		slog.Error("wait for job", "err", err)
+		os.Exit(1)
+	}
+	slog.Info("job completed", "job_id", job.ID, "status", job.Status)
 }
 
 func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
@@ -107,40 +129,44 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	_ = fs.Parse(args)
 
 	if *doneOnly && *all {
-		fatalIf(errCleanupFlags)
+		slog.Error("invalid usage", "err", errCleanupFlags)
+		os.Exit(1)
 	}
 	if *doneOnly {
-		fatalIf(svc.CleanupDone(ctx))
+		if err := svc.CleanupDone(ctx); err != nil {
+			slog.Error("cleanup done", "err", err)
+			os.Exit(1)
+		}
 		return
 	}
 	if *all {
-		fatalIf(svc.CleanupAll(ctx))
+		if err := svc.CleanupAll(ctx); err != nil {
+			slog.Error("cleanup all", "err", err)
+			os.Exit(1)
+		}
 		return
 	}
 
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fatalIf(errUsageCleanup)
+		slog.Error("invalid usage", "err", errUsageCleanup)
+		os.Exit(1)
 	}
-	fatalIf(svc.CleanupTicket(ctx, rest[0]))
+	if err := svc.CleanupTicket(ctx, rest[0]); err != nil {
+		slog.Error("cleanup ticket", "err", err)
+		os.Exit(1)
+	}
 }
 
 func requireArgs(cmd string, args []string, minArgs int) {
 	if len(args) < minArgs {
-		fatalIf(fmt.Errorf("auto-pr %s: %w", cmd, errUsage))
+		slog.Error("invalid usage", "cmd", "auto-pr "+cmd, "err", errUsage)
+		os.Exit(1)
 	}
-}
-
-func fatalIf(err error) {
-	if err == nil {
-		return
-	}
-	fmt.Fprintln(os.Stderr, "error:", err)
-	os.Exit(1)
 }
 
 func usage() {
-	fmt.Println(`AutoPR
+	_, _ = fmt.Fprintln(os.Stdout, `AutoPR
 
 Commands:
   auto-pr run <ticket-number> [<ticket-number>...]
@@ -157,6 +183,6 @@ func printNextSteps(svc orchestrator.Service, ticket string) {
 	if err != nil {
 		return
 	}
-	fmt.Println()
-	fmt.Println(msg)
+	_, _ = fmt.Fprintln(os.Stdout)
+	_, _ = fmt.Fprintln(os.Stdout, msg)
 }

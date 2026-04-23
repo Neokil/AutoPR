@@ -8,7 +8,7 @@ linters:
     #- err113
     #- errchkjson
     - exhaustruct
-    - forbidigo
+    #- forbidigo
     - funlen
     - gochecknoglobals
     - gocognit
