@@ -10,12 +10,6 @@ const (
 	ActionRunScript       ActionType = "run_script"
 )
 
-var terminalStateNames = map[string]bool{
-	"done":      true,
-	"cancelled": true,
-	"failed":    true,
-}
-
 type WorkflowConfig struct {
 	States []StateConfig `yaml:"states"`
 }
@@ -93,7 +87,7 @@ func validateActionNode(a ActionConfig, stateNames map[string]bool, requireLabel
 		if a.Target == "" {
 			return ErrMoveToStateRequiresTarget
 		}
-		if !stateNames[a.Target] && !terminalStateNames[a.Target] {
+		if !stateNames[a.Target] && !IsTerminal(a.Target) {
 			return fmt.Errorf("target %q: %w", a.Target, ErrInvalidStateTarget)
 		}
 		if len(a.Commands) > 0 {
@@ -149,7 +143,12 @@ func (c WorkflowConfig) FirstState() (StateConfig, bool) {
 
 // IsTerminal reports whether name is a built-in terminal state name.
 func IsTerminal(name string) bool {
-	return terminalStateNames[name]
+	switch name {
+	case "done", "cancelled", "failed":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s StateConfig) TimelineLabel() string {

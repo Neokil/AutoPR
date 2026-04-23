@@ -9,13 +9,6 @@ import (
 	"github.com/Neokil/AutoPR/internal/domain/ticket"
 )
 
-// v2StateValues are the old WorkflowState constants that indicate a pre-v3 state file.
-var v2StateValues = map[string]bool{
-	"queued": true, "investigating": true, "proposal_ready": true,
-	"waiting_for_human": true, "implementing": true, "validating": true,
-	"pr_ready": true,
-}
-
 const StateFileName = "state.json"
 
 type Store struct {
@@ -167,5 +160,10 @@ func isV2StateJSON(data []byte) bool {
 	if err := json.Unmarshal(rawStatus, &statusStr); err != nil {
 		return false
 	}
-	return v2StateValues[statusStr]
+	v2States := map[string]bool{
+		"queued": true, "investigating": true, "proposal_ready": true,
+		"waiting_for_human": true, "implementing": true, "validating": true,
+		"pr_ready": true,
+	}
+	return v2States[statusStr]
 }

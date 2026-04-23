@@ -11,7 +11,7 @@ import (
 )
 
 // userHomeDir is a variable so tests can override it.
-var userHomeDir = os.UserHomeDir
+var userHomeDir = os.UserHomeDir //nolint:gochecknoglobals
 
 // Load returns a WorkflowConfig using the three-level hierarchy:
 //  1. <repoRoot>/.auto-pr/workflow.yaml
