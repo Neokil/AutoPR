@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-ticket-worker/internal/shell"
+	"github.com/Neokil/AutoPR/internal/shell"
 )
 
 type PromptCommandRunner struct {

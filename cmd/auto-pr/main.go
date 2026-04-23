@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"ai-ticket-worker/internal/application/orchestrator"
-	"ai-ticket-worker/internal/gitutil"
+	"github.com/Neokil/AutoPR/internal/application/orchestrator"
+	"github.com/Neokil/AutoPR/internal/gitutil"
 )
 
 const defaultServerURL = "http://127.0.0.1:8080"

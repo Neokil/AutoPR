@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"ai-ticket-worker/internal/gitutil"
+	"github.com/Neokil/AutoPR/internal/gitutil"
 )
 
 func Ensure(ctx context.Context, repoRoot, stateDirName, ticketNumber, branchName, baseBranch string) (string, error) {

@@ -11,11 +11,11 @@ import (
 	"sort"
 	"strings"
 
-	"ai-ticket-worker/internal/application/orchestrator"
-	"ai-ticket-worker/internal/contracts/api"
-	"ai-ticket-worker/internal/gitutil"
-	"ai-ticket-worker/internal/providers"
-	"ai-ticket-worker/internal/state"
+	"github.com/Neokil/AutoPR/internal/application/orchestrator"
+	"github.com/Neokil/AutoPR/internal/contracts/api"
+	"github.com/Neokil/AutoPR/internal/gitutil"
+	"github.com/Neokil/AutoPR/internal/providers"
+	"github.com/Neokil/AutoPR/internal/state"
 )
 
 func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (repoRoot, repoID string, rt *repoRuntime, ok bool) {

@@ -3,9 +3,9 @@ package orchestrator
 import (
 	"context"
 
-	"ai-ticket-worker/internal/application/tickets"
-	"ai-ticket-worker/internal/config"
-	"ai-ticket-worker/internal/providers"
+	"github.com/Neokil/AutoPR/internal/application/tickets"
+	"github.com/Neokil/AutoPR/internal/config"
+	"github.com/Neokil/AutoPR/internal/providers"
 )
 
 // Service defines application-level orchestrator use-cases shared by clients.

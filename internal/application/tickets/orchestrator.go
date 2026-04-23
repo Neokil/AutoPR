@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"ai-ticket-worker/internal/config"
-	ticketdomain "ai-ticket-worker/internal/domain/ticket"
-	"ai-ticket-worker/internal/gitutil"
-	"ai-ticket-worker/internal/markdown"
-	"ai-ticket-worker/internal/ports"
-	"ai-ticket-worker/internal/providers"
-	"ai-ticket-worker/internal/shell"
-	"ai-ticket-worker/internal/state"
-	"ai-ticket-worker/internal/workflow"
-	"ai-ticket-worker/internal/worktree"
+	"github.com/Neokil/AutoPR/internal/config"
+	ticketdomain "github.com/Neokil/AutoPR/internal/domain/ticket"
+	"github.com/Neokil/AutoPR/internal/gitutil"
+	"github.com/Neokil/AutoPR/internal/markdown"
+	"github.com/Neokil/AutoPR/internal/ports"
+	"github.com/Neokil/AutoPR/internal/providers"
+	"github.com/Neokil/AutoPR/internal/shell"
+	"github.com/Neokil/AutoPR/internal/state"
+	"github.com/Neokil/AutoPR/internal/workflow"
+	"github.com/Neokil/AutoPR/internal/worktree"
 )
 
 type Orchestrator struct {

@@ -1,4 +1,4 @@
-module ai-ticket-worker
+module github.com/Neokil/AutoPR
 
 go 1.23
 

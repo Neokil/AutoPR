@@ -1,6 +1,6 @@
 package ports
 
-import "ai-ticket-worker/internal/domain/ticket"
+import "github.com/Neokil/AutoPR/internal/domain/ticket"
 
 // StateStore abstracts ticket workflow persistence so storage can be swapped.
 type StateStore interface {

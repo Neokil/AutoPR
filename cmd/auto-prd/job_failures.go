@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	ticketdomain "ai-ticket-worker/internal/domain/ticket"
-	"ai-ticket-worker/internal/markdown"
+	ticketdomain "github.com/Neokil/AutoPR/internal/domain/ticket"
+	"github.com/Neokil/AutoPR/internal/markdown"
 )
 
 func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, rt *repoRuntime, job queuedJob, cause error) error {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"ai-ticket-worker/internal/servermeta"
-	"ai-ticket-worker/internal/shell"
+	"github.com/Neokil/AutoPR/internal/servermeta"
+	"github.com/Neokil/AutoPR/internal/shell"
 )
 
 func (s *server) prMonitorLoop() {

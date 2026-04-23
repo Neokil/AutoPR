@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"ai-ticket-worker/internal/servermeta"
+	"github.com/Neokil/AutoPR/internal/servermeta"
 )
 
 func (s *server) workerLoop() {

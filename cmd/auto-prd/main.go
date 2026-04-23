@@ -15,15 +15,15 @@ import (
 	"sync"
 	"time"
 
-	"ai-ticket-worker/internal/application/orchestrator"
-	"ai-ticket-worker/internal/config"
-	"ai-ticket-worker/internal/contracts/api"
-	ticketdomain "ai-ticket-worker/internal/domain/ticket"
-	"ai-ticket-worker/internal/gitutil"
-	"ai-ticket-worker/internal/servermeta"
-	"ai-ticket-worker/internal/state"
-	"ai-ticket-worker/internal/workflow"
-	"ai-ticket-worker/web"
+	"github.com/Neokil/AutoPR/internal/application/orchestrator"
+	"github.com/Neokil/AutoPR/internal/config"
+	"github.com/Neokil/AutoPR/internal/contracts/api"
+	ticketdomain "github.com/Neokil/AutoPR/internal/domain/ticket"
+	"github.com/Neokil/AutoPR/internal/gitutil"
+	"github.com/Neokil/AutoPR/internal/servermeta"
+	"github.com/Neokil/AutoPR/internal/state"
+	"github.com/Neokil/AutoPR/internal/workflow"
+	"github.com/Neokil/AutoPR/web"
 )
 
 const (

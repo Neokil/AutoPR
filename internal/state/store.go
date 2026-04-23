@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"ai-ticket-worker/internal/domain/ticket"
+	"github.com/Neokil/AutoPR/internal/domain/ticket"
 )
 
 // v2StateValues are the old WorkflowState constants that indicate a pre-v3 state file.

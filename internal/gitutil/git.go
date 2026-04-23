@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"ai-ticket-worker/internal/shell"
+	"github.com/Neokil/AutoPR/internal/shell"
 )
 
 func RepoRoot(ctx context.Context, cwd string) (string, error) {

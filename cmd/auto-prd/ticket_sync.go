@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	ticketdomain "ai-ticket-worker/internal/domain/ticket"
-	"ai-ticket-worker/internal/servermeta"
+	ticketdomain "github.com/Neokil/AutoPR/internal/domain/ticket"
+	"github.com/Neokil/AutoPR/internal/servermeta"
 )
 
 func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {

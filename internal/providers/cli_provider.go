@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ai-ticket-worker/internal/config"
+	"github.com/Neokil/AutoPR/internal/config"
 )
 
 type CLIProvider struct {

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"ai-ticket-worker/internal/contracts/api"
+	"github.com/Neokil/AutoPR/internal/contracts/api"
 )
 
 type RemoteService struct {
