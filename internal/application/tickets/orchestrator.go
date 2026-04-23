@@ -34,7 +34,8 @@ func New(cfg config.Config, repoRoot string, provider providers.AIProvider) *Orc
 	return NewWithStore(cfg, repoRoot, state.NewStore(repoRoot, cfg.StateDirName), provider)
 }
 
-func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, provider providers.AIProvider) *Orchestrator {
+func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, provider providers.AIProvider,
+) *Orchestrator {
 	return &Orchestrator{
 		Cfg:      cfg,
 		RepoRoot: repoRoot,
@@ -113,7 +114,8 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 		for i, a := range stateCfg.Actions {
 			labels[i] = a.Label
 		}
-		return fmt.Errorf("action %q in state %q (available: %s): %w", actionLabel, st.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
+		return fmt.Errorf("action %q in state %q (available: %s): %w",
+			actionLabel, st.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
 	}
 
 	slog.Info("applying action", "ticket", ticketNumber, "action", actionLabel, "state", st.CurrentState)
@@ -245,7 +247,8 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 	contextPath := st.ArtifactPath("context.md")
 	if _, statErr := os.Stat(contextPath); os.IsNotExist(statErr) {
 		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
-		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
+		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n",
+			st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
 		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil { //nolint:gosec // G306: 0644 intentional for user-readable context files
 			return err
 		}
@@ -327,7 +330,9 @@ func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
 	return cause
 }
 
-func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
+func (o *Orchestrator) dispatchAction(
+	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string,
+) error {
 	logPath := st.CurrentRunLogPath()
 	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
 
@@ -343,7 +348,9 @@ func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.Stat
 	}
 }
 
-func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string) error {
+func (o *Orchestrator) transitionTo(
+	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string,
+) error {
 	if workflow.IsTerminal(target) {
 		slog.Info("reached terminal state", "ticket", st.TicketNumber, "state", target)
 		switch target {
@@ -364,7 +371,9 @@ func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State,
 	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string) error {
+func (o *Orchestrator) writeFeedbackAndRerun(
+	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string,
+) error {
 	if strings.TrimSpace(message) == "" {
 		return ErrFeedbackRequired
 	}
@@ -380,7 +389,9 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig) error {
+func (o *Orchestrator) executeScript(
+	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig,
+) error {
 	logPath := st.CurrentRunLogPath()
 
 	var out strings.Builder
@@ -420,7 +431,9 @@ func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State
 	return nil
 }
 
-func (o *Orchestrator) dispatchSubAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
+func (o *Orchestrator) dispatchSubAction(
+	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string,
+) error {
 	switch action.Type {
 	case workflow.ActionProvideFeedback:
 		if strings.TrimSpace(message) == "" {
@@ -436,7 +449,9 @@ func (o *Orchestrator) dispatchSubAction(ctx context.Context, st *ticketdomain.S
 	}
 }
 
-func (o *Orchestrator) runCommands(ctx context.Context, worktreePath string, commands []string, logPath, section string) error {
+func (o *Orchestrator) runCommands(
+	ctx context.Context, worktreePath string, commands []string, logPath, section string,
+) error {
 	if len(commands) == 0 {
 		return nil
 	}
@@ -539,7 +554,9 @@ func startStateRun(st *ticketdomain.State, stateCfg workflow.StateConfig) (ticke
 	return run, nil
 }
 
-func (o *Orchestrator) prepareRunContext(st ticketdomain.State, stateCfg workflow.StateConfig, run ticketdomain.StateRun) error {
+func (o *Orchestrator) prepareRunContext(
+	st ticketdomain.State, stateCfg workflow.StateConfig, run ticketdomain.StateRun,
+) error {
 	runDir := st.RunPath(run.ID)
 	if err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755); err != nil { //nolint:gosec // G301: 0755 correct for project directories
 		return err
@@ -553,7 +570,8 @@ func (o *Orchestrator) prepareRunContext(st ticketdomain.State, stateCfg workflo
 	fmt.Fprintf(&b, "Current Run Directory: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "runs", run.ID)))
 	fmt.Fprintf(&b, "Current Primary Artifact: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", run.ArtifactRef)))
 	fmt.Fprintf(&b, "Current State Log: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", run.LogRef)))
-	fmt.Fprintf(&b, "Current Raw Provider Log: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "runs", run.ID, "raw-provider.log")))
+	rawProviderLog := filepath.ToSlash(filepath.Join(".auto-pr", "runs", run.ID, "raw-provider.log"))
+	fmt.Fprintf(&b, "Current Raw Provider Log: %s\n", rawProviderLog)
 	fmt.Fprintf(&b, "Feedback File: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "feedback.md")))
 	fmt.Fprintf(&b, "Shared Context File: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "context.md")))
 	guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)

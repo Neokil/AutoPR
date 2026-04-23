@@ -9,7 +9,9 @@ import (
 	"github.com/Neokil/AutoPR/internal/markdown"
 )
 
-func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, rt *repoRuntime, job queuedJob, cause error) error {
+func (s *server) persistTicketFailure(
+	repoID, repoRoot, ticket string, rt *repoRuntime, job queuedJob, cause error,
+) error {
 	if strings.TrimSpace(ticket) == "" {
 		return nil
 	}

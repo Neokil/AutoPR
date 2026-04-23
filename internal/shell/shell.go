@@ -14,7 +14,7 @@ type Result struct {
 	Code   int
 }
 
-func Run(ctx context.Context, dir string, env map[string]string, stdin string, name string, args ...string) (Result, error) {
+func Run(ctx context.Context, dir string, env map[string]string, stdin, name string, args ...string) (Result, error) {
 	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // G204: intentional — orchestrator runs user-configured commands
 	cmd.Dir = dir
 	cmd.Env = os.Environ()

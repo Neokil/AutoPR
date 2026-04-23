@@ -15,7 +15,7 @@ linters:
     #- gosec
     #- interfacebloat
     #- ireturn
-    - lll
+    #- lll
     - mnd
     - nestif
     - nlreturn
@@ -30,6 +30,10 @@ linters:
     - wrapcheck
     - wsl
     - wsl_v5
+  exclusions:
+    rules:
+      - linters: [lll]
+        source: '//nolint:'
   settings:
     ireturn:
       allow:

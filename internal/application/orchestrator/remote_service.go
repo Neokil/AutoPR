@@ -32,12 +32,14 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 }
 
 func (s *RemoteService) StartFlow(ctx context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
+	path := fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber))
+	_, err := s.enqueueOnly(ctx, http.MethodPost, path, api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
 	return err
 }
 
 func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
-	_, err := s.enqueueOnly(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber)), api.ActionRequest{
+	path := fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber))
+	_, err := s.enqueueOnly(ctx, http.MethodPost, path, api.ActionRequest{
 		RepoPath: s.repoPath,
 		Label:    actionLabel,
 		Message:  message,
@@ -46,7 +48,8 @@ func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLab
 }
 
 func (s *RemoteService) MoveToState(ctx context.Context, ticketNumber, target string) error {
-	_, err := s.enqueueOnly(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/move-to-state", url.PathEscape(ticketNumber)), api.MoveToStateRequest{
+	path := fmt.Sprintf("/api/tickets/%s/move-to-state", url.PathEscape(ticketNumber))
+	_, err := s.enqueueOnly(ctx, http.MethodPost, path, api.MoveToStateRequest{
 		RepoPath: s.repoPath,
 		Target:   target,
 	}, "move to "+target, ticketNumber)
@@ -58,11 +61,14 @@ func (s *RemoteService) Status(ticketNumber string) error {
 		var out struct {
 			Tickets []map[string]any `json:"tickets"`
 		}
-		if err := s.doJSON(context.Background(), http.MethodGet, "/api/tickets?repo_path="+url.QueryEscape(s.repoPath), nil, &out); err != nil {
+		ticketsURL := "/api/tickets?repo_path=" + url.QueryEscape(s.repoPath)
+		if err := s.doJSON(context.Background(), http.MethodGet, ticketsURL, nil, &out); err != nil {
 			return err
 		}
 		for _, t := range out.Tickets {
-			slog.Info("ticket", "ticket", t["ticket_number"], "status", t["status"], "state", t["current_state"], "updated", t["updated_at"])
+			slog.Info("ticket",
+				"ticket", t["ticket_number"], "status", t["status"],
+				"state", t["current_state"], "updated", t["updated_at"])
 		}
 		return nil
 	}
@@ -107,17 +113,20 @@ func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
 }
 
 func (s *RemoteService) CleanupDone(ctx context.Context) error {
-	_, err := s.enqueueOnly(ctx, http.MethodPost, "/api/cleanup", api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"}, "cleanup done", "")
+	_, err := s.enqueueOnly(ctx, http.MethodPost, "/api/cleanup",
+		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"}, "cleanup done", "")
 	return err
 }
 
 func (s *RemoteService) CleanupAll(ctx context.Context) error {
-	_, err := s.enqueueOnly(ctx, http.MethodPost, "/api/cleanup", api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "all"}, "cleanup all", "")
+	_, err := s.enqueueOnly(ctx, http.MethodPost, "/api/cleanup",
+		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "all"}, "cleanup all", "")
 	return err
 }
 
 func (s *RemoteService) CleanupTicket(ctx context.Context, ticketNumber string) error {
-	_, err := s.enqueueOnly(ctx, http.MethodPost, fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
+	path := fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber))
+	_, err := s.enqueueOnly(ctx, http.MethodPost, path, api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
 	return err
 }
 
@@ -147,7 +156,9 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 	}
 }
 
-func (s *RemoteService) enqueueOnly(ctx context.Context, method, path string, body any, action, ticket string) (api.ActionAcceptedResponse, error) {
+func (s *RemoteService) enqueueOnly(
+	ctx context.Context, method, path string, body any, action, ticket string,
+) (api.ActionAcceptedResponse, error) {
 	var accepted api.ActionAcceptedResponse
 	if err := s.doJSON(ctx, method, path, body, &accepted); err != nil {
 		return api.ActionAcceptedResponse{}, err
