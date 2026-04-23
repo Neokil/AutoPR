@@ -14,7 +14,7 @@ linters:
     - gocognit
     #- gosec
     #- interfacebloat
-    - ireturn
+    #- ireturn
     - lll
     - mnd
     - nestif
@@ -30,3 +30,12 @@ linters:
     - wrapcheck
     - wsl
     - wsl_v5
+  settings:
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+        - github.com/Neokil/AutoPR/internal/application/orchestrator.Service
+        - github.com/Neokil/AutoPR/internal/providers.AIProvider
