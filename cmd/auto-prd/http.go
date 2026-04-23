@@ -90,7 +90,7 @@ func (s *server) serveEmbeddedFile(w http.ResponseWriter, r *http.Request, rel s
 	}
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
-		_, _ = w.Write(data)
+		_, _ = w.Write(data) //nolint:gosec // G705: writing pre-marshalled JSON, not HTML
 	}
 	return true
 }
@@ -132,6 +132,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		slog.Info("request", "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start).Round(time.Millisecond))
+		slog.Info("request", "method", r.Method, "path", r.URL.Path, "status", rec.status, "duration", time.Since(start).Round(time.Millisecond)) //nolint:gosec // G706: internal access log, not user-controlled injection risk
 	})
 }

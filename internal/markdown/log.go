@@ -8,7 +8,7 @@ import (
 )
 
 func AppendSection(path, title, body string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec // G304,G302: internal log path, 0644 intentional for readability
 	if err != nil {
 		return err
 	}
@@ -18,11 +18,11 @@ func AppendSection(path, title, body string) error {
 }
 
 func Write(path string, content string) error {
-	return os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644)
+	return os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644) //nolint:gosec // G306: 0644 intentional for user-readable artifact files
 }
 
 func Tail(path string, maxLines int) string {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: internal log path, not user-controlled
 	if err != nil {
 		return ""
 	}

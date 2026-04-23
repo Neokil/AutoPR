@@ -79,7 +79,7 @@ func resolveRepoRoot(ctx context.Context, repoPath string) (string, error) {
 		return "", fmt.Errorf("resolve repo_path: %w", err)
 	}
 	dir := absPath
-	info, err := os.Stat(absPath)
+	info, err := os.Stat(absPath) //nolint:gosec // G703: absPath is the resolved canonical repo path
 	if err == nil && !info.IsDir() {
 		dir = filepath.Dir(absPath)
 	}

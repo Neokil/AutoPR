@@ -465,7 +465,7 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unknown artifact")
 		return
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path resolved from trusted internal state
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSON(w, http.StatusOK, map[string]string{
@@ -511,7 +511,7 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	logs := make([]executionLog, 0, len(st.StateHistory))
 	for _, run := range st.StateHistory {
 		runPath := filepath.ToSlash(filepath.Join("runs", run.ID, "raw-provider.log"))
-		content, readErr := os.ReadFile(st.ResolveRef(runPath))
+		content, readErr := os.ReadFile(st.ResolveRef(runPath)) //nolint:gosec // G703: path is constructed from trusted internal state
 		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 			writeError(w, http.StatusInternalServerError, readErr.Error())
 			return
@@ -592,7 +592,7 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 }
 
 func parseLogEvents(path string) ([]logEvent, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path built from trusted internal state
 	if err != nil {
 		return nil, err
 	}

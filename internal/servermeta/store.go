@@ -2,7 +2,7 @@ package servermeta
 
 import (
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // G505: sha1 used for directory naming only, not cryptography
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -278,7 +278,7 @@ func (s *Store) ListRepos() []RepoRecord {
 }
 
 func (s *Store) load() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec // G301: 0755 correct for server meta directory
 		return err
 	}
 	data, err := os.ReadFile(s.path)
@@ -306,7 +306,7 @@ func (s *Store) load() error {
 }
 
 func (s *Store) saveLocked() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec // G301: 0755 correct for server meta directory
 		return err
 	}
 	data, err := json.MarshalIndent(s.data, "", "  ")
@@ -314,14 +314,14 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306: 0644 intentional for user-readable server meta file
 		return err
 	}
 	return os.Rename(tmp, s.path)
 }
 
 func repoID(repoPath string) string {
-	sum := sha1.Sum([]byte(strings.ToLower(filepath.Clean(repoPath))))
+	sum := sha1.Sum([]byte(strings.ToLower(filepath.Clean(repoPath)))) //nolint:gosec // G401: sha1 for directory naming, not a security primitive
 	return hex.EncodeToString(sum[:])
 }
 

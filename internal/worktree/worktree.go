@@ -15,7 +15,7 @@ func Ensure(ctx context.Context, repoRoot, stateDirName, ticketNumber, branchNam
 	if err == nil {
 		return path, nil
 	}
-	err = os.MkdirAll(filepath.Dir(path), 0o755)
+	err = os.MkdirAll(filepath.Dir(path), 0o755) //nolint:gosec // G301: 0755 correct for project directories
 	if err != nil {
 		return "", fmt.Errorf("prepare worktree parent: %w", err)
 	}

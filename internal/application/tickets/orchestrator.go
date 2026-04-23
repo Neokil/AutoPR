@@ -238,7 +238,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 	}
 
 	autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
-	if err := os.MkdirAll(autoPRDir, 0o755); err != nil {
+	if err := os.MkdirAll(autoPRDir, 0o755); err != nil { //nolint:gosec // G301: 0755 correct for project directories
 		return fmt.Errorf("create .auto-pr dir: %w", err)
 	}
 
@@ -246,7 +246,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 	if _, statErr := os.Stat(contextPath); os.IsNotExist(statErr) {
 		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
 		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
-		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil { //nolint:gosec // G306: 0644 intentional for user-readable context files
 			return err
 		}
 	}
@@ -283,12 +283,12 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 	}
 
 	promptPath := st.RunPath(run.ID, "prompt.md")
-	if err := os.WriteFile(promptPath, promptContent, 0o644); err != nil {
+	if err := os.WriteFile(promptPath, promptContent, 0o644); err != nil { //nolint:gosec // G306: 0644 intentional for user-readable prompt files
 		return o.failState(st, err)
 	}
 
 	runtimeDir := st.RunPath(run.ID, "provider")
-	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil { //nolint:gosec // G301: 0755 correct for project directories
 		return o.failState(st, err)
 	}
 
@@ -299,7 +299,7 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 		RuntimeDir: runtimeDir,
 	})
 	rawLogPath := st.RunPath(run.ID, "raw-provider.log")
-	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644)
+	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644) //nolint:gosec // G306: 0644 intentional for user-readable log files
 	if err != nil {
 		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
 		return o.failState(st, err)
@@ -370,7 +370,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 	}
 	slog.Info("applying feedback", "ticket", st.TicketNumber, "state", st.CurrentState)
 	feedbackPath := st.ArtifactPath("feedback.md")
-	if err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644); err != nil {
+	if err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644); err != nil { //nolint:gosec // G306: 0644 intentional for user-readable feedback files
 		return err
 	}
 	stateCfg, ok := wf.StateByName(st.CurrentState)
@@ -541,7 +541,7 @@ func startStateRun(st *ticketdomain.State, stateCfg workflow.StateConfig) (ticke
 
 func (o *Orchestrator) prepareRunContext(st ticketdomain.State, stateCfg workflow.StateConfig, run ticketdomain.StateRun) error {
 	runDir := st.RunPath(run.ID)
-	if err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755); err != nil { //nolint:gosec // G301: 0755 correct for project directories
 		return err
 	}
 
@@ -573,7 +573,7 @@ func (o *Orchestrator) prepareRunContext(st ticketdomain.State, stateCfg workflo
 		}
 	}
 
-	return os.WriteFile(st.ArtifactPath("run-context.md"), []byte(b.String()), 0o644)
+	return os.WriteFile(st.ArtifactPath("run-context.md"), []byte(b.String()), 0o644) //nolint:gosec // G306: 0644 intentional for user-readable context files
 }
 
 func newUUID() (string, error) {
@@ -596,14 +596,14 @@ func newUUID() (string, error) {
 func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	ignorePath := filepath.Join(repoRoot, ".gitignore")
 	entry := stateDirName + "/"
-	b, err := os.ReadFile(ignorePath)
+	b, err := os.ReadFile(ignorePath) //nolint:gosec // G304: path built from trusted repo root
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	if strings.Contains(string(b), entry) {
 		return nil
 	}
-	f, err := os.OpenFile(ignorePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(ignorePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec // G302: 0644 is correct for .gitignore
 	if err != nil {
 		return err
 	}

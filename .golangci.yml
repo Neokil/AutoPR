@@ -12,7 +12,7 @@ linters:
     - funlen
     #- gochecknoglobals
     - gocognit
-    - gosec
+    #- gosec
     - interfacebloat
     - ireturn
     - lll
