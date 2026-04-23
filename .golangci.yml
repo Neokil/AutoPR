@@ -5,7 +5,7 @@ linters:
   disable:
     - cyclop
     - depguard
-    - err113
+    #- err113
     - errchkjson
     - exhaustruct
     - forbidigo

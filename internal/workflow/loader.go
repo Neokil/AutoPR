@@ -61,7 +61,7 @@ func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 	data, err := fs.ReadFile(embeddedPromptsFS, promptRelPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("prompt %q not found in project, global config, or embedded defaults", promptRelPath)
+			return nil, fmt.Errorf("prompt %q: %w", promptRelPath, ErrPromptNotFound)
 		}
 		return nil, fmt.Errorf("read embedded prompt %q: %w", promptRelPath, err)
 	}

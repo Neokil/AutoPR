@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -73,7 +72,7 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 
 func resolveRepoRoot(ctx context.Context, repoPath string) (string, error) {
 	if strings.TrimSpace(repoPath) == "" {
-		return "", errors.New("repo_path is empty")
+		return "", errRepoPathEmpty
 	}
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {

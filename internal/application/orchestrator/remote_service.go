@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -129,9 +128,9 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 			return job, nil
 		case "failed":
 			if strings.TrimSpace(job.Error) == "" {
-				return job, fmt.Errorf("job %s failed", jobID)
+				return job, fmt.Errorf("job %s: %w", jobID, ErrJobFailed)
 			}
-			return job, errors.New(job.Error)
+			return job, fmt.Errorf("%w: %s", ErrJobFailed, job.Error)
 		case "queued", "running":
 			select {
 			case <-ctx.Done():
@@ -139,7 +138,7 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 			case <-time.After(600 * time.Millisecond):
 			}
 		default:
-			return job, fmt.Errorf("unexpected job status: %s", job.Status)
+			return job, fmt.Errorf("job status %q: %w", job.Status, ErrUnexpectedStatus)
 		}
 	}
 }
@@ -151,7 +150,7 @@ func (s *RemoteService) enqueueOnly(ctx context.Context, method, path string, bo
 	}
 	jobID := strings.TrimSpace(accepted.JobID)
 	if jobID == "" {
-		return api.ActionAcceptedResponse{}, errors.New("server response missing job_id")
+		return api.ActionAcceptedResponse{}, ErrMissingJobID
 	}
 	if ticket != "" {
 		fmt.Printf("%s scheduled for ticket %s, job id is %s\n", action, ticket, jobID)
@@ -188,12 +187,12 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 	if res.StatusCode >= 400 {
 		var er api.ErrorResponse
 		if err := json.Unmarshal(data, &er); err == nil && strings.TrimSpace(er.Error) != "" {
-			return errors.New(er.Error)
+			return fmt.Errorf("%w: %s", ErrRemote, er.Error)
 		}
 		if strings.TrimSpace(string(data)) == "" {
-			return fmt.Errorf("http %d", res.StatusCode)
+			return fmt.Errorf("HTTP %d: %w", res.StatusCode, ErrHTTP)
 		}
-		return errors.New(strings.TrimSpace(string(data)))
+		return fmt.Errorf("%w: %s", ErrRemote, strings.TrimSpace(string(data)))
 	}
 	if out == nil {
 		return nil

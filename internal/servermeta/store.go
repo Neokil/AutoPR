@@ -239,7 +239,7 @@ func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
 	defer s.mu.Unlock()
 	rec, ok := s.data.Jobs[id]
 	if !ok {
-		return fmt.Errorf("job %s not found", id)
+		return fmt.Errorf("job %s: %w", id, ErrJobNotFound)
 	}
 	now := time.Now().UTC()
 	switch status {

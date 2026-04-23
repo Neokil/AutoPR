@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -63,7 +62,7 @@ func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 
 func statusCmd(svc orchestrator.Service, args []string) {
 	if len(args) > 1 {
-		fatalIf(errors.New("usage: auto-pr status [ticket-number]"))
+		fatalIf(errUsageStatus)
 	}
 	ticket := ""
 	if len(args) == 1 {
@@ -85,7 +84,7 @@ func actionCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	_ = fs.Parse(args[1:])
 
 	if strings.TrimSpace(*label) == "" {
-		fatalIf(errors.New("action requires --label"))
+		fatalIf(errActionRequiresLabel)
 	}
 	fatalIf(svc.ApplyAction(ctx, ticket, *label, *message))
 }
@@ -94,7 +93,7 @@ func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string)
 	requireArgs("wait-for-job", args, 1)
 	remote, ok := svc.(*orchestrator.RemoteService)
 	if !ok {
-		fatalIf(errors.New("wait-for-job is only supported in server mode"))
+		fatalIf(errWaitForJobServerOnly)
 	}
 	job, err := remote.WaitForJob(ctx, args[0])
 	fatalIf(err)
@@ -108,7 +107,7 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	_ = fs.Parse(args)
 
 	if *doneOnly && *all {
-		fatalIf(errors.New("cleanup: use either --done or --all, not both"))
+		fatalIf(errCleanupFlags)
 	}
 	if *doneOnly {
 		fatalIf(svc.CleanupDone(ctx))
@@ -121,14 +120,14 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fatalIf(errors.New("usage: auto-pr cleanup <ticket-number> | --done | --all"))
+		fatalIf(errUsageCleanup)
 	}
 	fatalIf(svc.CleanupTicket(ctx, rest[0]))
 }
 
 func requireArgs(cmd string, args []string, minArgs int) {
 	if len(args) < minArgs {
-		fatalIf(fmt.Errorf("usage: auto-pr %s", cmd))
+		fatalIf(fmt.Errorf("auto-pr %s: %w", cmd, errUsage))
 	}
 }
 

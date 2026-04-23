@@ -28,7 +28,7 @@ func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir,
 		return res.Stdout, res.Stderr, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, err)
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
-		return "", res.Stderr, fmt.Errorf("provider %s phase %s returned empty output", r.providerName, phase)
+		return "", res.Stderr, fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrEmptyOutput)
 	}
 	return res.Stdout, res.Stderr, nil
 }

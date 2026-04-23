@@ -3,7 +3,6 @@ package tickets
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -66,7 +65,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 		return nil
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
-		return fmt.Errorf("ticket %s is already running", ticketNumber)
+		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
 	if err := o.ensureWorktreeAndContext(ctx, &st); err != nil {
 		return err
@@ -94,12 +93,12 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 		return err
 	}
 	if st.FlowStatus != ticketdomain.FlowStatusWaiting {
-		return fmt.Errorf("ticket %s is not waiting for an action (status: %s)", ticketNumber, st.FlowStatus)
+		return fmt.Errorf("ticket %s (status: %s): %w", ticketNumber, st.FlowStatus, ErrTicketNotWaiting)
 	}
 
 	stateCfg, ok := wf.StateByName(st.CurrentState)
 	if !ok {
-		return fmt.Errorf("current state %q not found in workflow", st.CurrentState)
+		return fmt.Errorf("state %q: %w", st.CurrentState, ErrStateNotFound)
 	}
 
 	var action *workflow.ActionConfig
@@ -114,7 +113,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 		for i, a := range stateCfg.Actions {
 			labels[i] = a.Label
 		}
-		return fmt.Errorf("action %q not found in state %q (available: %s)", actionLabel, st.CurrentState, strings.Join(labels, ", "))
+		return fmt.Errorf("action %q in state %q (available: %s): %w", actionLabel, st.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
 	}
 
 	log.Printf("[%s] applying action %q in state %q", ticketNumber, actionLabel, st.CurrentState)
@@ -127,7 +126,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 		return fmt.Errorf("load workflow: %w", err)
 	}
 	if strings.TrimSpace(target) == "" {
-		return errors.New("target state is required")
+		return ErrTargetStateRequired
 	}
 
 	st, err := o.Store.LoadState(ticketNumber)
@@ -140,7 +139,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 		return err
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
-		return fmt.Errorf("ticket %s is already running", ticketNumber)
+		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
 	if err := o.ensureWorktreeAndContext(ctx, &st); err != nil {
 		return err
@@ -340,7 +339,7 @@ func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.Stat
 	case workflow.ActionRunScript:
 		return o.executeScript(ctx, st, wf, action)
 	default:
-		return fmt.Errorf("unknown action type: %s", action.Type)
+		return fmt.Errorf("action type %q: %w", action.Type, ErrUnknownActionType)
 	}
 }
 
@@ -360,14 +359,14 @@ func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State,
 	log.Printf("[%s] transitioning to state %q", st.TicketNumber, target)
 	stateCfg, ok := wf.StateByName(target)
 	if !ok {
-		return fmt.Errorf("target state %q not found in workflow", target)
+		return fmt.Errorf("state %q: %w", target, ErrTargetNotFound)
 	}
 	return o.runState(ctx, st, stateCfg)
 }
 
 func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string) error {
 	if strings.TrimSpace(message) == "" {
-		return errors.New("feedback message is required")
+		return ErrFeedbackRequired
 	}
 	log.Printf("[%s] applying feedback, rerunning state %q", st.TicketNumber, st.CurrentState)
 	feedbackPath := st.ArtifactPath("feedback.md")
@@ -376,7 +375,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 	}
 	stateCfg, ok := wf.StateByName(st.CurrentState)
 	if !ok {
-		return fmt.Errorf("current state %q not found in workflow", st.CurrentState)
+		return fmt.Errorf("state %q: %w", st.CurrentState, ErrStateNotFound)
 	}
 	return o.runState(ctx, st, stateCfg)
 }
@@ -431,9 +430,9 @@ func (o *Orchestrator) dispatchSubAction(ctx context.Context, st *ticketdomain.S
 	case workflow.ActionMoveToState:
 		return o.transitionTo(ctx, st, wf, action.Target)
 	case workflow.ActionRunScript:
-		return errors.New("scripts cannot be used as sub-actions")
+		return ErrScriptSubAction
 	default:
-		return fmt.Errorf("unsupported sub-action type: %s", action.Type)
+		return fmt.Errorf("action type %q: %w", action.Type, ErrUnsupportedSubAction)
 	}
 }
 
@@ -504,13 +503,13 @@ func resolveStateForStart(st ticketdomain.State, wf workflow.WorkflowConfig) (wo
 	if st.CurrentState == "" {
 		first, ok := wf.FirstState()
 		if !ok {
-			return workflow.StateConfig{}, errors.New("workflow has no states defined")
+			return workflow.StateConfig{}, ErrWorkflowNoStates
 		}
 		return first, nil
 	}
 	stateCfg, ok := wf.StateByName(st.CurrentState)
 	if !ok {
-		return workflow.StateConfig{}, fmt.Errorf("current state %q not found in workflow", st.CurrentState)
+		return workflow.StateConfig{}, fmt.Errorf("state %q: %w", st.CurrentState, ErrStateNotFound)
 	}
 	return stateCfg, nil
 }

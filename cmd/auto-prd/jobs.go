@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -104,7 +103,7 @@ func (s *server) executeJob(job queuedJob) error {
 			err = s.syncRepoTickets(repoID, repoRoot, rt, true)
 		}
 	default:
-		err = errors.New("unsupported job action: " + job.record.Action)
+		err = fmt.Errorf("%w: %s", errUnsupportedJobAction, job.record.Action)
 	}
 	if err != nil && ticket != "" {
 		if persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, rt, job, err); persistErr != nil {

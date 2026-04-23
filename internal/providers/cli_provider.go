@@ -18,13 +18,13 @@ type CLIProvider struct {
 func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	pc, ok := cfg.Providers[cfg.Provider]
 	if !ok {
-		return nil, fmt.Errorf("provider %q missing from config providers", cfg.Provider)
+		return nil, fmt.Errorf("provider %q: %w", cfg.Provider, ErrProviderMissing)
 	}
 	if cfg.Provider == "codex" && len(pc.Args) == 0 {
 		pc.Args = []string{"exec", "-"}
 	}
 	if pc.Command == "" {
-		return nil, fmt.Errorf("provider %q command is empty", cfg.Provider)
+		return nil, fmt.Errorf("provider %q: %w", cfg.Provider, ErrProviderCommandEmpty)
 	}
 	return &CLIProvider{
 		name: cfg.Provider,

@@ -76,7 +76,7 @@ func parseGitHubOwnerRepo(origin string) (string, error) {
 	case strings.HasPrefix(origin, "http://github.com/"):
 		return strings.TrimPrefix(origin, "http://github.com/"), nil
 	default:
-		return "", fmt.Errorf("origin remote is not a supported GitHub URL: %s", origin)
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedGitHubURL, origin)
 	}
 }
 

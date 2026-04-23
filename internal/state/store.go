@@ -142,7 +142,7 @@ func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 
 func parseStateJSON(ticketNumber string, data []byte) (ticket.State, error) {
 	if isV2StateJSON(data) {
-		return ticket.State{}, fmt.Errorf("ticket %s has a v2 state file; v3 flows must be started fresh (cleanup and re-run)", ticketNumber)
+		return ticket.State{}, fmt.Errorf("ticket %s: %w", ticketNumber, ErrV2StateFile)
 	}
 	var st ticket.State
 	err := json.Unmarshal(data, &st)
