@@ -44,6 +44,14 @@ func (s *RemoteService) ApplyAction(_ context.Context, ticketNumber, actionLabel
 	return err
 }
 
+func (s *RemoteService) MoveToState(_ context.Context, ticketNumber, target string) error {
+	_, err := s.enqueueOnly(http.MethodPost, fmt.Sprintf("/api/tickets/%s/move-to-state", url.PathEscape(ticketNumber)), api.MoveToStateRequest{
+		RepoPath: s.repoPath,
+		Target:   target,
+	}, "move to "+target, ticketNumber)
+	return err
+}
+
 func (s *RemoteService) Status(ticketNumber string) error {
 	if strings.TrimSpace(ticketNumber) == "" {
 		var out struct {

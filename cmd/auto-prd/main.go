@@ -30,6 +30,7 @@ import (
 const (
 	jobRun         = "run"
 	jobAction      = "action"
+	jobMoveToState = "move_to_state"
 	jobCleanup     = "cleanup_ticket"
 	jobCleanupDone = "cleanup_done"
 	jobCleanupAll  = "cleanup_all"
@@ -45,6 +46,7 @@ type queuedJob struct {
 	record      servermeta.JobRecord
 	message     string
 	actionLabel string // used by jobAction
+	targetState string // used by jobMoveToState
 }
 
 type server struct {
@@ -116,6 +118,7 @@ func main() {
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/action", s.handleActionTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/move-to-state", s.handleMoveToStateTicket)
 	mux.HandleFunc("POST /api/tickets/{id}/cleanup", s.handleCleanupTicket)
 	mux.HandleFunc("POST /api/cleanup", s.handleCleanupScope)
 	mux.HandleFunc("/", s.handleFrontend)
@@ -184,6 +187,57 @@ func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
 			Status:       "accepted",
 			JobID:        job.ID,
 			Action:       jobAction,
+			RepoID:       repoID,
+			RepoPath:     repoRoot,
+			TicketNumber: ticket,
+		})
+	default:
+		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
+		writeError(w, http.StatusServiceUnavailable, "job queue is full")
+	}
+}
+
+func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request) {
+	ticket := r.PathValue("id")
+	var req api.MoveToStateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if strings.TrimSpace(req.RepoPath) == "" {
+		writeError(w, http.StatusBadRequest, "repo_path is required")
+		return
+	}
+	if strings.TrimSpace(req.Target) == "" {
+		writeError(w, http.StatusBadRequest, "target is required")
+		return
+	}
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(req.RepoPath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	job, jobErr := s.meta.NewJob(jobMoveToState, repoID, repoRoot, ticket, "")
+	if jobErr != nil {
+		writeError(w, http.StatusInternalServerError, jobErr.Error())
+		return
+	}
+	qj := queuedJob{record: job, targetState: req.Target}
+	s.broadcast(serverEvent{
+		Type:         "job",
+		RepoID:       repoID,
+		RepoPath:     repoRoot,
+		TicketNumber: ticket,
+		JobID:        job.ID,
+		Action:       jobMoveToState,
+		Status:       "queued",
+	})
+	select {
+	case s.jobs <- qj:
+		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
+			Status:       "accepted",
+			JobID:        job.ID,
+			Action:       jobMoveToState,
 			RepoID:       repoID,
 			RepoPath:     repoRoot,
 			TicketNumber: ticket,
@@ -334,8 +388,15 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 	githubBlobBase, _ := gitutil.GitHubBlobBase(r.Context(), repoRoot, s.cfg.BaseBranch)
 
 	var availableActions []actionInfo
-	if st.FlowStatus == ticketdomain.FlowStatusWaiting {
-		if wf, wfErr := workflow.Load(repoRoot); wfErr == nil {
+	var workflowStates []workflowStateInfo
+	if wf, wfErr := workflow.Load(repoRoot); wfErr == nil {
+		for _, stateCfg := range wf.States {
+			workflowStates = append(workflowStates, workflowStateInfo{
+				Name:        stateCfg.Name,
+				DisplayName: stateCfg.TimelineLabel(),
+			})
+		}
+		if st.FlowStatus == ticketdomain.FlowStatusWaiting {
 			if stateCfg, ok := wf.StateByName(st.CurrentState); ok {
 				for _, a := range stateCfg.Actions {
 					availableActions = append(availableActions, actionInfo{
@@ -349,6 +410,9 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 	if availableActions == nil {
 		availableActions = []actionInfo{}
 	}
+	if workflowStates == nil {
+		workflowStates = []workflowStateInfo{}
+	}
 
 	resp := ticketDetails{
 		RepoID:           repoID,
@@ -357,6 +421,7 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		GitHubBlobBase:   githubBlobBase,
 		State:            st,
 		NextSteps:        nextSteps,
+		WorkflowStates:   workflowStates,
 		AvailableActions: availableActions,
 	}
 	writeJSON(w, http.StatusOK, resp)

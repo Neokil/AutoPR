@@ -158,6 +158,35 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 	return o.dispatchAction(ctx, &st, wf, *action, message)
 }
 
+func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target string) error {
+	wf, err := workflow.Load(o.RepoRoot)
+	if err != nil {
+		return fmt.Errorf("load workflow: %w", err)
+	}
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("target state is required")
+	}
+
+	st, err := o.Store.LoadState(ticketNumber)
+	if os.IsNotExist(err) {
+		st = ticketdomain.NewState(ticketNumber)
+		if err := o.Store.SaveState(ticketNumber, st); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	if st.FlowStatus == ticketdomain.FlowStatusRunning {
+		return fmt.Errorf("ticket %s is already running", ticketNumber)
+	}
+	if err := o.ensureWorktreeAndContext(ctx, &st); err != nil {
+		return err
+	}
+
+	log.Printf("[%s] force moving to state %q", ticketNumber, target)
+	return o.transitionTo(ctx, &st, wf, target)
+}
+
 func (o *Orchestrator) Status(ticketNumber string) error {
 	if ticketNumber != "" {
 		return o.printStatus(ticketNumber)
@@ -226,6 +255,37 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	for _, ticket := range tickets {
 		if err := o.CleanupTicket(ctx, ticket); err != nil {
 			fmt.Fprintf(os.Stderr, "cleanup %s: %v\n", ticket, err)
+		}
+	}
+	return nil
+}
+
+func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketdomain.State) error {
+	if st.WorktreePath == "" {
+		branchName := fmt.Sprintf("auto-pr/%s", st.TicketNumber)
+		log.Printf("[%s] creating worktree on branch %s", st.TicketNumber, branchName)
+		wtPath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, st.TicketNumber, branchName, o.Cfg.BaseBranch)
+		if err != nil {
+			return fmt.Errorf("create worktree: %w", err)
+		}
+		st.BranchName = branchName
+		st.WorktreePath = wtPath
+		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+			return err
+		}
+	}
+
+	autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
+	if err := os.MkdirAll(autoPRDir, 0o755); err != nil {
+		return fmt.Errorf("create .auto-pr dir: %w", err)
+	}
+
+	contextPath := st.ArtifactPath("context.md")
+	if _, statErr := os.Stat(contextPath); os.IsNotExist(statErr) {
+		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
+		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
+		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil {
+			return err
 		}
 	}
 	return nil

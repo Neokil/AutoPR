@@ -109,6 +109,13 @@ export function applyAction(repoPath: string, ticket: string, label: string, mes
   });
 }
 
+export function moveToState(repoPath: string, ticket: string, target: string): Promise<AcceptedJob> {
+  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/move-to-state`, {
+    repo_path: repoPath,
+    target
+  });
+}
+
 export function cleanupDone(repoPath: string): Promise<AcceptedJob> {
   return postAccepted("/api/cleanup", { repo_path: repoPath, scope: "done" });
 }

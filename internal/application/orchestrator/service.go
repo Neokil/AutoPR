@@ -12,6 +12,7 @@ import (
 type Service interface {
 	StartFlow(ctx context.Context, ticketNumber string) error
 	ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error
+	MoveToState(ctx context.Context, ticketNumber, target string) error
 	Status(ticketNumber string) error
 	NextSteps(ticketNumber string) (string, error)
 	CleanupDone(ctx context.Context) error
@@ -33,6 +34,10 @@ func (s *WorkflowService) StartFlow(ctx context.Context, ticketNumber string) er
 
 func (s *WorkflowService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
 	return s.orch.ApplyAction(ctx, ticketNumber, actionLabel, message)
+}
+
+func (s *WorkflowService) MoveToState(ctx context.Context, ticketNumber, target string) error {
+	return s.orch.MoveToState(ctx, ticketNumber, target)
 }
 
 func (s *WorkflowService) Status(ticketNumber string) error {

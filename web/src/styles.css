@@ -379,6 +379,41 @@ button:disabled {
   outline: none;
 }
 
+.menu-submenu-root {
+  position: relative;
+  padding: 0;
+}
+
+.submenu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.submenu-trigger::after {
+  content: "›";
+  color: var(--muted);
+}
+
+.menu-submenu {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: -6px;
+  min-width: 180px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  padding: 6px;
+  display: none;
+  z-index: 21;
+}
+
+.menu-submenu-root:hover .menu-submenu,
+.menu-submenu-root:focus-within .menu-submenu {
+  display: block;
+}
+
 .card {
   border: 1px solid var(--panel-border);
   border-radius: 10px;

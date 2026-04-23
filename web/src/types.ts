@@ -43,6 +43,11 @@ export interface ActionInfo {
   type: string;
 }
 
+export interface WorkflowStateInfo {
+  name: string;
+  display_name?: string;
+}
+
 export interface TicketDetails {
   repo_id: string;
   repo_path: string;
@@ -53,6 +58,7 @@ export interface TicketDetails {
     title?: string;
   };
   next_steps?: string;
+  workflow_states: WorkflowStateInfo[];
   available_actions: ActionInfo[];
 }
 

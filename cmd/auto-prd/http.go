@@ -18,15 +18,21 @@ type actionInfo struct {
 	Type  string `json:"type"`
 }
 
+type workflowStateInfo struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+}
+
 type ticketDetails struct {
-	RepoID           string       `json:"repo_id"`
-	RepoPath         string       `json:"repo_path"`
-	TicketNumber     string       `json:"ticket_number"`
-	GitHubBlobBase   string       `json:"github_blob_base,omitempty"`
-	State            interface{}  `json:"state"`
-	Ticket           interface{}  `json:"ticket,omitempty"`
-	NextSteps        string       `json:"next_steps,omitempty"`
-	AvailableActions []actionInfo `json:"available_actions"`
+	RepoID           string              `json:"repo_id"`
+	RepoPath         string              `json:"repo_path"`
+	TicketNumber     string              `json:"ticket_number"`
+	GitHubBlobBase   string              `json:"github_blob_base,omitempty"`
+	State            interface{}         `json:"state"`
+	Ticket           interface{}         `json:"ticket,omitempty"`
+	NextSteps        string              `json:"next_steps,omitempty"`
+	WorkflowStates   []workflowStateInfo `json:"workflow_states,omitempty"`
+	AvailableActions []actionInfo        `json:"available_actions"`
 }
 
 type logEvent struct {

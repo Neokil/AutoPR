@@ -74,6 +74,11 @@ func (s *server) executeJob(job queuedJob) error {
 		if err == nil {
 			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 		}
+	case jobMoveToState:
+		err = rt.svc.MoveToState(context.Background(), ticket, job.targetState)
+		if err == nil {
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+		}
 	case jobCleanup:
 		err = rt.svc.CleanupTicket(context.Background(), ticket)
 		if err == nil {

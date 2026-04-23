@@ -11,6 +11,7 @@ import {
   getTicket,
   listRepositories,
   listTickets,
+  moveToState,
   runTicket
 } from "./api";
 import { ExecutionLogsModal } from "./ExecutionLogsModal";
@@ -564,8 +565,14 @@ export function App() {
                     onLogs={() => setShowLogsModal(true)}
                     onRerun={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}
                     onCleanup={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}
+                    onMoveToState={(target) =>
+                      void queueAction(() => moveToState(selectedSummary.repo_path, selectedSummary.ticket_number, target))
+                    }
+                    workflowStates={details?.workflow_states ?? []}
+                    currentStateName={details?.state.current_state}
                     rerunDisabled={selectedSummary.status === "running"}
                     cleanupDisabled={selectedSummary.status === "running"}
+                    moveDisabled={selectedSummary.status === "running"}
                   />
                 </div>
               </div>

@@ -22,6 +22,11 @@ type ActionRequest struct {
 	Message  string `json:"message,omitempty"`
 }
 
+type MoveToStateRequest struct {
+	RepoPath string `json:"repo_path"`
+	Target   string `json:"target"`
+}
+
 type ActionAcceptedResponse struct {
 	Status       string `json:"status"`
 	JobID        string `json:"job_id"`
