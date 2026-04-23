@@ -46,7 +46,6 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		}
 		return err
 	}
-	ensureLegacyStateRun(&st)
 	title := ticketTitleForDisplay(st)
 	rec := servermeta.TicketRecord{
 		RepoID:       repoID,
@@ -87,7 +86,6 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 		if err != nil {
 			continue
 		}
-		ensureLegacyStateRun(&st)
 		records = append(records, servermeta.TicketRecord{
 			RepoID:       repoID,
 			RepoPath:     repoRoot,

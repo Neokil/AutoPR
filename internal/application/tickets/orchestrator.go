@@ -60,8 +60,6 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	} else if err != nil {
 		return err
 	}
-	ensureRunHistory(&st)
-
 	if st.FlowStatus == ticketdomain.FlowStatusDone || st.FlowStatus == ticketdomain.FlowStatusCancelled {
 		log.Printf("[%s] already %s, skipping", ticketNumber, st.FlowStatus)
 		return nil
@@ -132,8 +130,6 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 	if err != nil {
 		return err
 	}
-	ensureRunHistory(&st)
-
 	if st.FlowStatus != ticketdomain.FlowStatusWaiting {
 		return fmt.Errorf("ticket %s is not waiting for an action (status: %s)", ticketNumber, st.FlowStatus)
 	}
@@ -184,7 +180,6 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ensureRunHistory(&st)
 	wf, _ := workflow.Load(o.RepoRoot)
 	return buildNextSteps(st, wf), nil
 }
@@ -515,35 +510,12 @@ func startStateRun(st *ticketdomain.State, stateCfg workflow.StateConfig) (ticke
 }
 
 func currentRunLogPath(st ticketdomain.State) string {
-	if st.CurrentRunID == "" {
-		return st.ArtifactPath(st.CurrentState + ".log")
-	}
 	for _, run := range st.StateHistory {
 		if run.ID == st.CurrentRunID && run.LogRef != "" {
 			return st.ResolveRef(run.LogRef)
 		}
 	}
-	return st.ArtifactPath(st.CurrentState + ".log")
-}
-
-func ensureRunHistory(st *ticketdomain.State) {
-	if st == nil || len(st.StateHistory) > 0 || st.CurrentState == "" {
-		return
-	}
-	runID := "legacy-" + strings.ReplaceAll(st.CurrentState, "/", "-")
-	if !st.UpdatedAt.IsZero() {
-		runID = fmt.Sprintf("legacy-%s-%d", strings.ReplaceAll(st.CurrentState, "/", "-"), st.UpdatedAt.UTC().Unix())
-	}
-	st.CurrentRunID = runID
-	st.StateHistory = []ticketdomain.StateRun{
-		{
-			ID:               runID,
-			StateName:        st.CurrentState,
-			StateDisplayName: st.CurrentState,
-			StartedAt:        st.UpdatedAt,
-			LogRef:           filepath.ToSlash(filepath.Join("runs", runID, "state.log")),
-		},
-	}
+	return ""
 }
 
 func latestArtifactRef(st ticketdomain.State, stateName string) string {

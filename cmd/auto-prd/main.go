@@ -330,7 +330,6 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
-	ensureLegacyStateRun(&st)
 	nextSteps, _ := rt.svc.NextSteps(ticket)
 	githubBlobBase, _ := gitutil.GitHubBlobBase(r.Context(), repoRoot, s.cfg.BaseBranch)
 
@@ -378,7 +377,6 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 	st, stErr := rt.store.LoadState(ticket)
 	var logPath string
 	if stErr == nil && st.WorktreePath != "" && st.CurrentState != "" {
-		ensureLegacyStateRun(&st)
 		logPath = currentRunLogPath(st)
 	}
 	events, err := parseLogEvents(logPath)
@@ -421,7 +419,6 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
-	ensureLegacyStateRun(&st)
 	path, ok := artifactPath(st, rt.store.Paths(ticket), name)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown artifact")
@@ -470,7 +467,6 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "ticket not found")
 		return
 	}
-	ensureLegacyStateRun(&st)
 	logs := make([]executionLog, 0, len(st.StateHistory))
 	for _, run := range st.StateHistory {
 		runPath := filepath.ToSlash(filepath.Join("runs", run.ID, "raw-provider.log"))
@@ -618,37 +614,12 @@ func resolveArtifactRef(st ticketdomain.State, name string) (string, bool) {
 }
 
 func currentRunLogPath(st ticketdomain.State) string {
-	if st.CurrentRunID != "" {
-		for _, run := range st.StateHistory {
-			if run.ID == st.CurrentRunID && run.LogRef != "" {
-				return st.ResolveRef(run.LogRef)
-			}
+	for _, run := range st.StateHistory {
+		if run.ID == st.CurrentRunID && run.LogRef != "" {
+			return st.ResolveRef(run.LogRef)
 		}
 	}
-	if st.WorktreePath != "" && st.CurrentState != "" {
-		return st.ArtifactPath(st.CurrentState + ".log")
-	}
 	return ""
-}
-
-func ensureLegacyStateRun(st *ticketdomain.State) {
-	if st == nil || len(st.StateHistory) > 0 || st.CurrentState == "" {
-		return
-	}
-	runID := "legacy-" + strings.ReplaceAll(st.CurrentState, "/", "-")
-	if !st.UpdatedAt.IsZero() {
-		runID = fmt.Sprintf("legacy-%s-%d", strings.ReplaceAll(st.CurrentState, "/", "-"), st.UpdatedAt.UTC().Unix())
-	}
-	st.CurrentRunID = runID
-	st.StateHistory = []ticketdomain.StateRun{
-		{
-			ID:               runID,
-			StateName:        st.CurrentState,
-			StateDisplayName: st.CurrentState,
-			StartedAt:        st.UpdatedAt,
-			LogRef:           filepath.ToSlash(filepath.Join("runs", runID, "state.log")),
-		},
-	}
 }
 
 func fatalIf(err error) {

@@ -57,23 +57,7 @@ function firstLinkedItem(ticket: Record<string, unknown> | null, keys: string[])
 }
 
 function normalizeStateRuns(details: TicketDetails | null): StateRun[] {
-  const history = details?.state.state_history ?? [];
-  if (history.length > 0) {
-    return history;
-  }
-  if (!details?.state.current_state) {
-    return [];
-  }
-  return [
-    {
-      id: details.state.current_run_id || `current-${details.state.current_state}`,
-      state_name: details.state.current_state,
-      state_display_name: details.state.current_state,
-      started_at: details.state.updated_at,
-      artifact_ref: "",
-      log_ref: ""
-    }
-  ];
+  return details?.state.state_history ?? [];
 }
 
 function runDisplayLabel(run: StateRun, runs: StateRun[]): string {
