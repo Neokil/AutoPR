@@ -171,7 +171,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, ok := s.repoRuntimeFromBody(w, r)
 	if !ok {
 		return
 	}
@@ -241,7 +241,7 @@ func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request)
 
 func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, _, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, ok := s.repoRuntimeFromBody(w, r)
 	if !ok {
 		return
 	}

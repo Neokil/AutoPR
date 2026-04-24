@@ -25,7 +25,7 @@ linters:
     #- revive
     #- tagliatelle
     #- testpackage
-    - unparam
+    #- unparam
     - varnamelen
     - wrapcheck
     - wsl

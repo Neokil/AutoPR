@@ -17,27 +17,27 @@ import (
 	"github.com/Neokil/AutoPR/internal/state"
 )
 
-func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (string, string, *repoRuntime, bool) {
+func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	var req api.RepoRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 
-		return "", "", nil, false
+		return "", "", false
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
 		writeError(w, http.StatusBadRequest, "repo_path is required")
 
-		return "", "", nil, false
+		return "", "", false
 	}
-	root, id, runtime, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
+	root, id, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 
-		return "", "", nil, false
+		return "", "", false
 	}
 
-	return root, id, runtime, true
+	return root, id, true
 }
 
 func (s *server) runtimeForRepoPath(ctx context.Context, repoPath string) (string, string, *repoRuntime, error) {
