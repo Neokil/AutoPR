@@ -598,7 +598,7 @@ func (s *server) enqueueAndRespond(
 
 		return
 	}
-	qj := queuedJob{
+	queued := queuedJob{
 		record:      job,
 		message:     opts.message,
 		actionLabel: opts.actionLabel,
@@ -615,7 +615,7 @@ func (s *server) enqueueAndRespond(
 		Status:       "queued",
 	})
 	select {
-	case s.jobs <- qj:
+	case s.jobs <- queued:
 		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
 			Status:       "accepted",
 			JobID:        job.ID,

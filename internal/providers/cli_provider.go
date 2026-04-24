@@ -16,14 +16,14 @@ type CLIProvider struct {
 }
 
 func NewFromConfig(cfg config.Config) (AIProvider, error) {
-	pc, ok := cfg.Providers[cfg.Provider]
+	providerCmd, ok := cfg.Providers[cfg.Provider]
 	if !ok {
 		return nil, fmt.Errorf("provider %q: %w", cfg.Provider, ErrProviderMissing)
 	}
-	if cfg.Provider == "codex" && len(pc.Args) == 0 {
-		pc.Args = []string{"exec", "-"}
+	if cfg.Provider == "codex" && len(providerCmd.Args) == 0 {
+		providerCmd.Args = []string{"exec", "-"}
 	}
-	if pc.Command == "" {
+	if providerCmd.Command == "" {
 		return nil, fmt.Errorf("provider %q: %w", cfg.Provider, ErrProviderCommandEmpty)
 	}
 
@@ -31,8 +31,8 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 		name: cfg.Provider,
 		runner: &PromptCommandRunner{
 			providerName: cfg.Provider,
-			command:      pc.Command,
-			args:         pc.Args,
+			command:      providerCmd.Command,
+			args:         providerCmd.Args,
 		},
 	}, nil
 }
