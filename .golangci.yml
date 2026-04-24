@@ -5,29 +5,9 @@ linters:
   disable:
     - cyclop
     - depguard
-    #- err113
-    #- errchkjson
     - exhaustruct
-    #- forbidigo
     - funlen
-    #- gochecknoglobals
     - gocognit
-    #- gosec
-    #- interfacebloat
-    #- ireturn
-    #- lll
-    #- mnd
-    #- nestif
-    #- nlreturn
-    #- noinlineerr
-    #- paralleltest
-    #- recvcheck
-    #- revive
-    #- tagliatelle
-    #- testpackage
-    #- unparam
-    #- varnamelen
-    #- wrapcheck
     - wsl
     - wsl_v5
   exclusions:
