@@ -294,7 +294,7 @@ func (s *Store) ListRepos() []RepoRecord {
 func (s *Store) load() error {
 	err := os.MkdirAll(filepath.Dir(s.path), 0o755) //nolint:gosec,mnd // G301: 0755 correct for server meta directory
 	if err != nil {
-		return err
+		return fmt.Errorf("create server meta dir: %w", err)
 	}
 	data, err := os.ReadFile(s.path)
 	if err != nil {
@@ -302,7 +302,7 @@ func (s *Store) load() error {
 			return s.saveLocked()
 		}
 
-		return err
+		return fmt.Errorf("read server meta: %w", err)
 	}
 	var parsed Data
 	err = json.Unmarshal(data, &parsed)
@@ -326,19 +326,23 @@ func (s *Store) load() error {
 func (s *Store) saveLocked() error {
 	err := os.MkdirAll(filepath.Dir(s.path), 0o755) //nolint:gosec,mnd // G301: 0755 correct for server meta directory
 	if err != nil {
-		return err
+		return fmt.Errorf("create server meta dir: %w", err)
 	}
 	data, err := json.MarshalIndent(s.data, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal server meta: %w", err)
 	}
 	tmp := s.path + ".tmp"
 	err = os.WriteFile(tmp, data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable server meta file
 	if err != nil {
-		return err
+		return fmt.Errorf("write server meta tmp: %w", err)
+	}
+	err = os.Rename(tmp, s.path)
+	if err != nil {
+		return fmt.Errorf("rename server meta: %w", err)
 	}
 
-	return os.Rename(tmp, s.path)
+	return nil
 }
 
 func repoID(repoPath string) string {
@@ -355,7 +359,7 @@ func randomID() (string, error) {
 	var b [12]byte
 	_, err := rand.Read(b[:])
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("rand read: %w", err)
 	}
 
 	return hex.EncodeToString(b[:]), nil

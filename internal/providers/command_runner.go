@@ -42,7 +42,7 @@ func writePromptArtifacts(runtimeDir, phase, prompt, stdout, stderr string) erro
 	stderrPath := filepath.Join(runtimeDir, phase+"-stderr.log")
 	err := os.WriteFile(inputPath, []byte(prompt), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts
 	if err != nil {
-		return err
+		return fmt.Errorf("write input file: %w", err)
 	}
 	_ = os.WriteFile(outputPath, []byte(stdout), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts
 	_ = os.WriteFile(stderrPath, []byte(stderr), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts

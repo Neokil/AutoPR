@@ -37,7 +37,7 @@ func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 	// Fall back to the pre-worktree location.
 	data, err = os.ReadFile(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
 	if err != nil {
-		return ticket.State{}, err
+		return ticket.State{}, fmt.Errorf("read state file: %w", err)
 	}
 
 	return parseStateJSON(ticketNumber, data)
@@ -55,11 +55,11 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 		autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
 		err = os.MkdirAll(autoPRDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
 		if err != nil {
-			return err
+			return fmt.Errorf("create worktree state dir: %w", err)
 		}
 		err = os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
 		if err != nil {
-			return err
+			return fmt.Errorf("write worktree state: %w", err)
 		}
 		// Remove the pre-worktree copy so there is only one source of truth.
 		_ = os.Remove(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
@@ -72,7 +72,12 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
+	err = os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
+	if err != nil {
+		return fmt.Errorf("write state: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Store) ListTicketDirs() ([]string, error) {
@@ -82,7 +87,7 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	// Tickets with state still in the pre-worktree location.
 	entries, err := os.ReadDir(s.StateRoot)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, err
+		return nil, fmt.Errorf("read state root: %w", err)
 	}
 	for _, e := range entries {
 		if !e.IsDir() || e.Name() == "worktrees" {
@@ -99,7 +104,7 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	worktreesDir := filepath.Join(s.StateRoot, "worktrees")
 	wtEntries, err := os.ReadDir(worktreesDir)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, err
+		return nil, fmt.Errorf("read worktrees dir: %w", err)
 	}
 	for _, e := range wtEntries {
 		if !e.IsDir() {
@@ -120,7 +125,12 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 }
 
 func (s *Store) RemoveTicketDir(ticketNumber string) error {
-	return os.RemoveAll(s.TicketDir(ticketNumber))
+	err := os.RemoveAll(s.TicketDir(ticketNumber))
+	if err != nil {
+		return fmt.Errorf("remove ticket dir: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Store) worktreePath(ticketNumber string) string {

@@ -77,11 +77,11 @@ func (s *State) Touch() {
 }
 
 // ArtifactPath returns the path to a named file within the worktree's .auto-pr directory.
-func (s State) ArtifactPath(name string) string {
+func (s *State) ArtifactPath(name string) string {
 	return filepath.Join(s.WorktreePath, ".auto-pr", name)
 }
 
-func (s State) RunPath(runID string, parts ...string) string {
+func (s *State) RunPath(runID string, parts ...string) string {
 	pathParts := make([]string, 0, 4+len(parts)) //nolint:mnd // 4 = worktreePath + .auto-pr + runs + runID
 	pathParts = append(pathParts, s.WorktreePath, ".auto-pr", "runs", runID)
 	pathParts = append(pathParts, parts...)
@@ -89,11 +89,11 @@ func (s State) RunPath(runID string, parts ...string) string {
 	return filepath.Join(pathParts...)
 }
 
-func (s State) ResolveRef(ref string) string {
+func (s *State) ResolveRef(ref string) string {
 	return filepath.Join(s.WorktreePath, ".auto-pr", ref)
 }
 
-func (s State) CurrentRunLogPath() string {
+func (s *State) CurrentRunLogPath() string {
 	for _, run := range s.StateHistory {
 		if run.ID == s.CurrentRunID && run.LogRef != "" {
 			return s.ResolveRef(run.LogRef)
@@ -103,7 +103,7 @@ func (s State) CurrentRunLogPath() string {
 	return ""
 }
 
-func (s State) LatestArtifactRef(stateName string) string {
+func (s *State) LatestArtifactRef(stateName string) string {
 	for i := len(s.StateHistory) - 1; i >= 0; i-- {
 		run := s.StateHistory[i]
 		if run.StateName == stateName && run.ArtifactRef != "" {

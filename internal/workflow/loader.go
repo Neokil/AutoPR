@@ -83,7 +83,7 @@ func loadFromFile(path string) (WorkflowConfig, bool, error) {
 			return WorkflowConfig{}, false, nil
 		}
 
-		return WorkflowConfig{}, false, err
+		return WorkflowConfig{}, false, fmt.Errorf("read workflow file: %w", err)
 	}
 	cfg, err := parse(data)
 	if err != nil {

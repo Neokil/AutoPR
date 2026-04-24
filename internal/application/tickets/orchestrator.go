@@ -273,7 +273,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 			st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
 		err = os.WriteFile(contextPath, []byte(content), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
 		if err != nil {
-			return err
+			return fmt.Errorf("write context file: %w", err)
 		}
 	}
 
@@ -416,7 +416,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(
 	feedbackPath := st.ArtifactPath("feedback.md")
 	err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable feedback files
 	if err != nil {
-		return err
+		return fmt.Errorf("write feedback file: %w", err)
 	}
 	stateCfg, ok := wf.StateByName(st.CurrentState)
 	if !ok {
@@ -610,7 +610,7 @@ func (o *Orchestrator) prepareRunContext(
 	runDir := st.RunPath(run.ID)
 	err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
 	if err != nil {
-		return err
+		return fmt.Errorf("create run artifacts dir: %w", err)
 	}
 
 	var b strings.Builder
@@ -642,14 +642,19 @@ func (o *Orchestrator) prepareRunContext(
 		}
 	}
 
-	return os.WriteFile(st.ArtifactPath("run-context.md"), []byte(b.String()), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
+	err = os.WriteFile(st.ArtifactPath("run-context.md"), []byte(b.String()), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
+	if err != nil {
+		return fmt.Errorf("write run-context: %w", err)
+	}
+
+	return nil
 }
 
 func newUUID() (string, error) {
 	var b [16]byte
 	_, err := rand.Read(b[:])
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("rand read: %w", err)
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 //nolint:mnd // UUID v4 version bits
 	b[8] = (b[8] & 0x3f) | 0x80 //nolint:mnd // UUID v4 variant bits
@@ -669,23 +674,26 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	entry := stateDirName + "/"
 	b, err := os.ReadFile(ignorePath) //nolint:gosec // G304: path built from trusted repo root
 	if err != nil && !os.IsNotExist(err) {
-		return err
+		return fmt.Errorf("read .gitignore: %w", err)
 	}
 	if strings.Contains(string(b), entry) {
 		return nil
 	}
 	f, err := os.OpenFile(ignorePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec,mnd // G302: 0644 is correct for .gitignore
 	if err != nil {
-		return err
+		return fmt.Errorf("open .gitignore: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	if len(b) > 0 && !strings.HasSuffix(string(b), "\n") {
 		_, err = f.WriteString("\n")
 		if err != nil {
-			return err
+			return fmt.Errorf("write .gitignore newline: %w", err)
 		}
 	}
 	_, err = f.WriteString(entry + "\n")
+	if err != nil {
+		return fmt.Errorf("write .gitignore entry: %w", err)
+	}
 
-	return err
+	return nil
 }

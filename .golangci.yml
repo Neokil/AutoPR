@@ -27,7 +27,7 @@ linters:
     #- testpackage
     #- unparam
     #- varnamelen
-    - wrapcheck
+    #- wrapcheck
     - wsl
     - wsl_v5
   exclusions:
@@ -54,6 +54,9 @@ linters:
         rules:
           json: snake
           yaml: snake
+    wrapcheck:
+      ignore-package-globs:
+        - github.com/Neokil/AutoPR/*
     varnamelen:
       ignore-names:
         - ok

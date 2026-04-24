@@ -644,7 +644,7 @@ func (s *server) enqueueAndRespond(
 func parseLogEvents(path string) ([]logEvent, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path built from trusted internal state
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read log file: %w", err)
 	}
 	lines := strings.Split(string(data), "\n")
 	events := make([]logEvent, 0)

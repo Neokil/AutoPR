@@ -39,11 +39,13 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 
 func (s *RemoteService) StartFlow(ctx context.Context, ticketNumber string) error {
 	path := fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber))
+
 	return s.enqueueOnly(ctx, path, api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
 }
 
 func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
 	path := fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber))
+
 	return s.enqueueOnly(ctx, path, api.ActionRequest{
 		RepoPath: s.repoPath,
 		Label:    actionLabel,
@@ -53,6 +55,7 @@ func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLab
 
 func (s *RemoteService) MoveToState(ctx context.Context, ticketNumber, target string) error {
 	path := fmt.Sprintf("/api/tickets/%s/move-to-state", url.PathEscape(ticketNumber))
+
 	return s.enqueueOnly(ctx, path, api.MoveToStateRequest{
 		RepoPath: s.repoPath,
 		Target:   target,
@@ -133,6 +136,7 @@ func (s *RemoteService) CleanupAll(ctx context.Context) error {
 
 func (s *RemoteService) CleanupTicket(ctx context.Context, ticketNumber string) error {
 	path := fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber))
+
 	return s.enqueueOnly(ctx, path, api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
 }
 
@@ -155,7 +159,7 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 		case "queued", "running":
 			select {
 			case <-ctx.Done():
-				return api.JobStatusResponse{}, ctx.Err()
+				return api.JobStatusResponse{}, fmt.Errorf("wait for job: %w", ctx.Err())
 			case <-time.After(pollInterval):
 			}
 		default:
@@ -191,13 +195,13 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return err
+			return fmt.Errorf("marshal request: %w", err)
 		}
 		reader = bytes.NewReader(data)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, reader)
 	if err != nil {
-		return err
+		return fmt.Errorf("build request: %w", err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -205,7 +209,7 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 
 	res, err := s.httpClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("do request: %w", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	data, _ := io.ReadAll(res.Body)
@@ -228,5 +232,10 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 		return nil
 	}
 
-	return json.Unmarshal(data, out)
+	err = json.Unmarshal(data, out)
+	if err != nil {
+		return fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return nil
 }

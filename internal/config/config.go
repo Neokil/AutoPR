@@ -81,6 +81,7 @@ func Load() (Config, error) {
 		if os.IsNotExist(err) {
 			return cfg, nil
 		}
+
 		return cfg, fmt.Errorf("read config file %s: %w", path, err)
 	}
 	err = yaml.Unmarshal(data, &cfg)

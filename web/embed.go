@@ -2,6 +2,7 @@ package web
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 )
 
@@ -11,5 +12,10 @@ import (
 var assets embed.FS
 
 func Dist() (fs.FS, error) {
-	return fs.Sub(assets, "dist")
+	sub, err := fs.Sub(assets, "dist")
+	if err != nil {
+		return nil, fmt.Errorf("sub dist: %w", err)
+	}
+
+	return sub, nil
 }
