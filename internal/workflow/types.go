@@ -57,6 +57,7 @@ func (c WorkflowConfig) Validate() error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -120,6 +121,7 @@ func validateActionNode(a ActionConfig, stateNames map[string]bool, requireLabel
 	default:
 		return fmt.Errorf("action type %q: %w", a.Type, ErrUnknownActionType)
 	}
+
 	return nil
 }
 
@@ -130,6 +132,7 @@ func (c WorkflowConfig) StateByName(name string) (StateConfig, bool) {
 			return s, true
 		}
 	}
+
 	return StateConfig{}, false
 }
 
@@ -138,6 +141,7 @@ func (c WorkflowConfig) FirstState() (StateConfig, bool) {
 	if len(c.States) == 0 {
 		return StateConfig{}, false
 	}
+
 	return c.States[0], true
 }
 
@@ -155,5 +159,6 @@ func (s StateConfig) TimelineLabel() string {
 	if s.DisplayName != "" {
 		return s.DisplayName
 	}
+
 	return s.Name
 }

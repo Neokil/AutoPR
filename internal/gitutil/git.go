@@ -15,6 +15,7 @@ func RepoRoot(ctx context.Context, cwd string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return strings.TrimSpace(res.Stdout), nil
 }
 
@@ -23,6 +24,7 @@ func CurrentBranch(ctx context.Context, repoRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return strings.TrimSpace(res.Stdout), nil
 }
 
@@ -31,6 +33,7 @@ func OriginURL(ctx context.Context, repoRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return strings.TrimSpace(res.Stdout), nil
 }
 
@@ -41,6 +44,7 @@ func DefaultBranch(ctx context.Context, repoRoot string) (string, error) {
 	}
 	branch := strings.TrimSpace(res.Stdout)
 	branch = strings.TrimPrefix(branch, "origin/")
+
 	return branch, nil
 }
 
@@ -60,6 +64,7 @@ func GitHubBlobBase(ctx context.Context, repoRoot, baseBranch string) (string, e
 			branch = "main"
 		}
 	}
+
 	return fmt.Sprintf("https://github.com/%s/blob/%s", ownerRepo, branch), nil
 }
 
@@ -88,6 +93,7 @@ func WorktreeAdd(ctx context.Context, repoRoot, branch, worktreePath, baseBranch
 	if err != nil {
 		return fmt.Errorf("create worktree: %w", err)
 	}
+
 	return nil
 }
 
@@ -97,11 +103,13 @@ func WorktreePath(repoRoot, stateDirName, ticketNumber string) string {
 
 func WorktreeRemove(ctx context.Context, repoRoot, worktreePath string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "worktree", "remove", worktreePath, "--force")
+
 	return err
 }
 
 func PushBranch(ctx context.Context, repoRoot, branch string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "push", "-u", "origin", branch)
+
 	return err
 }
 
@@ -116,8 +124,10 @@ func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (stri
 		if msg != "" {
 			return "", fmt.Errorf("%w\nstderr: %s", err, msg)
 		}
+
 		return "", err
 	}
+
 	return strings.TrimSpace(res.Stdout), nil
 }
 
@@ -130,6 +140,7 @@ func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("parse ahead count: %w", err)
 	}
+
 	return n, nil
 }
 
@@ -138,6 +149,7 @@ func HasChanges(ctx context.Context, repoRoot string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	return strings.TrimSpace(res.Stdout) != "", nil
 }
 
@@ -147,5 +159,6 @@ func CommitAll(ctx context.Context, repoRoot, message string) error {
 		return err
 	}
 	_, err = shell.Run(ctx, repoRoot, nil, "", "git", "commit", "-m", message)
+
 	return err
 }

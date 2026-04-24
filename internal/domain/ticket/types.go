@@ -63,6 +63,7 @@ type State struct {
 
 func NewState(ticketNumber string) State {
 	now := time.Now().UTC()
+
 	return State{
 		TicketNumber: ticketNumber,
 		FlowStatus:   FlowStatusPending,
@@ -84,6 +85,7 @@ func (s State) RunPath(runID string, parts ...string) string {
 	pathParts := make([]string, 0, 4+len(parts)) //nolint:mnd // 4 = worktreePath + .auto-pr + runs + runID
 	pathParts = append(pathParts, s.WorktreePath, ".auto-pr", "runs", runID)
 	pathParts = append(pathParts, parts...)
+
 	return filepath.Join(pathParts...)
 }
 
@@ -97,6 +99,7 @@ func (s State) CurrentRunLogPath() string {
 			return s.ResolveRef(run.LogRef)
 		}
 	}
+
 	return ""
 }
 
@@ -107,5 +110,6 @@ func (s State) LatestArtifactRef(stateName string) string {
 			return run.ArtifactRef
 		}
 	}
+
 	return ""
 }

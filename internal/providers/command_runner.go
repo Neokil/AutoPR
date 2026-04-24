@@ -32,6 +32,7 @@ func (r *PromptCommandRunner) Run(
 	if strings.TrimSpace(res.Stdout) == "" {
 		return "", res.Stderr, fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrEmptyOutput)
 	}
+
 	return res.Stdout, res.Stderr, nil
 }
 
@@ -45,5 +46,6 @@ func writePromptArtifacts(runtimeDir, phase, prompt, stdout, stderr string) erro
 	}
 	_ = os.WriteFile(outputPath, []byte(stdout), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts
 	_ = os.WriteFile(stderrPath, []byte(stderr), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts
+
 	return nil
 }

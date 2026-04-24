@@ -39,6 +39,7 @@ func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 	if err != nil {
 		return ticket.State{}, err
 	}
+
 	return parseStateJSON(ticketNumber, data)
 }
 
@@ -62,6 +63,7 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 		}
 		// Remove the pre-worktree copy so there is only one source of truth.
 		_ = os.Remove(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
+
 		return nil
 	}
 
@@ -69,6 +71,7 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 	if err != nil {
 		return err
 	}
+
 	return os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
 }
 
@@ -130,6 +133,7 @@ func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create ticket runtime dir: %w", err)
 	}
+
 	return dir, nil
 }
 
@@ -142,6 +146,7 @@ func parseStateJSON(ticketNumber string, data []byte) (ticket.State, error) {
 	if err != nil {
 		return ticket.State{}, fmt.Errorf("parse state file: %w", err)
 	}
+
 	return st, nil
 }
 
@@ -165,5 +170,6 @@ func isV2StateJSON(data []byte) bool {
 		"waiting_for_human": true, "implementing": true, "validating": true,
 		"pr_ready": true,
 	}
+
 	return v2States[statusStr]
 }

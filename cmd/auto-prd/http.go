@@ -54,10 +54,12 @@ type executionLog struct {
 func (s *server) handleFrontend(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		http.NotFound(w, r)
+
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+
 		return
 	}
 	requestPath := filepath.ToSlash(filepath.Clean("/" + r.URL.Path))
@@ -92,6 +94,7 @@ func (s *server) serveEmbeddedFile(w http.ResponseWriter, r *http.Request, rel s
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(data) //nolint:gosec // G705: writing pre-marshalled JSON, not HTML
 	}
+
 	return true
 }
 
@@ -103,6 +106,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("json marshal: %v", err), http.StatusInternalServerError)
+
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

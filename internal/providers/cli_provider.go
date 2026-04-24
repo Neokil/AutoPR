@@ -26,6 +26,7 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	if pc.Command == "" {
 		return nil, fmt.Errorf("provider %q: %w", cfg.Provider, ErrProviderCommandEmpty)
 	}
+
 	return &CLIProvider{
 		name: cfg.Provider,
 		runner: &PromptCommandRunner{
@@ -48,5 +49,6 @@ func (p *CLIProvider) Execute(ctx context.Context, req ExecuteRequest) (ExecuteR
 	if err != nil {
 		return ExecuteResult{RawOutput: stdout, Stderr: stderr}, err
 	}
+
 	return ExecuteResult{RawOutput: stdout, Stderr: stderr}, nil
 }

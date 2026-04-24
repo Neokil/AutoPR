@@ -15,6 +15,7 @@ func (s *server) workerLoop() {
 		err := s.executeJob(job)
 		if err != nil {
 			s.setJobStatus(job.record, "failed", err.Error())
+
 			continue
 		}
 		s.setJobStatus(job.record, "done", "")
@@ -110,6 +111,7 @@ func (s *server) executeJob(job queuedJob) error {
 			return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
 		}
 	}
+
 	return err
 }
 
@@ -121,6 +123,7 @@ func (s *server) getRepoLock(repoID string) *sync.RWMutex {
 	}
 	m := &sync.RWMutex{}
 	s.repoLocks[repoID] = m
+
 	return m
 }
 
@@ -133,5 +136,6 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 	}
 	m := &sync.Mutex{}
 	s.ticketLocks[key] = m
+
 	return m
 }

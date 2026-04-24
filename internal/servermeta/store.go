@@ -67,6 +67,7 @@ func DefaultPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
+
 	return filepath.Join(home, ".auto-pr", "server", "state.json"), nil
 }
 
@@ -80,6 +81,7 @@ func NewStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return s, nil
 }
 
@@ -97,6 +99,7 @@ func (s *Store) UpsertRepo(repoPath string) (RepoRecord, error) {
 	if err != nil {
 		return RepoRecord{}, err
 	}
+
 	return rec, nil
 }
 
@@ -105,17 +108,15 @@ func (s *Store) UpsertTicket(rec TicketRecord) error {
 	defer s.mu.Unlock()
 	rec.UpdatedAt = rec.UpdatedAt.UTC()
 	s.data.Tickets[ticketKey(rec.RepoID, rec.TicketNumber)] = rec
-	err := s.saveLocked()
-	if err != nil {
-		return err
-	}
-	return nil
+
+	return s.saveLocked()
 }
 
 func (s *Store) DeleteTicket(repoID, ticketNumber string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.data.Tickets, ticketKey(repoID, ticketNumber))
+
 	return s.saveLocked()
 }
 
@@ -127,6 +128,7 @@ func (s *Store) DeleteJobs(repoID, ticketNumber string) error {
 			delete(s.data.Jobs, id)
 		}
 	}
+
 	return s.saveLocked()
 }
 
@@ -146,6 +148,7 @@ func (s *Store) PruneTicketJobs(repoID string, keepTickets []string) error {
 		}
 		delete(s.data.Jobs, id)
 	}
+
 	return s.saveLocked()
 }
 
@@ -161,6 +164,7 @@ func (s *Store) ReplaceRepoTickets(repoID string, tickets []TicketRecord) error 
 		rec.UpdatedAt = rec.UpdatedAt.UTC()
 		s.data.Tickets[ticketKey(rec.RepoID, rec.TicketNumber)] = rec
 	}
+
 	return s.saveLocked()
 }
 
@@ -192,6 +196,7 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 		for _, job := range t.Jobs {
 			if job.Status == "queued" || job.Status == "running" {
 				t.Busy = true
+
 				break
 			}
 		}
@@ -202,10 +207,13 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 			if out[i].RepoPath == out[j].RepoPath {
 				return out[i].TicketNumber < out[j].TicketNumber
 			}
+
 			return out[i].RepoPath < out[j].RepoPath
 		}
+
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
+
 	return out
 }
 
@@ -231,6 +239,7 @@ func (s *Store) NewJob(action, repoID, repoPath, ticketNumber, scope string) (Jo
 	if err := s.saveLocked(); err != nil {
 		return JobRecord{}, err
 	}
+
 	return rec, nil
 }
 
@@ -251,6 +260,7 @@ func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
 	rec.Status = status
 	rec.Error = strings.TrimSpace(errMsg)
 	s.data.Jobs[id] = rec
+
 	return s.saveLocked()
 }
 
@@ -258,6 +268,7 @@ func (s *Store) GetJob(id string) (JobRecord, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec, ok := s.data.Jobs[id]
+
 	return rec, ok
 }
 
@@ -272,8 +283,10 @@ func (s *Store) ListRepos() []RepoRecord {
 		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
 			return out[i].Path < out[j].Path
 		}
+
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
+
 	return out
 }
 
@@ -286,6 +299,7 @@ func (s *Store) load() error {
 		if os.IsNotExist(err) {
 			return s.saveLocked()
 		}
+
 		return err
 	}
 	var parsed Data
@@ -302,6 +316,7 @@ func (s *Store) load() error {
 		parsed.Jobs = map[string]JobRecord{}
 	}
 	s.data = parsed
+
 	return nil
 }
 
@@ -317,11 +332,13 @@ func (s *Store) saveLocked() error {
 	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable server meta file
 		return err
 	}
+
 	return os.Rename(tmp, s.path)
 }
 
 func repoID(repoPath string) string {
 	sum := sha1.Sum([]byte(strings.ToLower(filepath.Clean(repoPath)))) //nolint:gosec // G401: sha1 for directory naming, not a security primitive
+
 	return hex.EncodeToString(sum[:])
 }
 
@@ -334,5 +351,6 @@ func randomID() (string, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
+
 	return hex.EncodeToString(b[:]), nil
 }

@@ -37,5 +37,6 @@ func Run(ctx context.Context, dir string, env map[string]string, stdin, name str
 	if err != nil {
 		return res, fmt.Errorf("run %s %v: %w", name, args, err)
 	}
+
 	return res, nil
 }

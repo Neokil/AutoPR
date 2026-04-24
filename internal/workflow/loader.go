@@ -63,8 +63,10 @@ func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("prompt %q: %w", promptRelPath, ErrPromptNotFound)
 		}
+
 		return nil, fmt.Errorf("read embedded prompt %q: %w", promptRelPath, err)
 	}
+
 	return data, nil
 }
 
@@ -74,12 +76,14 @@ func loadFromFile(path string) (WorkflowConfig, bool, error) {
 		if os.IsNotExist(err) {
 			return WorkflowConfig{}, false, nil
 		}
+
 		return WorkflowConfig{}, false, err
 	}
 	cfg, err := parse(data)
 	if err != nil {
 		return WorkflowConfig{}, false, err
 	}
+
 	return cfg, true, nil
 }
 
@@ -88,6 +92,7 @@ func loadEmbeddedDefault() (WorkflowConfig, error) {
 	if err != nil {
 		return WorkflowConfig{}, fmt.Errorf("embedded default workflow is invalid: %w", err)
 	}
+
 	return cfg, nil
 }
 
@@ -99,5 +104,6 @@ func parse(data []byte) (WorkflowConfig, error) {
 	if err := cfg.Validate(); err != nil {
 		return WorkflowConfig{}, fmt.Errorf("invalid workflow config: %w", err)
 	}
+
 	return cfg, nil
 }

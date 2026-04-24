@@ -182,19 +182,23 @@ func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
 	var req api.ActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
+
 		return
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
 		writeError(w, http.StatusBadRequest, "repo_path is required")
+
 		return
 	}
 	if strings.TrimSpace(req.Label) == "" {
 		writeError(w, http.StatusBadRequest, "label is required")
+
 		return
 	}
 	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 	s.enqueueAndRespond(w, jobAction, repoID, repoRoot, ticket, enqueueOptions{
@@ -208,19 +212,23 @@ func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request)
 	var req api.MoveToStateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
+
 		return
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
 		writeError(w, http.StatusBadRequest, "repo_path is required")
+
 		return
 	}
 	if strings.TrimSpace(req.Target) == "" {
 		writeError(w, http.StatusBadRequest, "target is required")
+
 		return
 	}
 	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 	s.enqueueAndRespond(w, jobMoveToState, repoID, repoRoot, ticket, enqueueOptions{
@@ -241,6 +249,7 @@ func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
 	var req api.CleanupScopeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
+
 		return
 	}
 	scope := strings.TrimSpace(req.Scope)
@@ -249,11 +258,13 @@ func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
 		writeError(w, http.StatusBadRequest, "repo_path is required")
+
 		return
 	}
 	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 
@@ -272,6 +283,7 @@ func (s *server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.meta.GetJob(id)
 	if !ok {
 		writeError(w, http.StatusNotFound, "job not found")
+
 		return
 	}
 	writeJSON(w, http.StatusOK, job)
@@ -283,15 +295,18 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"tickets": s.meta.ListTickets(""),
 		})
+
 		return
 	}
 	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 	if err := s.syncRepoTickets(repoID, repoRoot, rt, false); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
+
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -343,25 +358,30 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
 	if repoPath == "" {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+
 		return
 	}
 	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 	if err := s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, false); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeError(w, http.StatusNotFound, "ticket not found")
+
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())
+
 		return
 	}
 
 	st, err := rt.store.LoadState(ticket)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "ticket not found")
+
 		return
 	}
 	nextSteps, _ := rt.svc.NextSteps(ticket)
@@ -412,11 +432,13 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
 	if repoPath == "" {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+
 		return
 	}
 	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 	st, stErr := rt.store.LoadState(ticket)
@@ -433,9 +455,11 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 				"ticket_number": ticket,
 				"events":        []logEvent{},
 			})
+
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())
+
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -452,21 +476,25 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
 	if repoPath == "" {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+
 		return
 	}
 	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 	st, stErr := rt.store.LoadState(ticket)
 	if stErr != nil {
 		writeError(w, http.StatusNotFound, "ticket not found")
+
 		return
 	}
 	path, ok := artifactPath(st, filepath.Join(rt.store.TicketDir(ticket), state.StateFileName), name)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown artifact")
+
 		return
 	}
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path resolved from trusted internal state
@@ -480,9 +508,11 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 				"path":          path,
 				"content":       "",
 			})
+
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())
+
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -500,16 +530,19 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
 	if repoPath == "" {
 		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+
 		return
 	}
 	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return
 	}
 	st, err := rt.store.LoadState(ticket)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "ticket not found")
+
 		return
 	}
 	logs := make([]executionLog, 0, len(st.StateHistory))
@@ -518,6 +551,7 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 		content, readErr := os.ReadFile(st.ResolveRef(runPath)) //nolint:gosec // G703: path is constructed from trusted internal state
 		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 			writeError(w, http.StatusInternalServerError, readErr.Error())
+
 			return
 		}
 		logs = append(logs, executionLog{
@@ -546,12 +580,14 @@ func (s *server) enqueueAndRespond(
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
 		if err := s.ensureQueuedTicket(repoID, repoPath, ticket); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
+
 			return
 		}
 	}
 	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, opts.scope)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
+
 		return
 	}
 	qj := queuedJob{
@@ -618,11 +654,13 @@ func parseLogEvents(path string) ([]logEvent, error) {
 			flush()
 			cur = logEvent{Title: strings.TrimSpace(m[1]), Timestamp: strings.TrimSpace(m[2])}
 			bodyLines = bodyLines[:0]
+
 			continue
 		}
 		bodyLines = append(bodyLines, line)
 	}
 	flush()
+
 	return events, nil
 }
 
@@ -635,11 +673,13 @@ func artifactPath(st ticketdomain.State, stateFilePath, name string) (string, bo
 		if st.WorktreePath != "" {
 			return st.ArtifactPath("state.json"), true
 		}
+
 		return stateFilePath, true
 	case "log":
 		if st.WorktreePath != "" && st.CurrentState != "" {
 			return st.CurrentRunLogPath(), true
 		}
+
 		return "", false
 	default:
 		return "", false
@@ -658,5 +698,6 @@ func resolveArtifactRef(st ticketdomain.State, name string) (string, bool) {
 	if len(parts) < 2 || parts[0] != "runs" {
 		return "", false
 	}
+
 	return st.ResolveRef(filepath.ToSlash(clean)), true
 }

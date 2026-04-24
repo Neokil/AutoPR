@@ -23,5 +23,6 @@ func Ensure(ctx context.Context, repoRoot, stateDirName, ticketNumber, branchNam
 	if err != nil {
 		return "", fmt.Errorf("create worktree: %w", err)
 	}
+
 	return path, nil
 }

@@ -14,6 +14,7 @@ func AppendSection(path, title, body string) error {
 	}
 	defer func() { _ = f.Close() }()
 	_, err = fmt.Fprintf(f, "\n## %s (%s)\n\n%s\n", title, time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(body))
+
 	return err
 }
 
@@ -30,5 +31,6 @@ func Tail(path string, maxLines int) string {
 	if len(lines) <= maxLines {
 		return string(data)
 	}
+
 	return strings.Join(lines[len(lines)-maxLines:], "\n")
 }

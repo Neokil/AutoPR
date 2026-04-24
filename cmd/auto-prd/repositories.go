@@ -21,17 +21,21 @@ func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (st
 	var req api.RepoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
+
 		return "", "", nil, false
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
 		writeError(w, http.StatusBadRequest, "repo_path is required")
+
 		return "", "", nil, false
 	}
 	root, id, runtime, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+
 		return "", "", nil, false
 	}
+
 	return root, id, runtime, true
 }
 
@@ -48,6 +52,7 @@ func (s *server) runtimeForRepoPath(ctx context.Context, repoPath string) (strin
 	if err != nil {
 		return "", "", nil, err
 	}
+
 	return repoRoot, repoRec.ID, rt, nil
 }
 
@@ -67,6 +72,7 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 		store:    state.NewStore(repoRoot, s.cfg.StateDirName),
 	}
 	s.runtimes[repoRoot] = rt
+
 	return rt, nil
 }
 
@@ -87,6 +93,7 @@ func resolveRepoRoot(ctx context.Context, repoPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("repo_path is not a git repository: %w", err)
 	}
+
 	return filepath.Clean(root), nil
 }
 
@@ -108,6 +115,7 @@ func discoverRepositoriesFromConfig(entries []string) []string {
 				seen[absRoot] = struct{}{}
 				out = append(out, absRoot)
 			}
+
 			continue
 		}
 		children, err := os.ReadDir(absRoot)
@@ -130,6 +138,7 @@ func discoverRepositoriesFromConfig(entries []string) []string {
 		}
 	}
 	sort.Strings(out)
+
 	return out
 }
 
@@ -138,6 +147,7 @@ func expandHome(path string) string {
 		if home, err := os.UserHomeDir(); err == nil {
 			return home
 		}
+
 		return path
 	}
 	if rest, ok := strings.CutPrefix(path, "~/"); ok {
@@ -145,6 +155,7 @@ func expandHome(path string) string {
 			return filepath.Join(home, rest)
 		}
 	}
+
 	return path
 }
 
@@ -153,5 +164,6 @@ func isGitRepositoryDir(path string) bool {
 	if err != nil {
 		return false
 	}
+
 	return st.IsDir() || st.Mode().IsRegular()
 }

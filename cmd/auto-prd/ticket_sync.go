@@ -24,6 +24,7 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 	if err := rt.store.SaveState(ticket, st); err != nil {
 		return err
 	}
+
 	return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 }
 
@@ -41,6 +42,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 				TicketNumber: ticket,
 			})
 		}
+
 		return nil
 	}
 	if err != nil {
@@ -72,6 +74,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 			PRURL:        rec.PRURL,
 		})
 	}
+
 	return nil
 }
 
@@ -110,6 +113,7 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 			RepoPath: repoRoot,
 		})
 	}
+
 	return nil
 }
 
@@ -122,6 +126,7 @@ func ticketTitleForDisplay(st ticketdomain.State) string {
 	if err != nil {
 		return ""
 	}
+
 	return extractMarkdownTitle(string(data))
 }
 
@@ -147,7 +152,9 @@ func extractMarkdownTitle(content string) string {
 				}
 			}
 		}
+
 		return strings.Trim(line, "*_` ")
 	}
+
 	return ""
 }

@@ -38,6 +38,7 @@ func (s *server) checkPRStatesOnce() {
 		open, err := s.isPullRequestOpen(rec.RepoPath, rec.PRURL)
 		if err != nil {
 			slog.Error("pr monitor check failed", "repo", rec.RepoPath, "ticket", rec.TicketNumber, "err", err)
+
 			continue
 		}
 		if open {
@@ -45,6 +46,7 @@ func (s *server) checkPRStatesOnce() {
 		}
 		if err := s.autoCleanupTicket(rec); err != nil {
 			slog.Error("pr monitor auto-cleanup failed", "repo", rec.RepoPath, "ticket", rec.TicketNumber, "err", err)
+
 			continue
 		}
 		slog.Info("pr monitor auto-cleaned ticket", "repo", rec.RepoPath, "ticket", rec.TicketNumber)
@@ -64,6 +66,7 @@ func (s *server) isPullRequestOpen(repoPath, prURL string) (bool, error) {
 		return false, err
 	}
 	state := strings.TrimSpace(strings.ToLower(res.Stdout))
+
 	return state == "open", nil
 }
 
@@ -76,6 +79,7 @@ func parseGitHubPRURL(prURL string) (string, string, int, error) {
 	if convErr != nil {
 		return "", "", 0, fmt.Errorf("parse PR number: %w", convErr)
 	}
+
 	return m[1], m[2], n, nil
 }
 
@@ -106,5 +110,6 @@ func (s *server) autoCleanupTicket(rec servermeta.TicketRecord) error {
 		RepoPath:     rec.RepoPath,
 		TicketNumber: rec.TicketNumber,
 	})
+
 	return nil
 }

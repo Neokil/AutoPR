@@ -30,6 +30,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+
 		return
 	}
 	subID, ch := s.addSubscriber()
@@ -68,6 +69,7 @@ func (s *server) addSubscriber() (string, chan serverEvent) {
 	s.subsMu.Lock()
 	s.subscribers[id] = ch
 	s.subsMu.Unlock()
+
 	return id, ch
 }
 

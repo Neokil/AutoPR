@@ -63,6 +63,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusDone || st.FlowStatus == ticketdomain.FlowStatusCancelled {
 		slog.Info("skipping ticket", "ticket", ticketNumber, "status", st.FlowStatus)
+
 		return nil
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
@@ -79,6 +80,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	}
 
 	slog.Info("starting flow", "ticket", ticketNumber, "state", stateCfg.Name)
+
 	return o.runState(ctx, &st, stateCfg)
 }
 
@@ -106,6 +108,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 	for i, a := range stateCfg.Actions {
 		if strings.EqualFold(a.Label, actionLabel) {
 			action = &stateCfg.Actions[i]
+
 			break
 		}
 	}
@@ -114,11 +117,13 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 		for i, a := range stateCfg.Actions {
 			labels[i] = a.Label
 		}
+
 		return fmt.Errorf("action %q in state %q (available: %s): %w",
 			actionLabel, st.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
 	}
 
 	slog.Info("applying action", "ticket", ticketNumber, "action", actionLabel, "state", st.CurrentState)
+
 	return o.dispatchAction(ctx, &st, wf, *action, message)
 }
 
@@ -148,6 +153,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 	}
 
 	slog.Info("force moving to state", "ticket", ticketNumber, "target", target)
+
 	return o.transitionTo(ctx, &st, wf, target)
 }
 
@@ -165,6 +171,7 @@ func (o *Orchestrator) Status(ticketNumber string) error {
 			slog.Error("status failed", "ticket", t, "err", err)
 		}
 	}
+
 	return nil
 }
 
@@ -174,6 +181,7 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 		return "", err
 	}
 	wf, _ := workflow.Load(o.RepoRoot)
+
 	return buildNextSteps(st, wf), nil
 }
 
@@ -187,6 +195,7 @@ func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) e
 		return err
 	}
 	slog.Info("cleaned ticket", "ticket", ticketNumber)
+
 	return nil
 }
 
@@ -207,6 +216,7 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -221,6 +231,7 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 			slog.Error("cleanup failed", "ticket", ticket, "err", err)
 		}
 	}
+
 	return nil
 }
 
@@ -253,6 +264,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -305,6 +317,7 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable log files
 	if err != nil {
 		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
+
 		return o.failState(st, err)
 	}
 
@@ -319,6 +332,7 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 
 	slog.Info("state done, waiting for action", "ticket", st.TicketNumber, "state", stateCfg.Name)
 	st.FlowStatus = ticketdomain.FlowStatusWaiting
+
 	return o.Store.SaveState(st.TicketNumber, *st)
 }
 
@@ -327,6 +341,7 @@ func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
 	st.FlowStatus = ticketdomain.FlowStatusFailed
 	st.LastError = cause.Error()
 	_ = o.Store.SaveState(st.TicketNumber, *st)
+
 	return cause
 }
 
@@ -361,6 +376,7 @@ func (o *Orchestrator) transitionTo(
 		default:
 			st.FlowStatus = ticketdomain.FlowStatusFailed
 		}
+
 		return o.Store.SaveState(st.TicketNumber, *st)
 	}
 	slog.Info("transitioning to state", "ticket", st.TicketNumber, "target", target)
@@ -368,6 +384,7 @@ func (o *Orchestrator) transitionTo(
 	if !ok {
 		return fmt.Errorf("state %q: %w", target, ErrTargetNotFound)
 	}
+
 	return o.runState(ctx, st, stateCfg)
 }
 
@@ -386,6 +403,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(
 	if !ok {
 		return fmt.Errorf("state %q: %w", st.CurrentState, ErrStateNotFound)
 	}
+
 	return o.runState(ctx, st, stateCfg)
 }
 
@@ -406,6 +424,7 @@ func (o *Orchestrator) executeScript(
 		_ = markdown.AppendSection(logPath, "Script: "+cmd, strings.TrimSpace(output))
 		if err != nil {
 			scriptErr = err
+
 			break
 		}
 	}
@@ -439,6 +458,7 @@ func (o *Orchestrator) dispatchSubAction(
 		if strings.TrimSpace(message) == "" {
 			return nil // no script output to feed back
 		}
+
 		return o.writeFeedbackAndRerun(ctx, st, wf, message)
 	case workflow.ActionMoveToState:
 		return o.transitionTo(ctx, st, wf, action.Target)
@@ -461,10 +481,12 @@ func (o *Orchestrator) runCommands(
 		fmt.Fprintf(&b, "$ %s\n%s\n", cmd, res.Stdout)
 		if err != nil {
 			_ = markdown.AppendSection(logPath, section+" Failed", b.String()+"\nerror: "+err.Error())
+
 			return fmt.Errorf("command %q: %w", cmd, err)
 		}
 	}
 	_ = markdown.AppendSection(logPath, section, b.String())
+
 	return nil
 }
 
@@ -487,6 +509,7 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 		attrs = append(attrs, "error", st.LastError)
 	}
 	slog.Info("ticket status", attrs...)
+
 	return nil
 }
 
@@ -506,6 +529,7 @@ func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
 		for _, a := range stateCfg.Actions {
 			fmt.Fprintf(&b, "  - %s\n", a.Label)
 		}
+
 		return strings.TrimSpace(b.String())
 	case ticketdomain.FlowStatusDone:
 		return "Ticket is done."
@@ -514,6 +538,7 @@ func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
 	case ticketdomain.FlowStatusCancelled:
 		return "Ticket was cancelled."
 	}
+
 	return ""
 }
 
@@ -523,12 +548,14 @@ func resolveStateForStart(st ticketdomain.State, wf workflow.WorkflowConfig) (wo
 		if !ok {
 			return workflow.StateConfig{}, ErrWorkflowNoStates
 		}
+
 		return first, nil
 	}
 	stateCfg, ok := wf.StateByName(st.CurrentState)
 	if !ok {
 		return workflow.StateConfig{}, fmt.Errorf("state %q: %w", st.CurrentState, ErrStateNotFound)
 	}
+
 	return stateCfg, nil
 }
 
@@ -551,6 +578,7 @@ func startStateRun(st *ticketdomain.State, stateCfg workflow.StateConfig) (ticke
 	}
 	st.CurrentRunID = run.ID
 	st.StateHistory = append(st.StateHistory, run)
+
 	return run, nil
 }
 
@@ -601,6 +629,7 @@ func newUUID() (string, error) {
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 //nolint:mnd // UUID v4 version bits
 	b[8] = (b[8] & 0x3f) | 0x80 //nolint:mnd // UUID v4 variant bits
+
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		b[0:4],
 		b[4:6],
@@ -632,5 +661,6 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 		}
 	}
 	_, err = f.WriteString(entry + "\n")
+
 	return err
 }

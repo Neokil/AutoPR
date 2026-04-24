@@ -57,6 +57,7 @@ func ConfigPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
+
 	return filepath.Join(home, ".auto-pr", "config.yaml"), nil
 }
 
@@ -65,6 +66,7 @@ func PromptsDirPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
+
 	return filepath.Join(home, ".auto-pr", "prompts"), nil
 }
 
@@ -107,6 +109,7 @@ func Load() (Config, error) {
 	if cfg.RepositoryDirs == nil {
 		cfg.RepositoryDirs = []string{}
 	}
+
 	return cfg, nil
 }
 
@@ -117,5 +120,6 @@ func ResolveGuidelinesPath(repoRoot string, cfg Config) string {
 	if filepath.IsAbs(cfg.GuidelinesFile) {
 		return cfg.GuidelinesFile
 	}
+
 	return filepath.Join(repoRoot, cfg.GuidelinesFile)
 }

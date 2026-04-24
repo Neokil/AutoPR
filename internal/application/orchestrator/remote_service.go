@@ -40,6 +40,7 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 func (s *RemoteService) StartFlow(ctx context.Context, ticketNumber string) error {
 	path := fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber))
 	_, err := s.enqueueOnly(ctx, http.MethodPost, path, api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
+
 	return err
 }
 
@@ -50,6 +51,7 @@ func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLab
 		Label:    actionLabel,
 		Message:  message,
 	}, actionLabel, ticketNumber)
+
 	return err
 }
 
@@ -59,6 +61,7 @@ func (s *RemoteService) MoveToState(ctx context.Context, ticketNumber, target st
 		RepoPath: s.repoPath,
 		Target:   target,
 	}, "move to "+target, ticketNumber)
+
 	return err
 }
 
@@ -76,6 +79,7 @@ func (s *RemoteService) Status(ticketNumber string) error {
 				"ticket", t["ticket_number"], "status", t["status"],
 				"state", t["current_state"], "updated", t["updated_at"])
 		}
+
 		return nil
 	}
 	var out struct {
@@ -104,6 +108,7 @@ func (s *RemoteService) Status(ticketNumber string) error {
 		attrs = append(attrs, "next_steps", out.NextSteps)
 	}
 	slog.Info("ticket status", attrs...)
+
 	return nil
 }
 
@@ -115,24 +120,28 @@ func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
 	if err := s.doJSON(context.Background(), http.MethodGet, path, nil, &out); err != nil {
 		return "", err
 	}
+
 	return out.NextSteps, nil
 }
 
 func (s *RemoteService) CleanupDone(ctx context.Context) error {
 	_, err := s.enqueueOnly(ctx, http.MethodPost, "/api/cleanup",
 		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"}, "cleanup done", "")
+
 	return err
 }
 
 func (s *RemoteService) CleanupAll(ctx context.Context) error {
 	_, err := s.enqueueOnly(ctx, http.MethodPost, "/api/cleanup",
 		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "all"}, "cleanup all", "")
+
 	return err
 }
 
 func (s *RemoteService) CleanupTicket(ctx context.Context, ticketNumber string) error {
 	path := fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber))
 	_, err := s.enqueueOnly(ctx, http.MethodPost, path, api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
+
 	return err
 }
 
@@ -149,6 +158,7 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 			if strings.TrimSpace(job.Error) == "" {
 				return job, fmt.Errorf("job %s: %w", jobID, ErrJobFailed)
 			}
+
 			return job, fmt.Errorf("%w: %s", ErrJobFailed, job.Error)
 		case "queued", "running":
 			select {
@@ -178,6 +188,7 @@ func (s *RemoteService) enqueueOnly(
 	} else {
 		slog.Info("action scheduled", "action", action, "job_id", jobID)
 	}
+
 	return accepted, nil
 }
 
@@ -213,6 +224,7 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 		if strings.TrimSpace(string(data)) == "" {
 			return fmt.Errorf("HTTP %d: %w", res.StatusCode, ErrHTTP)
 		}
+
 		return fmt.Errorf("%w: %s", ErrRemote, strings.TrimSpace(string(data)))
 	}
 	if out == nil {
@@ -221,5 +233,6 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 	if len(data) == 0 {
 		return nil
 	}
+
 	return json.Unmarshal(data, out)
 }

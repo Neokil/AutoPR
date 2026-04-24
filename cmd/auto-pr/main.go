@@ -22,6 +22,7 @@ func resolveServerURL() string {
 	if serverURL != "" {
 		return serverURL
 	}
+
 	return defaultServerURL
 }
 
@@ -140,6 +141,7 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 			slog.Error("cleanup done", "err", err)
 			os.Exit(1)
 		}
+
 		return
 	}
 	if *all {
@@ -147,6 +149,7 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 			slog.Error("cleanup all", "err", err)
 			os.Exit(1)
 		}
+
 		return
 	}
 
