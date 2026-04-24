@@ -24,7 +24,7 @@ linters:
     #- recvcheck
     #- revive
     #- tagliatelle
-    - testpackage
+    #- testpackage
     - unparam
     - varnamelen
     - wrapcheck

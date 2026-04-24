@@ -1,4 +1,4 @@
-package workflow
+package workflow //nolint:testpackage // needs access to unexported loadEmbeddedDefault
 
 import (
 	"strings"
