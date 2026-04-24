@@ -23,7 +23,7 @@ linters:
     #- paralleltest
     #- recvcheck
     #- revive
-    - tagliatelle
+    #- tagliatelle
     - testpackage
     - unparam
     - varnamelen
@@ -49,3 +49,8 @@ linters:
           disabled: true
         - name: package-comments
           disabled: true
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
