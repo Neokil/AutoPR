@@ -81,7 +81,7 @@ func (s State) ArtifactPath(name string) string {
 }
 
 func (s State) RunPath(runID string, parts ...string) string {
-	pathParts := make([]string, 0, 4+len(parts))
+	pathParts := make([]string, 0, 4+len(parts)) //nolint:mnd // 4 = worktreePath + .auto-pr + runs + runID
 	pathParts = append(pathParts, s.WorktreePath, ".auto-pr", "runs", runID)
 	pathParts = append(pathParts, parts...)
 	return filepath.Join(pathParts...)

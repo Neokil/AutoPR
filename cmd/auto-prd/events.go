@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+const (
+	keepAliveInterval    = 20 * time.Second
+	subscriberBufferSize = 128
+)
+
 type serverEvent struct {
 	Type         string `json:"type"`
 	RepoID       string `json:"repo_id,omitempty"`
@@ -36,7 +41,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	keepAlive := time.NewTicker(20 * time.Second)
+	keepAlive := time.NewTicker(keepAliveInterval)
 	defer keepAlive.Stop()
 
 	for {
@@ -59,7 +64,7 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) addSubscriber() (string, chan serverEvent) {
 	id := fmt.Sprintf("sub-%d", time.Now().UnixNano())
-	ch := make(chan serverEvent, 128)
+	ch := make(chan serverEvent, subscriberBufferSize)
 	s.subsMu.Lock()
 	s.subscribers[id] = ch
 	s.subsMu.Unlock()

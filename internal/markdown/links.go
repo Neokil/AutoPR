@@ -25,7 +25,7 @@ func NormalizeRepoLinks(content string, roots ...string) string {
 	}
 	return markdownLinkPattern.ReplaceAllStringFunc(content, func(match string) string {
 		parts := markdownLinkPattern.FindStringSubmatch(match)
-		if len(parts) != 3 {
+		if len(parts) != 3 { //nolint:mnd // full match + 2 capture groups
 			return match
 		}
 		target := normalizeMarkdownTarget(parts[2], cleanRoots)

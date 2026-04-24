@@ -278,7 +278,7 @@ func (s *Store) ListRepos() []RepoRecord {
 }
 
 func (s *Store) load() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec // G301: 0755 correct for server meta directory
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec,mnd // G301: 0755 correct for server meta directory
 		return err
 	}
 	data, err := os.ReadFile(s.path)
@@ -306,7 +306,7 @@ func (s *Store) load() error {
 }
 
 func (s *Store) saveLocked() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec // G301: 0755 correct for server meta directory
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec,mnd // G301: 0755 correct for server meta directory
 		return err
 	}
 	data, err := json.MarshalIndent(s.data, "", "  ")
@@ -314,7 +314,7 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // G306: 0644 intentional for user-readable server meta file
+	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable server meta file
 		return err
 	}
 	return os.Rename(tmp, s.path)

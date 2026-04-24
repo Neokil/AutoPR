@@ -34,6 +34,10 @@ const (
 	jobCleanup     = "cleanup_ticket"
 	jobCleanupDone = "cleanup_done"
 	jobCleanupAll  = "cleanup_all"
+
+	jobQueueSize        = 256
+	httpReadHeaderTimeout = 30 * time.Second
+	sectionMatchLen     = 3 // full match + 2 capture groups
 )
 
 type repoRuntime struct {
@@ -107,7 +111,7 @@ func main() {
 		cfg:         cfg,
 		meta:        meta,
 		runtimes:    map[string]*repoRuntime{},
-		jobs:        make(chan queuedJob, 256),
+		jobs:        make(chan queuedJob, jobQueueSize),
 		repoLocks:   map[string]*sync.RWMutex{},
 		ticketLocks: map[string]*sync.Mutex{},
 		webFS:       distFS,
@@ -147,7 +151,7 @@ func main() {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           loggingMiddleware(mux),
-		ReadHeaderTimeout: 30 * time.Second,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
 	}
 	if err := srv.ListenAndServe(); err != nil {
 		slog.Error("server error", "err", err)
@@ -610,7 +614,7 @@ func parseLogEvents(path string) ([]logEvent, error) {
 		events = append(events, cur)
 	}
 	for _, line := range lines {
-		if m := sectionHeaderRE.FindStringSubmatch(line); len(m) == 3 {
+		if m := sectionHeaderRE.FindStringSubmatch(line); len(m) == sectionMatchLen {
 			flush()
 			cur = logEvent{Title: strings.TrimSpace(m[1]), Timestamp: strings.TrimSpace(m[2])}
 			bodyLines = bodyLines[:0]

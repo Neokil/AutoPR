@@ -12,10 +12,17 @@ import (
 	"github.com/Neokil/AutoPR/internal/shell"
 )
 
+const (
+	prMonitorInterval    = 2 * time.Minute
+	prMonitorInitialWait = 3 * time.Second
+	githubAPITimeout     = 20 * time.Second
+	prURLMatchLen        = 4 // full match + 3 capture groups (owner, repo, number)
+)
+
 func (s *server) prMonitorLoop() {
-	ticker := time.NewTicker(2 * time.Minute)
+	ticker := time.NewTicker(prMonitorInterval)
 	defer ticker.Stop()
-	time.Sleep(3 * time.Second)
+	time.Sleep(prMonitorInitialWait)
 	s.checkPRStatesOnce()
 	for range ticker.C {
 		s.checkPRStatesOnce()
@@ -49,7 +56,7 @@ func (s *server) isPullRequestOpen(repoPath, prURL string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), githubAPITimeout)
 	defer cancel()
 	path := fmt.Sprintf("repos/%s/%s/pulls/%d", owner, repo, number)
 	res, err := shell.Run(ctx, repoPath, nil, "", "gh", "api", path, "--jq", ".state")
@@ -62,7 +69,7 @@ func (s *server) isPullRequestOpen(repoPath, prURL string) (bool, error) {
 
 func parseGitHubPRURL(prURL string) (string, string, int, error) {
 	m := githubPRURLPattern.FindStringSubmatch(strings.TrimSpace(prURL))
-	if len(m) != 4 {
+	if len(m) != prURLMatchLen {
 		return "", "", 0, fmt.Errorf("%w: %s", errUnsupportedPRURL, prURL)
 	}
 	n, convErr := strconv.Atoi(m[3])

@@ -15,6 +15,12 @@ import (
 	"github.com/Neokil/AutoPR/internal/contracts/api"
 )
 
+const (
+	httpClientTimeout = 30 * time.Second
+	pollInterval      = 600 * time.Millisecond
+	httpErrorThreshold = 400
+)
+
 type RemoteService struct {
 	baseURL    string
 	repoPath   string
@@ -26,7 +32,7 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 		baseURL:  strings.TrimRight(baseURL, "/"),
 		repoPath: repoPath,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: httpClientTimeout,
 		},
 	}
 }
@@ -148,7 +154,7 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 			select {
 			case <-ctx.Done():
 				return api.JobStatusResponse{}, ctx.Err()
-			case <-time.After(600 * time.Millisecond):
+			case <-time.After(pollInterval):
 			}
 		default:
 			return job, fmt.Errorf("job status %q: %w", job.Status, ErrUnexpectedStatus)
@@ -199,7 +205,7 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 	}
 	defer func() { _ = res.Body.Close() }()
 	data, _ := io.ReadAll(res.Body)
-	if res.StatusCode >= 400 {
+	if res.StatusCode >= httpErrorThreshold {
 		var er api.ErrorResponse
 		if err := json.Unmarshal(data, &er); err == nil && strings.TrimSpace(er.Error) != "" {
 			return fmt.Errorf("%w: %s", ErrRemote, er.Error)

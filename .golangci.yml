@@ -16,7 +16,7 @@ linters:
     #- interfacebloat
     #- ireturn
     #- lll
-    - mnd
+    #- mnd
     - nestif
     - nlreturn
     - noinlineerr

@@ -52,11 +52,11 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 	if st.WorktreePath != "" {
 		// Once the worktree exists, state lives inside it.
 		autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
-		err = os.MkdirAll(autoPRDir, 0o755) //nolint:gosec // G301: 0755 correct for project directories
+		err = os.MkdirAll(autoPRDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
 		if err != nil {
 			return err
 		}
-		err = os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644) //nolint:gosec // G306: 0644 intentional for user-readable state files
+		err = os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
 		if err != nil {
 			return err
 		}
@@ -69,7 +69,7 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644) //nolint:gosec // G306: 0644 intentional for user-readable state files
+	return os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
 }
 
 func (s *Store) ListTicketDirs() ([]string, error) {
@@ -126,7 +126,7 @@ func (s *Store) worktreePath(ticketNumber string) string {
 
 func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 	dir := s.TicketDir(ticketNumber)
-	err := os.MkdirAll(dir, 0o755) //nolint:gosec // G301: 0755 correct for project directories
+	err := os.MkdirAll(dir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
 	if err != nil {
 		return "", fmt.Errorf("create ticket runtime dir: %w", err)
 	}

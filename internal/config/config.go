@@ -8,6 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	defaultServerPort    = 8080
+	defaultServerWorkers = 4
+)
+
 type ProviderCommand struct {
 	Command string   `yaml:"command"`
 	Args    []string `yaml:"args"`
@@ -34,8 +39,8 @@ func Default() Config {
 		Provider:       "codex",
 		StateDirName:   ".auto-pr",
 		RepositoryDirs: []string{},
-		ServerPort:     8080,
-		ServerWorkers:  4,
+		ServerPort:     defaultServerPort,
+		ServerWorkers:  defaultServerWorkers,
 		CreatePR:       true,
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{},
@@ -88,10 +93,10 @@ func Load() (Config, error) {
 		cfg.StateDirName = ".auto-pr"
 	}
 	if cfg.ServerPort <= 0 {
-		cfg.ServerPort = 8080
+		cfg.ServerPort = defaultServerPort
 	}
 	if cfg.ServerWorkers <= 0 {
-		cfg.ServerWorkers = 4
+		cfg.ServerWorkers = defaultServerWorkers
 	}
 	if cfg.MaxFixAttempts < 0 {
 		cfg.MaxFixAttempts = 0

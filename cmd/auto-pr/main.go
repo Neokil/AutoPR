@@ -12,7 +12,10 @@ import (
 	"github.com/Neokil/AutoPR/internal/gitutil"
 )
 
-const defaultServerURL = "http://127.0.0.1:8080"
+const (
+	defaultServerURL = "http://127.0.0.1:8080"
+	minArgs          = 2
+)
 
 func resolveServerURL() string {
 	serverURL := strings.TrimSpace(os.Getenv("AUTO_PR_SERVER_URL"))
@@ -24,7 +27,7 @@ func resolveServerURL() string {
 
 func main() {
 	ctx := context.Background()
-	if len(os.Args) < 2 {
+	if len(os.Args) < minArgs {
 		usage()
 		os.Exit(1)
 	}
