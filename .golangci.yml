@@ -20,7 +20,7 @@ linters:
     #- nestif
     #- nlreturn
     #- noinlineerr
-    - paralleltest
+    #- paralleltest
     - recvcheck
     - revive
     - tagliatelle

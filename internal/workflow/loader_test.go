@@ -16,7 +16,7 @@ states:
         target: done
 `
 
-func TestLoad_embeddedDefault(t *testing.T) {
+func TestLoad_embeddedDefault(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
@@ -30,7 +30,7 @@ func TestLoad_embeddedDefault(t *testing.T) {
 	}
 }
 
-func TestLoad_projectFile(t *testing.T) {
+func TestLoad_projectFile(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
@@ -55,7 +55,7 @@ func TestLoad_projectFile(t *testing.T) {
 	}
 }
 
-func TestLoad_globalFile(t *testing.T) {
+func TestLoad_globalFile(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	repoTmp := t.TempDir()
 	homeTmp := t.TempDir()
 	userHomeDir = func() (string, error) { return homeTmp, nil }
@@ -81,7 +81,7 @@ func TestLoad_globalFile(t *testing.T) {
 	}
 }
 
-func TestLoad_projectTakesPrecedenceOverGlobal(t *testing.T) {
+func TestLoad_projectTakesPrecedenceOverGlobal(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
@@ -130,7 +130,7 @@ states:
 	}
 }
 
-func TestLoad_invalidYAML(t *testing.T) {
+func TestLoad_invalidYAML(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
@@ -151,7 +151,7 @@ func TestLoad_invalidYAML(t *testing.T) {
 	}
 }
 
-func TestLoad_invalidWorkflowConfig(t *testing.T) {
+func TestLoad_invalidWorkflowConfig(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
@@ -181,7 +181,7 @@ states:
 	}
 }
 
-func TestReadPrompt_projectFile(t *testing.T) {
+func TestReadPrompt_projectFile(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
@@ -206,7 +206,7 @@ func TestReadPrompt_projectFile(t *testing.T) {
 	}
 }
 
-func TestReadPrompt_globalFile(t *testing.T) {
+func TestReadPrompt_globalFile(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	repoTmp := t.TempDir()
 	homeTmp := t.TempDir()
 	userHomeDir = func() (string, error) { return homeTmp, nil }
@@ -232,7 +232,7 @@ func TestReadPrompt_globalFile(t *testing.T) {
 	}
 }
 
-func TestReadPrompt_embeddedFallback(t *testing.T) {
+func TestReadPrompt_embeddedFallback(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
@@ -247,7 +247,7 @@ func TestReadPrompt_embeddedFallback(t *testing.T) {
 	}
 }
 
-func TestReadPrompt_notFound(t *testing.T) {
+func TestReadPrompt_notFound(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
 	tmp := t.TempDir()
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })

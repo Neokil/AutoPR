@@ -6,6 +6,7 @@ import (
 )
 
 func TestValidate_valid(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -33,6 +34,7 @@ func TestValidate_valid(t *testing.T) {
 }
 
 func TestValidate_runScript(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -64,6 +66,7 @@ func TestValidate_runScript(t *testing.T) {
 }
 
 func TestValidate_runScriptAlwaysHandler(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -90,6 +93,7 @@ func TestValidate_runScriptAlwaysHandler(t *testing.T) {
 }
 
 func TestValidate_emptyStateName(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{Name: "", Prompt: "prompts/x.md"},
@@ -102,6 +106,7 @@ func TestValidate_emptyStateName(t *testing.T) {
 }
 
 func TestValidate_emptyPrompt(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{Name: "step", Prompt: ""},
@@ -114,6 +119,7 @@ func TestValidate_emptyPrompt(t *testing.T) {
 }
 
 func TestValidate_emptyActionLabel(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -132,6 +138,7 @@ func TestValidate_emptyActionLabel(t *testing.T) {
 }
 
 func TestValidate_unknownActionType(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -150,6 +157,7 @@ func TestValidate_unknownActionType(t *testing.T) {
 }
 
 func TestValidate_moveToStateNoTarget(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -168,6 +176,7 @@ func TestValidate_moveToStateNoTarget(t *testing.T) {
 }
 
 func TestValidate_moveToStateUnknownTarget(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -186,6 +195,7 @@ func TestValidate_moveToStateUnknownTarget(t *testing.T) {
 }
 
 func TestValidate_moveToStateTerminalTargets(t *testing.T) {
+	t.Parallel()
 	for _, target := range []string{"done", "cancelled", "failed"} {
 		cfg := WorkflowConfig{
 			States: []StateConfig{
@@ -206,6 +216,7 @@ func TestValidate_moveToStateTerminalTargets(t *testing.T) {
 }
 
 func TestValidate_provideFeedbackWithCommands(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -224,6 +235,7 @@ func TestValidate_provideFeedbackWithCommands(t *testing.T) {
 }
 
 func TestValidate_provideFeedbackWithHandlers(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -248,6 +260,7 @@ func TestValidate_provideFeedbackWithHandlers(t *testing.T) {
 }
 
 func TestValidate_runScriptNoCommands(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -272,6 +285,7 @@ func TestValidate_runScriptNoCommands(t *testing.T) {
 }
 
 func TestValidate_runScriptNoHandlers(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -290,6 +304,7 @@ func TestValidate_runScriptNoHandlers(t *testing.T) {
 }
 
 func TestValidate_nestedRunScript(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -320,6 +335,7 @@ func TestValidate_nestedRunScript(t *testing.T) {
 }
 
 func TestValidate_runScriptWithTarget(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{
@@ -346,6 +362,7 @@ func TestValidate_runScriptWithTarget(t *testing.T) {
 }
 
 func TestStateByName(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{Name: "alpha", Prompt: "a.md"},
@@ -363,6 +380,7 @@ func TestStateByName(t *testing.T) {
 }
 
 func TestFirstState(t *testing.T) {
+	t.Parallel()
 	cfg := WorkflowConfig{
 		States: []StateConfig{
 			{Name: "first", Prompt: "f.md"},
@@ -382,6 +400,7 @@ func TestFirstState(t *testing.T) {
 }
 
 func TestIsTerminal(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"done", "cancelled", "failed"} {
 		if !IsTerminal(name) {
 			t.Errorf("expected %q to be terminal", name)
@@ -395,6 +414,7 @@ func TestIsTerminal(t *testing.T) {
 }
 
 func TestEmbeddedDefaultIsValid(t *testing.T) {
+	t.Parallel()
 	cfg, err := loadEmbeddedDefault()
 	if err != nil {
 		t.Fatalf("embedded default workflow is invalid: %v", err)
