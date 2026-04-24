@@ -236,7 +236,8 @@ func (s *Store) NewJob(action, repoID, repoPath, ticketNumber, scope string) (Jo
 		CreatedAt:    now,
 	}
 	s.data.Jobs[id] = rec
-	if err := s.saveLocked(); err != nil {
+	err = s.saveLocked()
+	if err != nil {
 		return JobRecord{}, err
 	}
 
@@ -291,7 +292,8 @@ func (s *Store) ListRepos() []RepoRecord {
 }
 
 func (s *Store) load() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec,mnd // G301: 0755 correct for server meta directory
+	err := os.MkdirAll(filepath.Dir(s.path), 0o755) //nolint:gosec,mnd // G301: 0755 correct for server meta directory
+	if err != nil {
 		return err
 	}
 	data, err := os.ReadFile(s.path)
@@ -303,7 +305,8 @@ func (s *Store) load() error {
 		return err
 	}
 	var parsed Data
-	if err := json.Unmarshal(data, &parsed); err != nil {
+	err = json.Unmarshal(data, &parsed)
+	if err != nil {
 		return fmt.Errorf("parse server state: %w", err)
 	}
 	if parsed.Repos == nil {
@@ -321,7 +324,8 @@ func (s *Store) load() error {
 }
 
 func (s *Store) saveLocked() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec,mnd // G301: 0755 correct for server meta directory
+	err := os.MkdirAll(filepath.Dir(s.path), 0o755) //nolint:gosec,mnd // G301: 0755 correct for server meta directory
+	if err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(s.data, "", "  ")
@@ -329,7 +333,8 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable server meta file
+	err = os.WriteFile(tmp, data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable server meta file
+	if err != nil {
 		return err
 	}
 
@@ -348,7 +353,8 @@ func ticketKey(repoID, ticketNumber string) string {
 
 func randomID() (string, error) {
 	var b [12]byte
-	if _, err := rand.Read(b[:]); err != nil {
+	_, err := rand.Read(b[:])
+	if err != nil {
 		return "", err
 	}
 

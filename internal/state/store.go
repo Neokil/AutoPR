@@ -162,7 +162,8 @@ func isV2StateJSON(data []byte) bool {
 		return false
 	}
 	var statusStr string
-	if err := json.Unmarshal(rawStatus, &statusStr); err != nil {
+	err = json.Unmarshal(rawStatus, &statusStr)
+	if err != nil {
 		return false
 	}
 	v2States := map[string]bool{

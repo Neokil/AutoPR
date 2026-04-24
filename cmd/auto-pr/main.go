@@ -67,7 +67,8 @@ func main() {
 func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	requireArgs("run", args, 1)
 	for _, ticket := range args {
-		if err := svc.StartFlow(ctx, ticket); err != nil {
+		err := svc.StartFlow(ctx, ticket)
+		if err != nil {
 			slog.Error("start flow", "err", err)
 			os.Exit(1)
 		}
@@ -83,7 +84,8 @@ func statusCmd(svc orchestrator.Service, args []string) {
 	if len(args) == 1 {
 		ticket = args[0]
 	}
-	if err := svc.Status(ticket); err != nil {
+	err := svc.Status(ticket)
+	if err != nil {
 		slog.Error("status", "err", err)
 		os.Exit(1)
 	}
@@ -105,7 +107,8 @@ func actionCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 		slog.Error("invalid usage", "err", errActionRequiresLabel)
 		os.Exit(1)
 	}
-	if err := svc.ApplyAction(ctx, ticket, *label, *message); err != nil {
+	err := svc.ApplyAction(ctx, ticket, *label, *message)
+	if err != nil {
 		slog.Error("apply action", "err", err)
 		os.Exit(1)
 	}
@@ -137,7 +140,8 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 		os.Exit(1)
 	}
 	if *doneOnly {
-		if err := svc.CleanupDone(ctx); err != nil {
+		err := svc.CleanupDone(ctx)
+		if err != nil {
 			slog.Error("cleanup done", "err", err)
 			os.Exit(1)
 		}
@@ -145,7 +149,8 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 		return
 	}
 	if *all {
-		if err := svc.CleanupAll(ctx); err != nil {
+		err := svc.CleanupAll(ctx)
+		if err != nil {
 			slog.Error("cleanup all", "err", err)
 			os.Exit(1)
 		}
@@ -158,7 +163,8 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 		slog.Error("invalid usage", "err", errUsageCleanup)
 		os.Exit(1)
 	}
-	if err := svc.CleanupTicket(ctx, rest[0]); err != nil {
+	err := svc.CleanupTicket(ctx, rest[0])
+	if err != nil {
 		slog.Error("cleanup ticket", "err", err)
 		os.Exit(1)
 	}

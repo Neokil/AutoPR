@@ -26,7 +26,8 @@ func TestValidate_valid(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		t.Fatalf("expected valid config, got error: %v", err)
 	}
 }
@@ -56,7 +57,8 @@ func TestValidate_runScript(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		t.Fatalf("expected valid config, got error: %v", err)
 	}
 }
@@ -81,7 +83,8 @@ func TestValidate_runScriptAlwaysHandler(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		t.Fatalf("expected valid config, got error: %v", err)
 	}
 }
@@ -92,7 +95,8 @@ func TestValidate_emptyStateName(t *testing.T) {
 			{Name: "", Prompt: "prompts/x.md"},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for empty state name")
 	}
 }
@@ -103,7 +107,8 @@ func TestValidate_emptyPrompt(t *testing.T) {
 			{Name: "step", Prompt: ""},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for empty prompt")
 	}
 }
@@ -120,7 +125,8 @@ func TestValidate_emptyActionLabel(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for empty action label")
 	}
 }
@@ -137,7 +143,8 @@ func TestValidate_unknownActionType(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for unknown action type")
 	}
 }
@@ -154,7 +161,8 @@ func TestValidate_moveToStateNoTarget(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for move_to_state without target")
 	}
 }
@@ -171,7 +179,8 @@ func TestValidate_moveToStateUnknownTarget(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for move_to_state with unknown target")
 	}
 }
@@ -189,7 +198,8 @@ func TestValidate_moveToStateTerminalTargets(t *testing.T) {
 				},
 			},
 		}
-		if err := cfg.Validate(); err != nil {
+		err := cfg.Validate()
+		if err != nil {
 			t.Errorf("target %q should be valid terminal, got error: %v", target, err)
 		}
 	}
@@ -207,7 +217,8 @@ func TestValidate_provideFeedbackWithCommands(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for provide_feedback with commands")
 	}
 }
@@ -230,7 +241,8 @@ func TestValidate_provideFeedbackWithHandlers(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for provide_feedback with script handlers")
 	}
 }
@@ -253,7 +265,8 @@ func TestValidate_runScriptNoCommands(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for run_script without commands")
 	}
 }
@@ -270,7 +283,8 @@ func TestValidate_runScriptNoHandlers(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for run_script without any handler")
 	}
 }
@@ -299,7 +313,8 @@ func TestValidate_nestedRunScript(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for nested run_script")
 	}
 }
@@ -324,7 +339,8 @@ func TestValidate_runScriptWithTarget(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err == nil {
+	err := cfg.Validate()
+	if err == nil {
 		t.Fatal("expected error for run_script with a target field set")
 	}
 }

@@ -19,7 +19,7 @@ linters:
     #- mnd
     #- nestif
     #- nlreturn
-    - noinlineerr
+    #- noinlineerr
     - paralleltest
     - recvcheck
     - revive

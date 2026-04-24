@@ -37,10 +37,12 @@ func TestLoad_projectFile(t *testing.T) {
 
 	// Write a project-level workflow file.
 	autoprDir := filepath.Join(tmp, ".auto-pr")
-	if err := os.MkdirAll(autoprDir, 0o755); err != nil { //nolint:gosec // G301: test setup, standard dir perms
+	err := os.MkdirAll(autoprDir, 0o755) //nolint:gosec // G301: test setup, standard dir perms
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(autoprDir, "workflow.yaml"), []byte(validWorkflowYAML), 0o644); err != nil { //nolint:gosec // G306: test setup, readable perms intentional
+	err = os.WriteFile(filepath.Join(autoprDir, "workflow.yaml"), []byte(validWorkflowYAML), 0o644) //nolint:gosec // G306: test setup, readable perms intentional
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -61,10 +63,12 @@ func TestLoad_globalFile(t *testing.T) {
 
 	// Write a global workflow file (no project-level file).
 	globalDir := filepath.Join(homeTmp, ".auto-pr")
-	if err := os.MkdirAll(globalDir, 0o755); err != nil { //nolint:gosec // G301: test setup, standard dir perms
+	err := os.MkdirAll(globalDir, 0o755) //nolint:gosec // G301: test setup, standard dir perms
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(globalDir, "workflow.yaml"), []byte(validWorkflowYAML), 0o644); err != nil { //nolint:gosec // G306: test setup, readable perms intentional
+	err = os.WriteFile(filepath.Join(globalDir, "workflow.yaml"), []byte(validWorkflowYAML), 0o644) //nolint:gosec // G306: test setup, readable perms intentional
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,7 +88,8 @@ func TestLoad_projectTakesPrecedenceOverGlobal(t *testing.T) {
 
 	// Write both project and global files.
 	projectDir := filepath.Join(tmp, ".auto-pr")
-	if err := os.MkdirAll(projectDir, 0o755); err != nil { //nolint:gosec // G301: test setup, standard dir perms
+	err := os.MkdirAll(projectDir, 0o755) //nolint:gosec // G301: test setup, standard dir perms
+	if err != nil {
 		t.Fatal(err)
 	}
 	projectYAML := `
@@ -96,7 +101,8 @@ states:
         type: move_to_state
         target: done
 `
-	if err := os.WriteFile(filepath.Join(projectDir, "workflow.yaml"), []byte(projectYAML), 0o644); err != nil { //nolint:gosec // G306: test setup, readable perms intentional
+	err = os.WriteFile(filepath.Join(projectDir, "workflow.yaml"), []byte(projectYAML), 0o644) //nolint:gosec // G306: test setup, readable perms intentional
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -130,14 +136,17 @@ func TestLoad_invalidYAML(t *testing.T) {
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
 
 	autoprDir := filepath.Join(tmp, ".auto-pr")
-	if err := os.MkdirAll(autoprDir, 0o755); err != nil { //nolint:gosec // G301: test setup, standard dir perms
+	err := os.MkdirAll(autoprDir, 0o755) //nolint:gosec // G301: test setup, standard dir perms
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(autoprDir, "workflow.yaml"), []byte("states:\n  - {invalid"), 0o644); err != nil { //nolint:gosec // G306: test setup, readable perms intentional
+	err = os.WriteFile(filepath.Join(autoprDir, "workflow.yaml"), []byte("states:\n  - {invalid"), 0o644) //nolint:gosec // G306: test setup, readable perms intentional
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := Load(tmp); err == nil {
+	_, loadErr := Load(tmp)
+	if loadErr == nil {
 		t.Fatal("expected error for invalid YAML")
 	}
 }
@@ -148,7 +157,8 @@ func TestLoad_invalidWorkflowConfig(t *testing.T) {
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
 
 	autoprDir := filepath.Join(tmp, ".auto-pr")
-	if err := os.MkdirAll(autoprDir, 0o755); err != nil { //nolint:gosec // G301: test setup, standard dir perms
+	err := os.MkdirAll(autoprDir, 0o755) //nolint:gosec // G301: test setup, standard dir perms
+	if err != nil {
 		t.Fatal(err)
 	}
 	badYAML := `
@@ -160,11 +170,13 @@ states:
         type: move_to_state
         target: nonexistent-state
 `
-	if err := os.WriteFile(filepath.Join(autoprDir, "workflow.yaml"), []byte(badYAML), 0o644); err != nil { //nolint:gosec // G306: test setup, readable perms intentional
+	err = os.WriteFile(filepath.Join(autoprDir, "workflow.yaml"), []byte(badYAML), 0o644) //nolint:gosec // G306: test setup, readable perms intentional
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := Load(tmp); err == nil {
+	_, loadErr := Load(tmp)
+	if loadErr == nil {
 		t.Fatal("expected validation error for unknown target state")
 	}
 }
@@ -175,11 +187,13 @@ func TestReadPrompt_projectFile(t *testing.T) {
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
 
 	promptDir := filepath.Join(tmp, ".auto-pr", "prompts")
-	if err := os.MkdirAll(promptDir, 0o755); err != nil { //nolint:gosec // G301: test setup, standard dir perms
+	err := os.MkdirAll(promptDir, 0o755) //nolint:gosec // G301: test setup, standard dir perms
+	if err != nil {
 		t.Fatal(err)
 	}
 	content := []byte("project prompt content")
-	if err := os.WriteFile(filepath.Join(promptDir, "my-prompt.md"), content, 0o644); err != nil { //nolint:gosec // G306: test setup, readable perms intentional
+	err = os.WriteFile(filepath.Join(promptDir, "my-prompt.md"), content, 0o644) //nolint:gosec // G306: test setup, readable perms intentional
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -199,11 +213,13 @@ func TestReadPrompt_globalFile(t *testing.T) {
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
 
 	promptDir := filepath.Join(homeTmp, ".auto-pr", "prompts")
-	if err := os.MkdirAll(promptDir, 0o755); err != nil { //nolint:gosec // G301: test setup, standard dir perms
+	err := os.MkdirAll(promptDir, 0o755) //nolint:gosec // G301: test setup, standard dir perms
+	if err != nil {
 		t.Fatal(err)
 	}
 	content := []byte("global prompt content")
-	if err := os.WriteFile(filepath.Join(promptDir, "my-prompt.md"), content, 0o644); err != nil { //nolint:gosec // G306: test setup, readable perms intentional
+	err = os.WriteFile(filepath.Join(promptDir, "my-prompt.md"), content, 0o644) //nolint:gosec // G306: test setup, readable perms intentional
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -236,7 +252,8 @@ func TestReadPrompt_notFound(t *testing.T) {
 	userHomeDir = func() (string, error) { return tmp, nil }
 	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
 
-	if _, err := ReadPrompt(tmp, "prompts/does-not-exist.md"); err == nil {
+	_, readErr := ReadPrompt(tmp, "prompts/does-not-exist.md")
+	if readErr == nil {
 		t.Fatal("expected error for missing prompt")
 	}
 }

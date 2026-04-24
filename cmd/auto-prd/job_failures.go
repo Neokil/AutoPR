@@ -27,7 +27,8 @@ func (s *server) persistTicketFailure(
 	msg := strings.TrimSpace(cause.Error())
 	st.FlowStatus = ticketdomain.FlowStatusFailed
 	st.LastError = msg
-	if saveErr := rt.store.SaveState(ticket, st); saveErr != nil {
+	saveErr := rt.store.SaveState(ticket, st)
+	if saveErr != nil {
 		return saveErr
 	}
 

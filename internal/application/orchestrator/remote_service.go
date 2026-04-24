@@ -71,7 +71,8 @@ func (s *RemoteService) Status(ticketNumber string) error {
 			Tickets []map[string]any `json:"tickets"`
 		}
 		ticketsURL := "/api/tickets?repo_path=" + url.QueryEscape(s.repoPath)
-		if err := s.doJSON(context.Background(), http.MethodGet, ticketsURL, nil, &out); err != nil {
+		err := s.doJSON(context.Background(), http.MethodGet, ticketsURL, nil, &out)
+		if err != nil {
 			return err
 		}
 		for _, t := range out.Tickets {
@@ -88,7 +89,8 @@ func (s *RemoteService) Status(ticketNumber string) error {
 		NextSteps    string         `json:"next_steps"`
 	}
 	path := "/api/tickets/" + url.PathEscape(ticketNumber) + "?repo_path=" + url.QueryEscape(s.repoPath)
-	if err := s.doJSON(context.Background(), http.MethodGet, path, nil, &out); err != nil {
+	err := s.doJSON(context.Background(), http.MethodGet, path, nil, &out)
+	if err != nil {
 		return err
 	}
 	attrs := []any{
@@ -117,7 +119,8 @@ func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
 		NextSteps string `json:"next_steps"`
 	}
 	path := "/api/tickets/" + url.PathEscape(ticketNumber) + "?repo_path=" + url.QueryEscape(s.repoPath)
-	if err := s.doJSON(context.Background(), http.MethodGet, path, nil, &out); err != nil {
+	err := s.doJSON(context.Background(), http.MethodGet, path, nil, &out)
+	if err != nil {
 		return "", err
 	}
 
@@ -148,7 +151,8 @@ func (s *RemoteService) CleanupTicket(ctx context.Context, ticketNumber string) 
 func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobStatusResponse, error) {
 	for {
 		var job api.JobStatusResponse
-		if err := s.doJSON(ctx, http.MethodGet, "/api/jobs/"+url.PathEscape(jobID), nil, &job); err != nil {
+		err := s.doJSON(ctx, http.MethodGet, "/api/jobs/"+url.PathEscape(jobID), nil, &job)
+		if err != nil {
 			return api.JobStatusResponse{}, err
 		}
 		switch job.Status {
@@ -176,7 +180,8 @@ func (s *RemoteService) enqueueOnly(
 	ctx context.Context, method, path string, body any, action, ticket string,
 ) (api.ActionAcceptedResponse, error) {
 	var accepted api.ActionAcceptedResponse
-	if err := s.doJSON(ctx, method, path, body, &accepted); err != nil {
+	err := s.doJSON(ctx, method, path, body, &accepted)
+	if err != nil {
 		return api.ActionAcceptedResponse{}, err
 	}
 	jobID := strings.TrimSpace(accepted.JobID)
@@ -218,7 +223,8 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 	data, _ := io.ReadAll(res.Body)
 	if res.StatusCode >= httpErrorThreshold {
 		var er api.ErrorResponse
-		if err := json.Unmarshal(data, &er); err == nil && strings.TrimSpace(er.Error) != "" {
+		unmarshalErr := json.Unmarshal(data, &er)
+		if unmarshalErr == nil && strings.TrimSpace(er.Error) != "" {
 			return fmt.Errorf("%w: %s", ErrRemote, er.Error)
 		}
 		if strings.TrimSpace(string(data)) == "" {

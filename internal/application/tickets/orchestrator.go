@@ -55,7 +55,8 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	st, err := o.Store.LoadState(ticketNumber)
 	if os.IsNotExist(err) {
 		st = ticketdomain.NewState(ticketNumber)
-		if err := o.Store.SaveState(ticketNumber, st); err != nil {
+		err = o.Store.SaveState(ticketNumber, st)
+		if err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -69,7 +70,8 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
 		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
-	if err := o.ensureWorktreeAndContext(ctx, &st); err != nil {
+	err = o.ensureWorktreeAndContext(ctx, &st)
+	if err != nil {
 		return err
 	}
 
@@ -139,7 +141,8 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 	st, err := o.Store.LoadState(ticketNumber)
 	if os.IsNotExist(err) {
 		st = ticketdomain.NewState(ticketNumber)
-		if err := o.Store.SaveState(ticketNumber, st); err != nil {
+		err = o.Store.SaveState(ticketNumber, st)
+		if err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -148,7 +151,8 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
 		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
-	if err := o.ensureWorktreeAndContext(ctx, &st); err != nil {
+	err = o.ensureWorktreeAndContext(ctx, &st)
+	if err != nil {
 		return err
 	}
 
@@ -167,7 +171,8 @@ func (o *Orchestrator) Status(ticketNumber string) error {
 	}
 	sort.Strings(tickets)
 	for _, t := range tickets {
-		if err := o.printStatus(t); err != nil {
+		err = o.printStatus(t)
+		if err != nil {
 			slog.Error("status failed", "ticket", t, "err", err)
 		}
 	}
@@ -191,7 +196,8 @@ func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) e
 		return err
 	}
 	_ = gitutil.WorktreeRemove(ctx, o.RepoRoot, st.WorktreePath)
-	if err := o.Store.RemoveTicketDir(ticketNumber); err != nil {
+	err = o.Store.RemoveTicketDir(ticketNumber)
+	if err != nil {
 		return err
 	}
 	slog.Info("cleaned ticket", "ticket", ticketNumber)
@@ -211,7 +217,8 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 			continue
 		}
 		if st.FlowStatus == ticketdomain.FlowStatusDone {
-			if err := o.CleanupTicket(ctx, ticket); err != nil {
+			err = o.CleanupTicket(ctx, ticket)
+			if err != nil {
 				slog.Error("cleanup failed", "ticket", ticket, "err", err)
 			}
 		}
@@ -227,7 +234,8 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	}
 	sort.Strings(tickets)
 	for _, ticket := range tickets {
-		if err := o.CleanupTicket(ctx, ticket); err != nil {
+		err = o.CleanupTicket(ctx, ticket)
+		if err != nil {
 			slog.Error("cleanup failed", "ticket", ticket, "err", err)
 		}
 	}
@@ -245,22 +253,26 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 		}
 		st.BranchName = branchName
 		st.WorktreePath = wtPath
-		if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+		err = o.Store.SaveState(st.TicketNumber, *st)
+		if err != nil {
 			return err
 		}
 	}
 
 	autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
-	if err := os.MkdirAll(autoPRDir, 0o755); err != nil { //nolint:gosec,mnd // G301: 0755 correct for project directories
+	err := os.MkdirAll(autoPRDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+	if err != nil {
 		return fmt.Errorf("create .auto-pr dir: %w", err)
 	}
 
 	contextPath := st.ArtifactPath("context.md")
-	if _, statErr := os.Stat(contextPath); os.IsNotExist(statErr) {
+	_, statErr := os.Stat(contextPath)
+	if os.IsNotExist(statErr) {
 		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
 		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n",
 			st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
-		if err := os.WriteFile(contextPath, []byte(content), 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
+		err = os.WriteFile(contextPath, []byte(content), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
+		if err != nil {
 			return err
 		}
 	}
@@ -281,14 +293,17 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 	st.CurrentState = stateCfg.Name
 	st.FlowStatus = ticketdomain.FlowStatusRunning
 	st.LastError = ""
-	if err := o.Store.SaveState(st.TicketNumber, *st); err != nil {
+	err = o.Store.SaveState(st.TicketNumber, *st)
+	if err != nil {
 		return err
 	}
-	if err := o.prepareRunContext(*st, stateCfg, run); err != nil {
+	err = o.prepareRunContext(*st, stateCfg, run)
+	if err != nil {
 		return o.failState(st, err)
 	}
 
-	if err := o.runCommands(ctx, st.WorktreePath, stateCfg.PrePromptCommands, logPath, "Pre-prompt"); err != nil {
+	err = o.runCommands(ctx, st.WorktreePath, stateCfg.PrePromptCommands, logPath, "Pre-prompt")
+	if err != nil {
 		return o.failState(st, err)
 	}
 
@@ -298,12 +313,14 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 	}
 
 	promptPath := st.RunPath(run.ID, "prompt.md")
-	if err := os.WriteFile(promptPath, promptContent, 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable prompt files
+	err = os.WriteFile(promptPath, promptContent, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable prompt files
+	if err != nil {
 		return o.failState(st, err)
 	}
 
 	runtimeDir := st.RunPath(run.ID, "provider")
-	if err := os.MkdirAll(runtimeDir, 0o755); err != nil { //nolint:gosec,mnd // G301: 0755 correct for project directories
+	err = os.MkdirAll(runtimeDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+	if err != nil {
 		return o.failState(st, err)
 	}
 
@@ -323,7 +340,8 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 
 	_ = markdown.AppendSection(logPath, stateCfg.Name, result.RawOutput)
 
-	if err := o.runCommands(ctx, st.WorktreePath, stateCfg.PostPromptCommands, logPath, "Post-prompt"); err != nil {
+	err = o.runCommands(ctx, st.WorktreePath, stateCfg.PostPromptCommands, logPath, "Post-prompt")
+	if err != nil {
 		return o.failState(st, err)
 	}
 
@@ -396,7 +414,8 @@ func (o *Orchestrator) writeFeedbackAndRerun(
 	}
 	slog.Info("applying feedback", "ticket", st.TicketNumber, "state", st.CurrentState)
 	feedbackPath := st.ArtifactPath("feedback.md")
-	if err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable feedback files
+	err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable feedback files
+	if err != nil {
 		return err
 	}
 	stateCfg, ok := wf.StateByName(st.CurrentState)
@@ -432,17 +451,20 @@ func (o *Orchestrator) executeScript(
 	captured := strings.TrimSpace(out.String())
 
 	if scriptErr == nil && action.OnSuccess != nil {
-		if err := o.dispatchSubAction(ctx, st, wf, *action.OnSuccess, captured); err != nil {
+		err := o.dispatchSubAction(ctx, st, wf, *action.OnSuccess, captured)
+		if err != nil {
 			return err
 		}
 	} else if scriptErr != nil && action.OnFailure != nil {
-		if err := o.dispatchSubAction(ctx, st, wf, *action.OnFailure, captured); err != nil {
+		err := o.dispatchSubAction(ctx, st, wf, *action.OnFailure, captured)
+		if err != nil {
 			return err
 		}
 	}
 
 	if action.Always != nil {
-		if err := o.dispatchSubAction(ctx, st, wf, *action.Always, captured); err != nil {
+		err := o.dispatchSubAction(ctx, st, wf, *action.Always, captured)
+		if err != nil {
 			return err
 		}
 	}
@@ -586,7 +608,8 @@ func (o *Orchestrator) prepareRunContext(
 	st ticketdomain.State, stateCfg workflow.StateConfig, run ticketdomain.StateRun,
 ) error {
 	runDir := st.RunPath(run.ID)
-	if err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755); err != nil { //nolint:gosec,mnd // G301: 0755 correct for project directories
+	err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+	if err != nil {
 		return err
 	}
 
@@ -624,7 +647,8 @@ func (o *Orchestrator) prepareRunContext(
 
 func newUUID() (string, error) {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
+	_, err := rand.Read(b[:])
+	if err != nil {
 		return "", err
 	}
 	b[6] = (b[6] & 0x0f) | 0x40 //nolint:mnd // UUID v4 version bits
@@ -656,7 +680,8 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	}
 	defer func() { _ = f.Close() }()
 	if len(b) > 0 && !strings.HasSuffix(string(b), "\n") {
-		if _, err := f.WriteString("\n"); err != nil {
+		_, err = f.WriteString("\n")
+		if err != nil {
 			return err
 		}
 	}

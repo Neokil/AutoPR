@@ -107,7 +107,8 @@ func (s *server) executeJob(job queuedJob) error {
 		err = fmt.Errorf("%w: %s", errUnsupportedJobAction, job.record.Action)
 	}
 	if err != nil && ticket != "" {
-		if persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, rt, job, err); persistErr != nil {
+		persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, rt, job, err)
+		if persistErr != nil {
 			return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
 		}
 	}

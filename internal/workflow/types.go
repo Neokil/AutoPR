@@ -52,7 +52,8 @@ func (c WorkflowConfig) Validate() error {
 			return fmt.Errorf("state %q: %w", state.Name, ErrStateEmptyPrompt)
 		}
 		for _, action := range state.Actions {
-			if err := validateAction(action, stateNames); err != nil {
+			err := validateAction(action, stateNames)
+			if err != nil {
 				return fmt.Errorf("state %q action %q: %w", state.Name, action.Label, err)
 			}
 		}
@@ -114,7 +115,8 @@ func validateActionNode(a ActionConfig, stateNames map[string]bool, requireLabel
 			if sub.Type == ActionRunScript {
 				return ErrNestedRunScript
 			}
-			if err := validateHandler(*sub, stateNames); err != nil {
+			err := validateHandler(*sub, stateNames)
+			if err != nil {
 				return fmt.Errorf("handler: %w", err)
 			}
 		}

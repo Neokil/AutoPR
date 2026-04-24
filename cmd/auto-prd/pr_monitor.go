@@ -44,8 +44,9 @@ func (s *server) checkPRStatesOnce() {
 		if open {
 			continue
 		}
-		if err := s.autoCleanupTicket(rec); err != nil {
-			slog.Error("pr monitor auto-cleanup failed", "repo", rec.RepoPath, "ticket", rec.TicketNumber, "err", err)
+		autoCleanupErr := s.autoCleanupTicket(rec)
+		if autoCleanupErr != nil {
+			slog.Error("pr monitor auto-cleanup failed", "repo", rec.RepoPath, "ticket", rec.TicketNumber, "err", autoCleanupErr)
 
 			continue
 		}
@@ -95,13 +96,16 @@ func (s *server) autoCleanupTicket(rec servermeta.TicketRecord) error {
 	if err != nil {
 		return err
 	}
-	if err := rt.svc.CleanupTicket(context.Background(), rec.TicketNumber); err != nil {
+	err = rt.svc.CleanupTicket(context.Background(), rec.TicketNumber)
+	if err != nil {
 		return err
 	}
-	if err := s.meta.DeleteTicket(rec.RepoID, rec.TicketNumber); err != nil {
+	err = s.meta.DeleteTicket(rec.RepoID, rec.TicketNumber)
+	if err != nil {
 		return err
 	}
-	if err := s.meta.DeleteJobs(rec.RepoID, rec.TicketNumber); err != nil {
+	err = s.meta.DeleteJobs(rec.RepoID, rec.TicketNumber)
+	if err != nil {
 		return err
 	}
 	s.broadcast(serverEvent{

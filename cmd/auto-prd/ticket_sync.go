@@ -14,14 +14,17 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := rt.store.LoadState(ticket); err == nil {
+	_, loadErr := rt.store.LoadState(ticket)
+	if loadErr == nil {
 		return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+	}
+	if !errors.Is(loadErr, os.ErrNotExist) {
+		return loadErr
 	}
 
 	st := ticketdomain.NewState(ticket)
-	if err := rt.store.SaveState(ticket, st); err != nil {
+	err = rt.store.SaveState(ticket, st)
+	if err != nil {
 		return err
 	}
 
@@ -31,7 +34,8 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime, emitEvent bool) error {
 	st, err := rt.store.LoadState(ticket)
 	if errors.Is(err, os.ErrNotExist) {
-		if delErr := s.meta.DeleteTicket(repoID, ticket); delErr != nil {
+		delErr := s.meta.DeleteTicket(repoID, ticket)
+		if delErr != nil {
 			return delErr
 		}
 		if emitEvent {
@@ -59,7 +63,8 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		UpdatedAt:    st.UpdatedAt.UTC(),
 		PRURL:        st.PRURL,
 	}
-	if err := s.meta.UpsertTicket(rec); err != nil {
+	err = s.meta.UpsertTicket(rec)
+	if err != nil {
 		return err
 	}
 	if emitEvent {
@@ -100,10 +105,12 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 			PRURL:        st.PRURL,
 		})
 	}
-	if err := s.meta.ReplaceRepoTickets(repoID, records); err != nil {
+	err = s.meta.ReplaceRepoTickets(repoID, records)
+	if err != nil {
 		return err
 	}
-	if err := s.meta.PruneTicketJobs(repoID, tickets); err != nil {
+	err = s.meta.PruneTicketJobs(repoID, tickets)
+	if err != nil {
 		return err
 	}
 	if emitEvent {

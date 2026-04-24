@@ -153,7 +153,8 @@ func main() {
 		Handler:           loggingMiddleware(mux),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 	}
-	if err := srv.ListenAndServe(); err != nil {
+	err = srv.ListenAndServe()
+	if err != nil {
 		slog.Error("server error", "err", err)
 		os.Exit(1)
 	}
@@ -180,7 +181,8 @@ func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
 	var req api.ActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 
 		return
@@ -210,7 +212,8 @@ func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
 	var req api.MoveToStateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 
 		return
@@ -247,7 +250,8 @@ func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
 	var req api.CleanupScopeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 
 		return
@@ -304,7 +308,8 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	if err := s.syncRepoTickets(repoID, repoRoot, rt, false); err != nil {
+	err = s.syncRepoTickets(repoID, repoRoot, rt, false)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 
 		return
@@ -367,7 +372,8 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	if err := s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, false); err != nil {
+	err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, false)
+	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeError(w, http.StatusNotFound, "ticket not found")
 
@@ -389,7 +395,8 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 
 	var availableActions []actionInfo
 	var workflowStates []workflowStateInfo
-	if wf, wfErr := workflow.Load(repoRoot); wfErr == nil {
+	wf, wfErr := workflow.Load(repoRoot)
+	if wfErr == nil {
 		for _, stateCfg := range wf.States {
 			workflowStates = append(workflowStates, workflowStateInfo{
 				Name:        stateCfg.Name,
@@ -578,7 +585,8 @@ func (s *server) enqueueAndRespond(
 	w http.ResponseWriter, action, repoID, repoPath, ticket string, opts enqueueOptions,
 ) {
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
-		if err := s.ensureQueuedTicket(repoID, repoPath, ticket); err != nil {
+		err := s.ensureQueuedTicket(repoID, repoPath, ticket)
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 
 			return

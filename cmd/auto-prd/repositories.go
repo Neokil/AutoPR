@@ -19,7 +19,8 @@ import (
 
 func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (string, string, *repoRuntime, bool) {
 	var req api.RepoRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 
 		return "", "", nil, false
@@ -144,14 +145,16 @@ func discoverRepositoriesFromConfig(entries []string) []string {
 
 func expandHome(path string) string {
 	if path == "~" {
-		if home, err := os.UserHomeDir(); err == nil {
+		home, err := os.UserHomeDir()
+		if err == nil {
 			return home
 		}
 
 		return path
 	}
 	if rest, ok := strings.CutPrefix(path, "~/"); ok {
-		if home, err := os.UserHomeDir(); err == nil {
+		home, err := os.UserHomeDir()
+		if err == nil {
 			return filepath.Join(home, rest)
 		}
 	}

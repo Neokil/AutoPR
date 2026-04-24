@@ -19,9 +19,11 @@ var userHomeDir = os.UserHomeDir //nolint:gochecknoglobals
 //  3. Embedded binary default
 func Load(repoRoot string) (WorkflowConfig, error) {
 	projectPath := filepath.Join(repoRoot, ".auto-pr", "workflow.yaml")
-	if cfg, ok, err := loadFromFile(projectPath); err != nil {
+	cfg, ok, err := loadFromFile(projectPath)
+	if err != nil {
 		return WorkflowConfig{}, fmt.Errorf("load project workflow config: %w", err)
-	} else if ok {
+	}
+	if ok {
 		return cfg, nil
 	}
 
@@ -30,9 +32,11 @@ func Load(repoRoot string) (WorkflowConfig, error) {
 		return WorkflowConfig{}, fmt.Errorf("resolve home dir: %w", err)
 	}
 	globalPath := filepath.Join(home, ".auto-pr", "workflow.yaml")
-	if cfg, ok, err := loadFromFile(globalPath); err != nil {
+	cfg, ok, err = loadFromFile(globalPath)
+	if err != nil {
 		return WorkflowConfig{}, fmt.Errorf("load global workflow config: %w", err)
-	} else if ok {
+	}
+	if ok {
 		return cfg, nil
 	}
 
@@ -45,7 +49,8 @@ func Load(repoRoot string) (WorkflowConfig, error) {
 //  3. Embedded binary default
 func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 	projectPath := filepath.Join(repoRoot, ".auto-pr", promptRelPath)
-	if data, err := os.ReadFile(projectPath); err == nil { //nolint:gosec // G304: path built from trusted repo root
+	data, err := os.ReadFile(projectPath) //nolint:gosec // G304: path built from trusted repo root
+	if err == nil {
 		return data, nil
 	}
 
@@ -54,11 +59,12 @@ func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 		return nil, fmt.Errorf("resolve home dir: %w", err)
 	}
 	globalPath := filepath.Join(home, ".auto-pr", promptRelPath)
-	if data, err := os.ReadFile(globalPath); err == nil { //nolint:gosec // G304: path built from trusted home dir
+	data, err = os.ReadFile(globalPath) //nolint:gosec // G304: path built from trusted home dir
+	if err == nil {
 		return data, nil
 	}
 
-	data, err := fs.ReadFile(embeddedPromptsFS, promptRelPath)
+	data, err = fs.ReadFile(embeddedPromptsFS, promptRelPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("prompt %q: %w", promptRelPath, ErrPromptNotFound)
@@ -98,10 +104,12 @@ func loadEmbeddedDefault() (WorkflowConfig, error) {
 
 func parse(data []byte) (WorkflowConfig, error) {
 	var cfg WorkflowConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	err := yaml.Unmarshal(data, &cfg)
+	if err != nil {
 		return WorkflowConfig{}, fmt.Errorf("parse workflow yaml: %w", err)
 	}
-	if err := cfg.Validate(); err != nil {
+	err = cfg.Validate()
+	if err != nil {
 		return WorkflowConfig{}, fmt.Errorf("invalid workflow config: %w", err)
 	}
 
