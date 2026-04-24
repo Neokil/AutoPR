@@ -17,7 +17,7 @@ func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, rt *repoR
 	st, err := rt.store.LoadState(ticket)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return err
+			return fmt.Errorf("load ticket state: %w", err)
 		}
 		st = ticketdomain.NewState(ticket)
 	}
@@ -27,7 +27,7 @@ func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, rt *repoR
 	st.LastError = msg
 	saveErr := rt.store.SaveState(ticket, st)
 	if saveErr != nil {
-		return saveErr
+		return fmt.Errorf("save ticket state: %w", saveErr)
 	}
 
 	body := msg

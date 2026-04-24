@@ -31,9 +31,7 @@ linters:
         rules:
           json: snake
           yaml: snake
-    wrapcheck:
-      ignore-package-globs:
-        - github.com/Neokil/AutoPR/*
+
     varnamelen:
       ignore-names:
         - ok

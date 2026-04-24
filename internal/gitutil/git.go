@@ -13,7 +13,7 @@ import (
 func RepoRoot(ctx context.Context, cwd string) (string, error) {
 	res, err := shell.Run(ctx, cwd, nil, "", "git", "rev-parse", "--show-toplevel")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("git rev-parse: %w", err)
 	}
 
 	return strings.TrimSpace(res.Stdout), nil
@@ -22,7 +22,7 @@ func RepoRoot(ctx context.Context, cwd string) (string, error) {
 func CurrentBranch(ctx context.Context, repoRoot string) (string, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
 
 	return strings.TrimSpace(res.Stdout), nil
@@ -31,7 +31,7 @@ func CurrentBranch(ctx context.Context, repoRoot string) (string, error) {
 func OriginURL(ctx context.Context, repoRoot string) (string, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "remote", "get-url", "origin")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("git remote get-url: %w", err)
 	}
 
 	return strings.TrimSpace(res.Stdout), nil
@@ -40,7 +40,7 @@ func OriginURL(ctx context.Context, repoRoot string) (string, error) {
 func DefaultBranch(ctx context.Context, repoRoot string) (string, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("git symbolic-ref: %w", err)
 	}
 	branch := strings.TrimSpace(res.Stdout)
 	branch = strings.TrimPrefix(branch, "origin/")
@@ -103,14 +103,20 @@ func WorktreePath(repoRoot, stateDirName, ticketNumber string) string {
 
 func WorktreeRemove(ctx context.Context, repoRoot, worktreePath string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "worktree", "remove", worktreePath, "--force")
+	if err != nil {
+		return fmt.Errorf("git worktree remove: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func PushBranch(ctx context.Context, repoRoot, branch string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "push", "-u", "origin", branch)
+	if err != nil {
+		return fmt.Errorf("git push: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (string, error) {
@@ -122,10 +128,10 @@ func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (stri
 	if err != nil {
 		msg := strings.TrimSpace(res.Stderr)
 		if msg != "" {
-			return "", fmt.Errorf("%w\nstderr: %s", err, msg)
+			return "", fmt.Errorf("gh pr create: %w\nstderr: %s", err, msg)
 		}
 
-		return "", err
+		return "", fmt.Errorf("gh pr create: %w", err)
 	}
 
 	return strings.TrimSpace(res.Stdout), nil
@@ -134,7 +140,7 @@ func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (stri
 func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "rev-list", "--count", baseRef+"..HEAD")
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("git rev-list: %w", err)
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(res.Stdout))
 	if err != nil {
@@ -147,7 +153,7 @@ func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
 func HasChanges(ctx context.Context, repoRoot string) (bool, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "status", "--porcelain")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("git status: %w", err)
 	}
 
 	return strings.TrimSpace(res.Stdout) != "", nil
@@ -156,9 +162,12 @@ func HasChanges(ctx context.Context, repoRoot string) (bool, error) {
 func CommitAll(ctx context.Context, repoRoot, message string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "add", "-A")
 	if err != nil {
-		return err
+		return fmt.Errorf("git add: %w", err)
 	}
 	_, err = shell.Run(ctx, repoRoot, nil, "", "git", "commit", "-m", message)
+	if err != nil {
+		return fmt.Errorf("git commit: %w", err)
+	}
 
-	return err
+	return nil
 }

@@ -51,15 +51,15 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 		return fmt.Errorf("load workflow: %w", err)
 	}
 
-	st, err := o.Store.LoadState(ticketNumber)
-	if os.IsNotExist(err) {
+	st, loadErr := o.Store.LoadState(ticketNumber)
+	if os.IsNotExist(loadErr) {
 		st = ticketdomain.NewState(ticketNumber)
-		err = o.Store.SaveState(ticketNumber, st)
-		if err != nil {
-			return err
+		saveErr := o.Store.SaveState(ticketNumber, st)
+		if saveErr != nil {
+			return fmt.Errorf("save initial ticket state: %w", saveErr)
 		}
-	} else if err != nil {
-		return err
+	} else if loadErr != nil {
+		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusDone || st.FlowStatus == ticketdomain.FlowStatusCancelled {
 		slog.Info("skipping ticket", "ticket", ticketNumber, "status", st.FlowStatus)
@@ -94,7 +94,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("load ticket state: %w", err)
 	}
 	if st.FlowStatus != ticketdomain.FlowStatusWaiting {
 		return fmt.Errorf("ticket %s (status: %s): %w", ticketNumber, st.FlowStatus, ErrTicketNotWaiting)
@@ -136,15 +136,15 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 		return ErrTargetStateRequired
 	}
 
-	st, err := o.Store.LoadState(ticketNumber)
-	if os.IsNotExist(err) {
+	st, loadErr := o.Store.LoadState(ticketNumber)
+	if os.IsNotExist(loadErr) {
 		st = ticketdomain.NewState(ticketNumber)
-		err = o.Store.SaveState(ticketNumber, st)
-		if err != nil {
-			return err
+		saveErr := o.Store.SaveState(ticketNumber, st)
+		if saveErr != nil {
+			return fmt.Errorf("save initial ticket state: %w", saveErr)
 		}
-	} else if err != nil {
-		return err
+	} else if loadErr != nil {
+		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
 	if st.FlowStatus == ticketdomain.FlowStatusRunning {
 		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
@@ -165,7 +165,7 @@ func (o *Orchestrator) Status(ticketNumber string) error {
 	}
 	tickets, err := o.Store.ListTicketDirs()
 	if err != nil {
-		return err
+		return fmt.Errorf("list ticket dirs: %w", err)
 	}
 	sort.Strings(tickets)
 	for _, t := range tickets {
@@ -181,7 +181,7 @@ func (o *Orchestrator) Status(ticketNumber string) error {
 func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("load ticket state: %w", err)
 	}
 	wf, _ := workflow.Load(o.RepoRoot)
 
@@ -191,12 +191,12 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) error {
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("load ticket state: %w", err)
 	}
 	_ = gitutil.WorktreeRemove(ctx, o.RepoRoot, st.WorktreePath)
 	err = o.Store.RemoveTicketDir(ticketNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("remove ticket dir: %w", err)
 	}
 	slog.Info("cleaned ticket", "ticket", ticketNumber)
 
@@ -206,7 +206,7 @@ func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) e
 func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 	tickets, err := o.Store.ListTicketDirs()
 	if err != nil {
-		return err
+		return fmt.Errorf("list ticket dirs: %w", err)
 	}
 	sort.Strings(tickets)
 	for _, ticket := range tickets {
@@ -228,7 +228,7 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	tickets, err := o.Store.ListTicketDirs()
 	if err != nil {
-		return err
+		return fmt.Errorf("list ticket dirs: %w", err)
 	}
 	sort.Strings(tickets)
 	for _, ticket := range tickets {
@@ -253,7 +253,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 		st.WorktreePath = wtPath
 		err = o.Store.SaveState(st.TicketNumber, *st)
 		if err != nil {
-			return err
+			return fmt.Errorf("save ticket state: %w", err)
 		}
 	}
 
@@ -292,7 +292,7 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 	st.LastError = ""
 	err = o.Store.SaveState(st.TicketNumber, *st)
 	if err != nil {
-		return err
+		return fmt.Errorf("save ticket state: %w", err)
 	}
 	err = o.prepareRunContext(*st, stateCfg, run)
 	if err != nil {
@@ -347,8 +347,12 @@ func (o *Orchestrator) runState(ctx context.Context, st *ticketdomain.State, sta
 
 	slog.Info("state done, waiting for action", "ticket", st.TicketNumber, "state", stateCfg.Name)
 	st.FlowStatus = ticketdomain.FlowStatusWaiting
+	saveErr := o.Store.SaveState(st.TicketNumber, *st)
+	if saveErr != nil {
+		return fmt.Errorf("save ticket state: %w", saveErr)
+	}
 
-	return o.Store.SaveState(st.TicketNumber, *st)
+	return nil
 }
 
 func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
@@ -388,7 +392,12 @@ func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State,
 			st.FlowStatus = ticketdomain.FlowStatusFailed
 		}
 
-		return o.Store.SaveState(st.TicketNumber, *st)
+		saveErr := o.Store.SaveState(st.TicketNumber, *st)
+		if saveErr != nil {
+			return fmt.Errorf("save ticket state: %w", saveErr)
+		}
+
+		return nil
 	}
 	slog.Info("transitioning to state", "ticket", st.TicketNumber, "target", target)
 	stateCfg, ok := wf.StateByName(target)
@@ -504,7 +513,7 @@ func (o *Orchestrator) runCommands(
 func (o *Orchestrator) printStatus(ticketNumber string) error {
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("load ticket state: %w", err)
 	}
 	attrs := []any{
 		"ticket", ticketNumber,

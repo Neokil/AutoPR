@@ -64,7 +64,7 @@ func (s *server) isPullRequestOpen(repoPath, prURL string) (bool, error) {
 	path := fmt.Sprintf("repos/%s/%s/pulls/%d", owner, repo, number)
 	res, err := shell.Run(ctx, repoPath, nil, "", "gh", "api", path, "--jq", ".state")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("gh api pr status: %w", err)
 	}
 	state := strings.TrimSpace(strings.ToLower(res.Stdout))
 
@@ -98,15 +98,15 @@ func (s *server) autoCleanupTicket(rec servermeta.TicketRecord) error {
 	}
 	err = rt.svc.CleanupTicket(context.Background(), rec.TicketNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("cleanup ticket: %w", err)
 	}
 	err = s.meta.DeleteTicket(rec.RepoID, rec.TicketNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete ticket metadata: %w", err)
 	}
 	err = s.meta.DeleteJobs(rec.RepoID, rec.TicketNumber)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete ticket jobs: %w", err)
 	}
 	s.broadcast(serverEvent{
 		Type:         "ticket_deleted",

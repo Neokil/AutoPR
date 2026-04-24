@@ -47,7 +47,7 @@ func (s *server) runtimeForRepoPath(ctx context.Context, repoPath string) (strin
 	}
 	repoRec, err := s.meta.UpsertRepo(repoRoot)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", nil, fmt.Errorf("upsert repo: %w", err)
 	}
 	rt, err := s.runtimeForRepo(repoRoot)
 	if err != nil {
@@ -65,7 +65,7 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 	}
 	provider, err := providers.NewFromConfig(s.cfg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create AI provider: %w", err)
 	}
 	rt := &repoRuntime{
 		svc:      orchestrator.NewWorkflowService(s.cfg, repoRoot, provider),

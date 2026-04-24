@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -19,13 +20,13 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 		return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
 	}
 	if !errors.Is(loadErr, os.ErrNotExist) {
-		return loadErr
+		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
 
 	st := ticketdomain.NewState(ticket)
 	err = rt.store.SaveState(ticket, st)
 	if err != nil {
-		return err
+		return fmt.Errorf("save initial ticket state: %w", err)
 	}
 
 	return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
@@ -36,7 +37,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 	if errors.Is(err, os.ErrNotExist) {
 		delErr := s.meta.DeleteTicket(repoID, ticket)
 		if delErr != nil {
-			return delErr
+			return fmt.Errorf("delete ticket metadata: %w", delErr)
 		}
 		if emitEvent {
 			s.broadcast(serverEvent{
@@ -50,7 +51,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("load ticket state: %w", err)
 	}
 	title := ticketTitleForDisplay(st)
 	rec := servermeta.TicketRecord{
@@ -65,7 +66,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 	}
 	err = s.meta.UpsertTicket(rec)
 	if err != nil {
-		return err
+		return fmt.Errorf("upsert ticket metadata: %w", err)
 	}
 	if emitEvent {
 		s.broadcast(serverEvent{
@@ -86,7 +87,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitEvent bool) error {
 	tickets, err := rt.store.ListTicketDirs()
 	if err != nil {
-		return err
+		return fmt.Errorf("list ticket dirs: %w", err)
 	}
 	records := make([]servermeta.TicketRecord, 0, len(tickets))
 	for _, t := range tickets {
@@ -107,11 +108,11 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitE
 	}
 	err = s.meta.ReplaceRepoTickets(repoID, records)
 	if err != nil {
-		return err
+		return fmt.Errorf("replace repo tickets: %w", err)
 	}
 	err = s.meta.PruneTicketJobs(repoID, tickets)
 	if err != nil {
-		return err
+		return fmt.Errorf("prune ticket jobs: %w", err)
 	}
 	if emitEvent {
 		s.broadcast(serverEvent{
