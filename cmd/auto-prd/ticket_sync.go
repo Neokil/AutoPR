@@ -29,21 +29,21 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 
 func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime, emitEvent bool) error {
 	st, err := rt.store.LoadState(ticket)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			if err := s.meta.DeleteTicket(repoID, ticket); err != nil {
-				return err
-			}
-			if emitEvent {
-				s.broadcast(serverEvent{
-					Type:         "ticket_deleted",
-					RepoID:       repoID,
-					RepoPath:     repoRoot,
-					TicketNumber: ticket,
-				})
-			}
-			return nil
+	if errors.Is(err, os.ErrNotExist) {
+		if delErr := s.meta.DeleteTicket(repoID, ticket); delErr != nil {
+			return delErr
 		}
+		if emitEvent {
+			s.broadcast(serverEvent{
+				Type:         "ticket_deleted",
+				RepoID:       repoID,
+				RepoPath:     repoRoot,
+				TicketNumber: ticket,
+			})
+		}
+		return nil
+	}
+	if err != nil {
 		return err
 	}
 	title := ticketTitleForDisplay(st)
