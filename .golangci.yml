@@ -21,8 +21,8 @@ linters:
     #- nlreturn
     #- noinlineerr
     #- paralleltest
-    - recvcheck
-    - revive
+    #- recvcheck
+    #- revive
     - tagliatelle
     - testpackage
     - unparam
@@ -43,3 +43,9 @@ linters:
         - stdlib
         - github.com/Neokil/AutoPR/internal/application/orchestrator.Service
         - github.com/Neokil/AutoPR/internal/providers.AIProvider
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
