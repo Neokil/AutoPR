@@ -8,12 +8,9 @@ linters:
     - exhaustruct
     - funlen
     - gocognit
+    - lll
     - wsl
     - wsl_v5
-  exclusions:
-    rules:
-      - linters: [lll]
-        source: '//nolint:'
   settings:
     ireturn:
       allow:

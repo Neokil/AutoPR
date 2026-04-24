@@ -34,8 +34,7 @@ func New(cfg config.Config, repoRoot string, provider providers.AIProvider) *Orc
 	return NewWithStore(cfg, repoRoot, state.NewStore(repoRoot, cfg.StateDirName), provider)
 }
 
-func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, provider providers.AIProvider,
-) *Orchestrator {
+func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, provider providers.AIProvider) *Orchestrator {
 	return &Orchestrator{
 		Cfg:      cfg,
 		RepoRoot: repoRoot,
@@ -120,8 +119,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 			labels[i] = a.Label
 		}
 
-		return fmt.Errorf("action %q in state %q (available: %s): %w",
-			actionLabel, st.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
+		return fmt.Errorf("action %q in state %q (available: %s): %w", actionLabel, st.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
 	}
 
 	slog.Info("applying action", "ticket", ticketNumber, "action", actionLabel, "state", st.CurrentState)
@@ -269,8 +267,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, st *ticketd
 	_, statErr := os.Stat(contextPath)
 	if os.IsNotExist(statErr) {
 		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
-		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n",
-			st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
+		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", st.TicketNumber, st.WorktreePath, o.RepoRoot, guidelinesPath)
 		err = os.WriteFile(contextPath, []byte(content), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
 		if err != nil {
 			return fmt.Errorf("write context file: %w", err)
@@ -363,9 +360,7 @@ func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
 	return cause
 }
 
-func (o *Orchestrator) dispatchAction(
-	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string,
-) error {
+func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
 	logPath := st.CurrentRunLogPath()
 	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
 
@@ -381,9 +376,7 @@ func (o *Orchestrator) dispatchAction(
 	}
 }
 
-func (o *Orchestrator) transitionTo(
-	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string,
-) error {
+func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string) error {
 	if workflow.IsTerminal(target) {
 		slog.Info("reached terminal state", "ticket", st.TicketNumber, "state", target)
 		switch target {
@@ -406,9 +399,7 @@ func (o *Orchestrator) transitionTo(
 	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) writeFeedbackAndRerun(
-	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string,
-) error {
+func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string) error {
 	if strings.TrimSpace(message) == "" {
 		return ErrFeedbackRequired
 	}
@@ -426,9 +417,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(
 	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) executeScript(
-	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig,
-) error {
+func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig) error {
 	logPath := st.CurrentRunLogPath()
 
 	var out strings.Builder

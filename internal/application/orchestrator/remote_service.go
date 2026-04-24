@@ -38,15 +38,11 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 }
 
 func (s *RemoteService) StartFlow(ctx context.Context, ticketNumber string) error {
-	path := fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber))
-
-	return s.enqueueOnly(ctx, path, api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
+	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
 }
 
 func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
-	path := fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber))
-
-	return s.enqueueOnly(ctx, path, api.ActionRequest{
+	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber)), api.ActionRequest{
 		RepoPath: s.repoPath,
 		Label:    actionLabel,
 		Message:  message,
@@ -54,9 +50,7 @@ func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLab
 }
 
 func (s *RemoteService) MoveToState(ctx context.Context, ticketNumber, target string) error {
-	path := fmt.Sprintf("/api/tickets/%s/move-to-state", url.PathEscape(ticketNumber))
-
-	return s.enqueueOnly(ctx, path, api.MoveToStateRequest{
+	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/move-to-state", url.PathEscape(ticketNumber)), api.MoveToStateRequest{
 		RepoPath: s.repoPath,
 		Target:   target,
 	}, "move to "+target, ticketNumber)
@@ -67,15 +61,12 @@ func (s *RemoteService) Status(ticketNumber string) error {
 		var out struct {
 			Tickets []map[string]any `json:"tickets"`
 		}
-		ticketsURL := "/api/tickets?repo_path=" + url.QueryEscape(s.repoPath)
-		err := s.doJSON(context.Background(), http.MethodGet, ticketsURL, nil, &out)
+		err := s.doJSON(context.Background(), http.MethodGet, "/api/tickets?repo_path="+url.QueryEscape(s.repoPath), nil, &out)
 		if err != nil {
 			return err
 		}
 		for _, t := range out.Tickets {
-			slog.Info("ticket",
-				"ticket", t["ticket_number"], "status", t["status"],
-				"state", t["current_state"], "updated", t["updated_at"])
+			slog.Info("ticket", "ticket", t["ticket_number"], "status", t["status"], "state", t["current_state"], "updated", t["updated_at"])
 		}
 
 		return nil
@@ -135,9 +126,7 @@ func (s *RemoteService) CleanupAll(ctx context.Context) error {
 }
 
 func (s *RemoteService) CleanupTicket(ctx context.Context, ticketNumber string) error {
-	path := fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber))
-
-	return s.enqueueOnly(ctx, path, api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
+	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
 }
 
 func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobStatusResponse, error) {
@@ -168,9 +157,7 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 	}
 }
 
-func (s *RemoteService) enqueueOnly(
-	ctx context.Context, path string, body any, action, ticket string,
-) error {
+func (s *RemoteService) enqueueOnly(ctx context.Context, path string, body any, action, ticket string) error {
 	var accepted api.ActionAcceptedResponse
 	err := s.doJSON(ctx, http.MethodPost, path, body, &accepted)
 	if err != nil {

@@ -581,9 +581,7 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) enqueueAndRespond(
-	w http.ResponseWriter, action, repoID, repoPath, ticket string, opts enqueueOptions,
-) {
+func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket string, opts enqueueOptions) {
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
 		err := s.ensureQueuedTicket(repoID, repoPath, ticket)
 		if err != nil {

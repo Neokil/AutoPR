@@ -16,9 +16,7 @@ type PromptCommandRunner struct {
 	args         []string
 }
 
-func (r *PromptCommandRunner) Run(
-	ctx context.Context, worktreePath, runtimeDir, phase, prompt string,
-) (string, string, error) {
+func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, string, error) {
 	err := writePromptArtifacts(runtimeDir, phase, prompt, "", "")
 	if err != nil {
 		return "", "", err
