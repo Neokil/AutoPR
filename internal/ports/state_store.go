@@ -1,3 +1,5 @@
+// Package ports defines the interfaces that application logic depends on so storage
+// and provider implementations can be swapped without changing the core logic.
 package ports
 
 import "github.com/Neokil/AutoPR/internal/domain/ticket"

@@ -1,3 +1,4 @@
+// Package providers defines the AIProvider interface and the CLI-based implementation.
 package providers
 
 import (
@@ -10,11 +11,13 @@ import (
 	"github.com/Neokil/AutoPR/internal/config"
 )
 
+// CLIProvider implements AIProvider by shelling out to a configured command-line tool.
 type CLIProvider struct {
 	name   string
 	runner *PromptCommandRunner
 }
 
+// NewFromConfig constructs an AIProvider from the named provider in cfg.
 func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	providerCmd, ok := cfg.Providers[cfg.Provider]
 	if !ok {
@@ -37,8 +40,10 @@ func NewFromConfig(cfg config.Config) (AIProvider, error) {
 	}, nil
 }
 
+// Name returns the configured provider name (e.g. "codex", "claude-code").
 func (p *CLIProvider) Name() string { return p.name }
 
+// Execute reads the prompt file and runs the provider CLI, returning the captured output.
 func (p *CLIProvider) Execute(ctx context.Context, req ExecuteRequest) (ExecuteResult, error) {
 	content, err := os.ReadFile(req.PromptPath)
 	if err != nil {

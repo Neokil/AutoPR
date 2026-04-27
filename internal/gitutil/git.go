@@ -10,6 +10,7 @@ import (
 	"github.com/Neokil/AutoPR/internal/shell"
 )
 
+// RepoRoot returns the absolute path to the root of the git repository containing cwd.
 func RepoRoot(ctx context.Context, cwd string) (string, error) {
 	res, err := shell.Run(ctx, cwd, nil, "", "git", "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -19,6 +20,7 @@ func RepoRoot(ctx context.Context, cwd string) (string, error) {
 	return strings.TrimSpace(res.Stdout), nil
 }
 
+// CurrentBranch returns the name of the currently checked-out branch in repoRoot.
 func CurrentBranch(ctx context.Context, repoRoot string) (string, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
@@ -28,6 +30,7 @@ func CurrentBranch(ctx context.Context, repoRoot string) (string, error) {
 	return strings.TrimSpace(res.Stdout), nil
 }
 
+// OriginURL returns the URL of the origin remote for the repository at repoRoot.
 func OriginURL(ctx context.Context, repoRoot string) (string, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "remote", "get-url", "origin")
 	if err != nil {
@@ -37,6 +40,7 @@ func OriginURL(ctx context.Context, repoRoot string) (string, error) {
 	return strings.TrimSpace(res.Stdout), nil
 }
 
+// DefaultBranch returns the default branch name as tracked by origin/HEAD (e.g. "main").
 func DefaultBranch(ctx context.Context, repoRoot string) (string, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
 	if err != nil {
@@ -48,6 +52,8 @@ func DefaultBranch(ctx context.Context, repoRoot string) (string, error) {
 	return branch, nil
 }
 
+// GitHubBlobBase returns the GitHub blob URL prefix for browsing files on baseBranch
+// (e.g. "https://github.com/owner/repo/blob/main"). Falls back to "main" if baseBranch is empty.
 func GitHubBlobBase(ctx context.Context, repoRoot, baseBranch string) (string, error) {
 	origin, err := OriginURL(ctx, repoRoot)
 	if err != nil {
@@ -85,6 +91,7 @@ func parseGitHubOwnerRepo(origin string) (string, error) {
 	}
 }
 
+// WorktreeAdd creates a new git worktree at worktreePath on branch, forked from baseBranch.
 func WorktreeAdd(ctx context.Context, repoRoot, branch, worktreePath, baseBranch string) error {
 	if baseBranch == "" {
 		baseBranch = "HEAD"
@@ -97,10 +104,12 @@ func WorktreeAdd(ctx context.Context, repoRoot, branch, worktreePath, baseBranch
 	return nil
 }
 
+// WorktreePath returns the conventional filesystem path for a ticket's worktree.
 func WorktreePath(repoRoot, stateDirName, ticketNumber string) string {
 	return filepath.Join(repoRoot, stateDirName, "worktrees", ticketNumber)
 }
 
+// WorktreeRemove force-removes the worktree at worktreePath from the repository.
 func WorktreeRemove(ctx context.Context, repoRoot, worktreePath string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "worktree", "remove", worktreePath, "--force")
 	if err != nil {
@@ -110,6 +119,7 @@ func WorktreeRemove(ctx context.Context, repoRoot, worktreePath string) error {
 	return nil
 }
 
+// PushBranch pushes branch to origin and sets the upstream tracking reference.
 func PushBranch(ctx context.Context, repoRoot, branch string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "push", "-u", "origin", branch)
 	if err != nil {
@@ -119,6 +129,7 @@ func PushBranch(ctx context.Context, repoRoot, branch string) error {
 	return nil
 }
 
+// CreatePR opens a draft pull request via `gh` and returns its URL.
 func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (string, error) {
 	args := []string{"pr", "create", "--draft", "--assignee", "@me", "--title", title, "--body-file", bodyFile}
 	if base != "" {
@@ -137,6 +148,7 @@ func CreatePR(ctx context.Context, repoRoot, title, bodyFile, base string) (stri
 	return strings.TrimSpace(res.Stdout), nil
 }
 
+// AheadCount returns the number of commits on HEAD that are not in baseRef.
 func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "rev-list", "--count", baseRef+"..HEAD")
 	if err != nil {
@@ -150,6 +162,7 @@ func AheadCount(ctx context.Context, repoRoot, baseRef string) (int, error) {
 	return n, nil
 }
 
+// HasChanges reports whether the working tree has any uncommitted changes.
 func HasChanges(ctx context.Context, repoRoot string) (bool, error) {
 	res, err := shell.Run(ctx, repoRoot, nil, "", "git", "status", "--porcelain")
 	if err != nil {
@@ -159,6 +172,7 @@ func HasChanges(ctx context.Context, repoRoot string) (bool, error) {
 	return strings.TrimSpace(res.Stdout) != "", nil
 }
 
+// CommitAll stages all changes and creates a commit with the given message.
 func CommitAll(ctx context.Context, repoRoot, message string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "add", "-A")
 	if err != nil {

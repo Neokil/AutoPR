@@ -2,6 +2,7 @@ package providers
 
 import "errors"
 
+// Sentinel errors returned by provider construction and execution.
 var (
 	ErrProviderMissing      = errors.New("provider missing from config")
 	ErrProviderCommandEmpty = errors.New("provider command is empty")

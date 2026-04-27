@@ -9,13 +9,17 @@ import (
 	"github.com/Neokil/AutoPR/internal/domain/ticket"
 )
 
+// StateFileName is the name of the JSON file that holds a ticket's persisted workflow state.
 const StateFileName = "state.json"
 
+// Store is the filesystem-backed implementation of ports.StateStore, keeping state files
+// inside the configured state directory under the repo root.
 type Store struct {
 	RepoRoot  string
 	StateRoot string
 }
 
+// NewStore returns a Store rooted at stateDirName inside repoRoot.
 func NewStore(repoRoot, stateDirName string) *Store {
 	return &Store{
 		RepoRoot:  repoRoot,
@@ -23,10 +27,13 @@ func NewStore(repoRoot, stateDirName string) *Store {
 	}
 }
 
+// TicketDir returns the directory used to store state for the given ticket before a worktree exists.
 func (s *Store) TicketDir(ticketNumber string) string {
 	return filepath.Join(s.StateRoot, ticketNumber)
 }
 
+// LoadState reads the persisted state for the ticket, preferring the worktree location
+// when it exists and falling back to the pre-worktree state directory.
 func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 	// Prefer the worktree location when it exists.
 	wtStatePath := filepath.Join(s.worktreePath(ticketNumber), ".auto-pr", StateFileName)
@@ -43,6 +50,8 @@ func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 	return parseStateJSON(ticketNumber, data)
 }
 
+// SaveState persists st, writing to the worktree location once a worktree exists
+// and removing the pre-worktree copy to keep a single source of truth.
 func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 	st.Touch()
 	data, err := json.MarshalIndent(st, "", "  ")
@@ -80,6 +89,8 @@ func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
 	return nil
 }
 
+// ListTicketDirs returns the ticket numbers of all tickets that have persisted state,
+// searching both the pre-worktree directory and the worktrees directory.
 func (s *Store) ListTicketDirs() ([]string, error) {
 	seen := map[string]struct{}{}
 	var out []string
@@ -124,6 +135,7 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	return out, nil
 }
 
+// RemoveTicketDir deletes the pre-worktree state directory for the given ticket.
 func (s *Store) RemoveTicketDir(ticketNumber string) error {
 	err := os.RemoveAll(s.TicketDir(ticketNumber))
 	if err != nil {

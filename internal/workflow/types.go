@@ -2,18 +2,22 @@ package workflow
 
 import "fmt"
 
+// ActionType identifies the behaviour of a workflow action.
 type ActionType string
 
+// Known action types used in workflow YAML.
 const (
 	ActionProvideFeedback ActionType = "provide_feedback"
 	ActionMoveToState     ActionType = "move_to_state"
 	ActionRunScript       ActionType = "run_script"
 )
 
-type WorkflowConfig struct {
+// Config is the top-level structure parsed from a workflow.yaml file.
+type Config struct {
 	States []StateConfig `yaml:"states"`
 }
 
+// StateConfig defines a single step in a workflow: the prompt to run and the actions available afterward.
 type StateConfig struct {
 	Name               string         `yaml:"name"`
 	DisplayName        string         `yaml:"display_name,omitempty"`
@@ -24,6 +28,7 @@ type StateConfig struct {
 	Actions            []ActionConfig `yaml:"actions"`
 }
 
+// ActionConfig describes what happens when a human (or script) triggers an action on a waiting ticket.
 type ActionConfig struct {
 	Label string     `yaml:"label"`
 	Type  ActionType `yaml:"type"`
@@ -39,7 +44,7 @@ type ActionConfig struct {
 }
 
 // Validate checks that the config is self-consistent.
-func (c WorkflowConfig) Validate() error {
+func (c Config) Validate() error {
 	stateNames := make(map[string]bool, len(c.States))
 	for _, s := range c.States {
 		stateNames[s.Name] = true
@@ -128,7 +133,7 @@ func validateActionNode(a ActionConfig, stateNames map[string]bool, requireLabel
 }
 
 // StateByName returns the StateConfig with the given name, if it exists.
-func (c WorkflowConfig) StateByName(name string) (StateConfig, bool) {
+func (c Config) StateByName(name string) (StateConfig, bool) {
 	for _, s := range c.States {
 		if s.Name == name {
 			return s, true
@@ -139,7 +144,7 @@ func (c WorkflowConfig) StateByName(name string) (StateConfig, bool) {
 }
 
 // FirstState returns the first state defined in the workflow.
-func (c WorkflowConfig) FirstState() (StateConfig, bool) {
+func (c Config) FirstState() (StateConfig, bool) {
 	if len(c.States) == 0 {
 		return StateConfig{}, false
 	}
@@ -157,6 +162,7 @@ func IsTerminal(name string) bool {
 	}
 }
 
+// TimelineLabel returns the display name shown in the UI timeline, falling back to Name.
 func (s StateConfig) TimelineLabel() string {
 	if s.DisplayName != "" {
 		return s.DisplayName

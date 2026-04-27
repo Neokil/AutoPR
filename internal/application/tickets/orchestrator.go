@@ -23,6 +23,7 @@ import (
 	"github.com/Neokil/AutoPR/internal/worktree"
 )
 
+// Orchestrator drives the workflow state machine for a single repository.
 type Orchestrator struct {
 	Cfg      config.Config
 	RepoRoot string
@@ -30,10 +31,12 @@ type Orchestrator struct {
 	Provider providers.AIProvider
 }
 
+// New returns an Orchestrator using the default filesystem state store.
 func New(cfg config.Config, repoRoot string, provider providers.AIProvider) *Orchestrator {
 	return NewWithStore(cfg, repoRoot, state.NewStore(repoRoot, cfg.StateDirName), provider)
 }
 
+// NewWithStore returns an Orchestrator with an explicitly provided state store (used in tests).
 func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, provider providers.AIProvider) *Orchestrator {
 	return &Orchestrator{
 		Cfg:      cfg,
@@ -127,6 +130,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 	return o.dispatchAction(ctx, &st, wf, *action, message)
 }
 
+// MoveToState force-transitions the ticket to target, creating a worktree if needed.
 func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target string) error {
 	wf, err := workflow.Load(o.RepoRoot)
 	if err != nil {
@@ -159,6 +163,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 	return o.transitionTo(ctx, &st, wf, target)
 }
 
+// Status prints the workflow status for one ticket, or all tickets if ticketNumber is empty.
 func (o *Orchestrator) Status(ticketNumber string) error {
 	if ticketNumber != "" {
 		return o.printStatus(ticketNumber)
@@ -178,6 +183,7 @@ func (o *Orchestrator) Status(ticketNumber string) error {
 	return nil
 }
 
+// NextSteps returns a human-readable description of the available next actions for the ticket.
 func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
@@ -188,6 +194,7 @@ func (o *Orchestrator) NextSteps(ticketNumber string) (string, error) {
 	return buildNextSteps(st, wf), nil
 }
 
+// CleanupTicket removes the worktree and state directory for the given ticket.
 func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) error {
 	st, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
@@ -203,6 +210,7 @@ func (o *Orchestrator) CleanupTicket(ctx context.Context, ticketNumber string) e
 	return nil
 }
 
+// CleanupDone removes worktrees and state for all tickets with FlowStatusDone.
 func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 	tickets, err := o.Store.ListTicketDirs()
 	if err != nil {
@@ -225,6 +233,7 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 	return nil
 }
 
+// CleanupAll removes worktrees and state for every ticket regardless of status.
 func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	tickets, err := o.Store.ListTicketDirs()
 	if err != nil {
@@ -364,7 +373,7 @@ func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
 	return cause
 }
 
-func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string) error {
+func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.State, wf workflow.Config, action workflow.ActionConfig, message string) error {
 	logPath := st.CurrentRunLogPath()
 	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
 
@@ -380,7 +389,7 @@ func (o *Orchestrator) dispatchAction(ctx context.Context, st *ticketdomain.Stat
 	}
 }
 
-func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, target string) error {
+func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State, wf workflow.Config, target string) error {
 	if workflow.IsTerminal(target) {
 		slog.Info("reached terminal state", "ticket", st.TicketNumber, "state", target)
 		switch target {
@@ -408,7 +417,7 @@ func (o *Orchestrator) transitionTo(ctx context.Context, st *ticketdomain.State,
 	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, message string) error {
+func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdomain.State, wf workflow.Config, message string) error {
 	if strings.TrimSpace(message) == "" {
 		return ErrFeedbackRequired
 	}
@@ -426,7 +435,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, st *ticketdoma
 	return o.runState(ctx, st, stateCfg)
 }
 
-func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig) error {
+func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State, wf workflow.Config, action workflow.ActionConfig) error {
 	logPath := st.CurrentRunLogPath()
 
 	var out strings.Builder
@@ -471,7 +480,7 @@ func (o *Orchestrator) executeScript(ctx context.Context, st *ticketdomain.State
 }
 
 func (o *Orchestrator) dispatchSubAction(
-	ctx context.Context, st *ticketdomain.State, wf workflow.WorkflowConfig, action workflow.ActionConfig, message string,
+	ctx context.Context, st *ticketdomain.State, wf workflow.Config, action workflow.ActionConfig, message string,
 ) error {
 	switch action.Type {
 	case workflow.ActionProvideFeedback:
@@ -533,7 +542,7 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 	return nil
 }
 
-func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
+func buildNextSteps(st ticketdomain.State, wf workflow.Config) string {
 	switch st.FlowStatus {
 	case ticketdomain.FlowStatusPending:
 		return "Run the ticket to start the workflow: auto-pr run " + st.TicketNumber
@@ -562,7 +571,7 @@ func buildNextSteps(st ticketdomain.State, wf workflow.WorkflowConfig) string {
 	return ""
 }
 
-func resolveStateForStart(st ticketdomain.State, wf workflow.WorkflowConfig) (workflow.StateConfig, error) {
+func resolveStateForStart(st ticketdomain.State, wf workflow.Config) (workflow.StateConfig, error) {
 	if st.CurrentState == "" {
 		first, ok := wf.FirstState()
 		if !ok {

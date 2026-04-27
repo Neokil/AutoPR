@@ -21,12 +21,14 @@ const (
 	httpErrorThreshold = 400
 )
 
+// RemoteService implements Service by calling the AutoPR HTTP server over the network.
 type RemoteService struct {
 	baseURL    string
 	repoPath   string
 	httpClient *http.Client
 }
 
+// NewRemoteService creates a RemoteService that targets baseURL for the given repoPath.
 func NewRemoteService(baseURL, repoPath string) *RemoteService {
 	return &RemoteService{
 		baseURL:  strings.TrimRight(baseURL, "/"),
@@ -37,10 +39,12 @@ func NewRemoteService(baseURL, repoPath string) *RemoteService {
 	}
 }
 
+// StartFlow enqueues a run job for the ticket and returns once it is scheduled.
 func (s *RemoteService) StartFlow(ctx context.Context, ticketNumber string) error {
 	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/run", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "run", ticketNumber)
 }
 
+// ApplyAction enqueues an action job for a waiting ticket.
 func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
 	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber)), api.ActionRequest{
 		RepoPath: s.repoPath,
@@ -49,6 +53,7 @@ func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLab
 	}, actionLabel, ticketNumber)
 }
 
+// MoveToState enqueues a force-transition job to move the ticket to target.
 func (s *RemoteService) MoveToState(ctx context.Context, ticketNumber, target string) error {
 	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/move-to-state", url.PathEscape(ticketNumber)), api.MoveToStateRequest{
 		RepoPath: s.repoPath,
@@ -56,6 +61,7 @@ func (s *RemoteService) MoveToState(ctx context.Context, ticketNumber, target st
 	}, "move to "+target, ticketNumber)
 }
 
+// Status prints the current status of one ticket (or all tickets if ticketNumber is empty).
 func (s *RemoteService) Status(ticketNumber string) error {
 	if strings.TrimSpace(ticketNumber) == "" {
 		var out struct {
@@ -102,6 +108,7 @@ func (s *RemoteService) Status(ticketNumber string) error {
 	return nil
 }
 
+// NextSteps returns a human-readable description of what actions are available for the ticket.
 func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
 	var out struct {
 		NextSteps string `json:"next_steps"`
@@ -115,20 +122,24 @@ func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
 	return out.NextSteps, nil
 }
 
+// CleanupDone enqueues a cleanup job that removes all completed tickets.
 func (s *RemoteService) CleanupDone(ctx context.Context) error {
 	return s.enqueueOnly(ctx, "/api/cleanup",
 		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"}, "cleanup done", "")
 }
 
+// CleanupAll enqueues a cleanup job that removes all tickets regardless of status.
 func (s *RemoteService) CleanupAll(ctx context.Context) error {
 	return s.enqueueOnly(ctx, "/api/cleanup",
 		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "all"}, "cleanup all", "")
 }
 
+// CleanupTicket enqueues a cleanup job for a single ticket.
 func (s *RemoteService) CleanupTicket(ctx context.Context, ticketNumber string) error {
 	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/cleanup", url.PathEscape(ticketNumber)), api.RepoRequest{RepoPath: s.repoPath}, "cleanup", ticketNumber)
 }
 
+// WaitForJob polls until the job reaches a terminal state and returns its final record.
 func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobStatusResponse, error) {
 	for {
 		var job api.JobStatusResponse

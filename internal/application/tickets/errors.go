@@ -1,7 +1,9 @@
+// Package tickets implements the Orchestrator that drives the per-ticket workflow state machine.
 package tickets
 
 import "errors"
 
+// Sentinel errors returned by Orchestrator methods.
 var (
 	ErrTicketRunning       = errors.New("ticket is already running")
 	ErrTicketNotWaiting    = errors.New("ticket is not waiting for an action")

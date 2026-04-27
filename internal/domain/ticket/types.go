@@ -1,3 +1,4 @@
+// Package ticket defines the core domain types for ticket workflow state.
 package ticket
 
 import (
@@ -5,8 +6,10 @@ import (
 	"time"
 )
 
+// FlowStatus represents the lifecycle stage of a ticket's workflow execution.
 type FlowStatus string
 
+// Flow lifecycle stages from creation through completion or failure.
 const (
 	FlowStatusPending   FlowStatus = "pending" // ticket exists, flow not yet started
 	FlowStatusRunning   FlowStatus = "running" // prompt or commands currently executing
@@ -16,6 +19,7 @@ const (
 	FlowStatusCancelled FlowStatus = "cancelled"
 )
 
+// Ticket is a structured representation of a project ticket fetched from an external tracker.
 type Ticket struct {
 	Number             string            `json:"number"`
 	ID                 string            `json:"id"`
@@ -26,11 +30,12 @@ type Ticket struct {
 	URL                string            `json:"url"`
 	Labels             []string          `json:"labels,omitempty"`
 	WorkflowFields     map[string]string `json:"workflow_fields,omitempty"`
-	ParentTicket       *TicketContext    `json:"parent_ticket,omitempty"`
-	Epic               *TicketContext    `json:"epic,omitempty"`
+	ParentTicket       *Context    `json:"parent_ticket,omitempty"`
+	Epic               *Context    `json:"epic,omitempty"`
 }
 
-type TicketContext struct {
+// Context is a lightweight reference to a parent ticket or epic.
+type Context struct {
 	ID          string `json:"id"`
 	Number      string `json:"number,omitempty"`
 	Title       string `json:"title"`
@@ -38,6 +43,7 @@ type TicketContext struct {
 	URL         string `json:"url"`
 }
 
+// StateRun records a single execution of a workflow state for a ticket.
 type StateRun struct {
 	ID               string    `json:"id"`
 	StateName        string    `json:"state_name"`
@@ -47,6 +53,7 @@ type StateRun struct {
 	LogRef           string    `json:"log_ref,omitempty"`
 }
 
+// State is the persisted workflow state for a single ticket, written to state.json.
 type State struct {
 	TicketNumber string     `json:"ticket_number"`
 	CurrentState string     `json:"current_state"` // matches a StateConfig.Name from workflow
@@ -61,6 +68,7 @@ type State struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
+// NewState returns a new pending State for the given ticket number.
 func NewState(ticketNumber string) State {
 	now := time.Now().UTC()
 
@@ -72,6 +80,7 @@ func NewState(ticketNumber string) State {
 	}
 }
 
+// Touch updates UpdatedAt to the current UTC time.
 func (s *State) Touch() {
 	s.UpdatedAt = time.Now().UTC()
 }
@@ -81,6 +90,7 @@ func (s *State) ArtifactPath(name string) string {
 	return filepath.Join(s.WorktreePath, ".auto-pr", name)
 }
 
+// RunPath returns the filesystem path to a file or directory within a state run's directory.
 func (s *State) RunPath(runID string, parts ...string) string {
 	pathParts := make([]string, 0, 4+len(parts)) //nolint:mnd // 4 = worktreePath + .auto-pr + runs + runID
 	pathParts = append(pathParts, s.WorktreePath, ".auto-pr", "runs", runID)
@@ -89,10 +99,12 @@ func (s *State) RunPath(runID string, parts ...string) string {
 	return filepath.Join(pathParts...)
 }
 
+// ResolveRef converts a relative artifact ref (stored in StateRun) to an absolute path.
 func (s *State) ResolveRef(ref string) string {
 	return filepath.Join(s.WorktreePath, ".auto-pr", ref)
 }
 
+// CurrentRunLogPath returns the absolute path to the log file for the current state run.
 func (s *State) CurrentRunLogPath() string {
 	for _, run := range s.StateHistory {
 		if run.ID == s.CurrentRunID && run.LogRef != "" {
@@ -103,6 +115,7 @@ func (s *State) CurrentRunLogPath() string {
 	return ""
 }
 
+// LatestArtifactRef returns the artifact ref from the most recent run of the named state.
 func (s *State) LatestArtifactRef(stateName string) string {
 	for i := len(s.StateHistory) - 1; i >= 0; i-- {
 		run := s.StateHistory[i]

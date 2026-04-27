@@ -13,15 +13,15 @@ import (
 // userHomeDir is a variable so tests can override it.
 var userHomeDir = os.UserHomeDir //nolint:gochecknoglobals
 
-// Load returns a WorkflowConfig using the three-level hierarchy:
+// Load returns a Config using the three-level hierarchy:
 //  1. <repoRoot>/.auto-pr/workflow.yaml
 //  2. ~/.auto-pr/workflow.yaml
 //  3. Embedded binary default
-func Load(repoRoot string) (WorkflowConfig, error) {
+func Load(repoRoot string) (Config, error) {
 	projectPath := filepath.Join(repoRoot, ".auto-pr", "workflow.yaml")
 	cfg, ok, err := loadFromFile(projectPath)
 	if err != nil {
-		return WorkflowConfig{}, fmt.Errorf("load project workflow config: %w", err)
+		return Config{}, fmt.Errorf("load project workflow config: %w", err)
 	}
 	if ok {
 		return cfg, nil
@@ -29,12 +29,12 @@ func Load(repoRoot string) (WorkflowConfig, error) {
 
 	home, err := userHomeDir()
 	if err != nil {
-		return WorkflowConfig{}, fmt.Errorf("resolve home dir: %w", err)
+		return Config{}, fmt.Errorf("resolve home dir: %w", err)
 	}
 	globalPath := filepath.Join(home, ".auto-pr", "workflow.yaml")
 	cfg, ok, err = loadFromFile(globalPath)
 	if err != nil {
-		return WorkflowConfig{}, fmt.Errorf("load global workflow config: %w", err)
+		return Config{}, fmt.Errorf("load global workflow config: %w", err)
 	}
 	if ok {
 		return cfg, nil
@@ -76,41 +76,41 @@ func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 	return data, nil
 }
 
-func loadFromFile(path string) (WorkflowConfig, bool, error) {
+func loadFromFile(path string) (Config, bool, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path built from trusted config hierarchy
 	if err != nil {
 		if os.IsNotExist(err) {
-			return WorkflowConfig{}, false, nil
+			return Config{}, false, nil
 		}
 
-		return WorkflowConfig{}, false, fmt.Errorf("read workflow file: %w", err)
+		return Config{}, false, fmt.Errorf("read workflow file: %w", err)
 	}
 	cfg, err := parse(data)
 	if err != nil {
-		return WorkflowConfig{}, false, err
+		return Config{}, false, err
 	}
 
 	return cfg, true, nil
 }
 
-func loadEmbeddedDefault() (WorkflowConfig, error) {
+func loadEmbeddedDefault() (Config, error) {
 	cfg, err := parse(embeddedWorkflowYAML)
 	if err != nil {
-		return WorkflowConfig{}, fmt.Errorf("embedded default workflow is invalid: %w", err)
+		return Config{}, fmt.Errorf("embedded default workflow is invalid: %w", err)
 	}
 
 	return cfg, nil
 }
 
-func parse(data []byte) (WorkflowConfig, error) {
-	var cfg WorkflowConfig
+func parse(data []byte) (Config, error) {
+	var cfg Config
 	err := yaml.Unmarshal(data, &cfg)
 	if err != nil {
-		return WorkflowConfig{}, fmt.Errorf("parse workflow yaml: %w", err)
+		return Config{}, fmt.Errorf("parse workflow yaml: %w", err)
 	}
 	err = cfg.Validate()
 	if err != nil {
-		return WorkflowConfig{}, fmt.Errorf("invalid workflow config: %w", err)
+		return Config{}, fmt.Errorf("invalid workflow config: %w", err)
 	}
 
 	return cfg, nil

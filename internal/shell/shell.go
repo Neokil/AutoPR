@@ -1,3 +1,4 @@
+// Package shell provides a thin wrapper around os/exec for running subprocesses.
 package shell
 
 import (
@@ -8,12 +9,15 @@ import (
 	"os/exec"
 )
 
+// Result holds the captured output of a completed shell command.
 type Result struct {
 	Stdout string
 	Stderr string
 	Code   int
 }
 
+// Run executes name with args in dir, merging env into the process environment and
+// writing stdin to the process if non-empty. It returns the captured output and any error.
 func Run(ctx context.Context, dir string, env map[string]string, stdin string, name string, args ...string) (Result, error) {
 	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // G204: intentional — orchestrator runs user-configured commands
 	cmd.Dir = dir

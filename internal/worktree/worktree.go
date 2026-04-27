@@ -1,3 +1,4 @@
+// Package worktree manages git worktree creation for tickets.
 package worktree
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/Neokil/AutoPR/internal/gitutil"
 )
 
+// Ensure returns the worktree path for the ticket, creating the worktree if it does not exist.
 func Ensure(ctx context.Context, repoRoot, stateDirName, ticketNumber, branchName, baseBranch string) (string, error) {
 	path := gitutil.WorktreePath(repoRoot, stateDirName, ticketNumber)
 	_, err := os.Stat(path)

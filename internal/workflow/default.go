@@ -1,3 +1,4 @@
+// Package workflow defines the workflow configuration types, loader, and validation logic.
 package workflow
 
 import "embed"

@@ -1,3 +1,4 @@
+// Package config defines the application configuration structure and loading logic.
 package config
 
 import (
@@ -13,11 +14,13 @@ const (
 	defaultServerWorkers = 4
 )
 
+// ProviderCommand specifies the executable and arguments used to invoke an AI provider.
 type ProviderCommand struct {
 	Command string   `yaml:"command"`
 	Args    []string `yaml:"args"`
 }
 
+// Config holds all runtime configuration for an AutoPR instance, loaded from ~/.auto-pr/config.yaml.
 type Config struct {
 	Provider       string                     `yaml:"provider"`
 	GuidelinesFile string                     `yaml:"guidelines_file"`
@@ -34,6 +37,7 @@ type Config struct {
 	Providers      map[string]ProviderCommand `yaml:"providers"`
 }
 
+// Default returns a Config populated with built-in defaults.
 func Default() Config {
 	return Config{
 		Provider:       "codex",
@@ -52,7 +56,8 @@ func Default() Config {
 	}
 }
 
-func ConfigPath() (string, error) {
+// Path returns the absolute path to the user-level config file (~/.auto-pr/config.yaml).
+func Path() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)
@@ -61,6 +66,7 @@ func ConfigPath() (string, error) {
 	return filepath.Join(home, ".auto-pr", "config.yaml"), nil
 }
 
+// PromptsDirPath returns the absolute path to the user-level prompts directory (~/.auto-pr/prompts).
 func PromptsDirPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -70,9 +76,11 @@ func PromptsDirPath() (string, error) {
 	return filepath.Join(home, ".auto-pr", "prompts"), nil
 }
 
+// Load reads the config file and merges it over the defaults, returning the result.
+// Missing file is not an error; individual unset fields fall back to their defaults.
 func Load() (Config, error) {
 	cfg := Default()
-	path, err := ConfigPath()
+	path, err := Path()
 	if err != nil {
 		return cfg, err
 	}
@@ -113,6 +121,8 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+// ResolveGuidelinesPath returns the absolute path to the guidelines file, resolving relative
+// paths against repoRoot. Returns an empty string if no guidelines file is configured.
 func ResolveGuidelinesPath(repoRoot string, cfg Config) string {
 	if cfg.GuidelinesFile == "" {
 		return ""

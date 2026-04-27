@@ -20,6 +20,7 @@ type Service interface {
 	CleanupTicket(ctx context.Context, ticketNumber string) error
 }
 
+// NewWorkflowService constructs the in-process Service implementation backed by a ticket Orchestrator.
 func NewWorkflowService(cfg config.Config, repoRoot string, provider providers.AIProvider) Service {
 	return tickets.New(cfg, repoRoot, provider)
 }

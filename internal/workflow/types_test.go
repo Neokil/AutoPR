@@ -7,7 +7,7 @@ import (
 
 func TestValidate_valid(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step-one",
@@ -35,7 +35,7 @@ func TestValidate_valid(t *testing.T) {
 
 func TestValidate_runScript(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "check",
@@ -67,7 +67,7 @@ func TestValidate_runScript(t *testing.T) {
 
 func TestValidate_runScriptAlwaysHandler(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "fetch",
@@ -94,7 +94,7 @@ func TestValidate_runScriptAlwaysHandler(t *testing.T) {
 
 func TestValidate_emptyStateName(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{Name: "", Prompt: "prompts/x.md"},
 		},
@@ -107,7 +107,7 @@ func TestValidate_emptyStateName(t *testing.T) {
 
 func TestValidate_emptyPrompt(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{Name: "step", Prompt: ""},
 		},
@@ -120,7 +120,7 @@ func TestValidate_emptyPrompt(t *testing.T) {
 
 func TestValidate_emptyActionLabel(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -139,7 +139,7 @@ func TestValidate_emptyActionLabel(t *testing.T) {
 
 func TestValidate_unknownActionType(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -158,7 +158,7 @@ func TestValidate_unknownActionType(t *testing.T) {
 
 func TestValidate_moveToStateNoTarget(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -177,7 +177,7 @@ func TestValidate_moveToStateNoTarget(t *testing.T) {
 
 func TestValidate_moveToStateUnknownTarget(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -197,7 +197,7 @@ func TestValidate_moveToStateUnknownTarget(t *testing.T) {
 func TestValidate_moveToStateTerminalTargets(t *testing.T) {
 	t.Parallel()
 	for _, target := range []string{"done", "cancelled", "failed"} {
-		cfg := WorkflowConfig{
+		cfg := Config{
 			States: []StateConfig{
 				{
 					Name:   "step",
@@ -217,7 +217,7 @@ func TestValidate_moveToStateTerminalTargets(t *testing.T) {
 
 func TestValidate_provideFeedbackWithCommands(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -236,7 +236,7 @@ func TestValidate_provideFeedbackWithCommands(t *testing.T) {
 
 func TestValidate_provideFeedbackWithHandlers(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -261,7 +261,7 @@ func TestValidate_provideFeedbackWithHandlers(t *testing.T) {
 
 func TestValidate_runScriptNoCommands(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -286,7 +286,7 @@ func TestValidate_runScriptNoCommands(t *testing.T) {
 
 func TestValidate_runScriptNoHandlers(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -305,7 +305,7 @@ func TestValidate_runScriptNoHandlers(t *testing.T) {
 
 func TestValidate_nestedRunScript(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -336,7 +336,7 @@ func TestValidate_nestedRunScript(t *testing.T) {
 
 func TestValidate_runScriptWithTarget(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{
 				Name:   "step",
@@ -363,7 +363,7 @@ func TestValidate_runScriptWithTarget(t *testing.T) {
 
 func TestStateByName(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{Name: "alpha", Prompt: "a.md"},
 			{Name: "beta", Prompt: "b.md"},
@@ -381,7 +381,7 @@ func TestStateByName(t *testing.T) {
 
 func TestFirstState(t *testing.T) {
 	t.Parallel()
-	cfg := WorkflowConfig{
+	cfg := Config{
 		States: []StateConfig{
 			{Name: "first", Prompt: "f.md"},
 			{Name: "second", Prompt: "s.md"},
@@ -392,7 +392,7 @@ func TestFirstState(t *testing.T) {
 		t.Fatalf("expected first state, got ok=%v name=%q", ok, s.Name)
 	}
 
-	empty := WorkflowConfig{}
+	empty := Config{}
 	_, ok = empty.FirstState()
 	if ok {
 		t.Fatal("expected FirstState to return false on empty config")

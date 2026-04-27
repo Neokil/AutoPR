@@ -10,12 +10,14 @@ import (
 	"github.com/Neokil/AutoPR/internal/shell"
 )
 
+// PromptCommandRunner runs a configured CLI command with a prompt piped to stdin.
 type PromptCommandRunner struct {
 	providerName string
 	command      string
 	args         []string
 }
 
+// Run executes the provider command in worktreePath, writing prompt artifacts to runtimeDir.
 func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir, phase, prompt string) (string, string, error) {
 	err := writePromptArtifacts(runtimeDir, phase, prompt, "", "")
 	if err != nil {

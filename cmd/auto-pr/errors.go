@@ -1,3 +1,4 @@
+// Package main is the entry point for the auto-pr CLI client.
 package main
 
 import "errors"

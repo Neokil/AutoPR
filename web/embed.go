@@ -1,3 +1,4 @@
+// Package web embeds the compiled frontend assets for serving via the AutoPR HTTP server.
 package web
 
 import (
@@ -11,6 +12,7 @@ import (
 //go:embed all:dist
 var assets embed.FS
 
+// Dist returns an fs.FS rooted at the embedded web/dist directory.
 func Dist() (fs.FS, error) {
 	sub, err := fs.Sub(assets, "dist")
 	if err != nil {

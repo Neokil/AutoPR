@@ -2,6 +2,7 @@ package workflow
 
 import "errors"
 
+// Validation errors returned by Config.Validate and related helpers.
 var (
 	ErrStateEmptyName              = errors.New("state has empty name")
 	ErrStateEmptyPrompt            = errors.New("state has empty prompt")

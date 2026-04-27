@@ -160,7 +160,7 @@ func main() {
 	}
 }
 
-func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":       "ok",
 		"server_state": "~/.auto-pr/server/state.json",
@@ -321,7 +321,7 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) handleListRepositories(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleListRepositories(w http.ResponseWriter, _ *http.Request) {
 	configured := discoverRepositoriesFromConfig(s.cfg.RepositoryDirs)
 	seen := s.meta.ListRepos()
 	paths := make([]string, 0, len(configured)+len(seen))

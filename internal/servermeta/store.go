@@ -14,12 +14,14 @@ import (
 	"time"
 )
 
+// RepoRecord is the persisted metadata for a known repository.
 type RepoRecord struct {
 	ID        string    `json:"id"`
 	Path      string    `json:"path"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// TicketRecord is the persisted metadata for a ticket tracked by the server.
 type TicketRecord struct {
 	RepoID       string      `json:"repo_id"`
 	RepoPath     string      `json:"repo_path"`
@@ -34,12 +36,14 @@ type TicketRecord struct {
 	Jobs         []JobRecord `json:"jobs,omitempty"`
 }
 
+// Data is the top-level structure serialized to the server state file.
 type Data struct {
 	Repos   map[string]RepoRecord   `json:"repos"`
 	Tickets map[string]TicketRecord `json:"tickets"`
 	Jobs    map[string]JobRecord    `json:"jobs"`
 }
 
+// JobRecord represents a single background job and its lifecycle timestamps.
 type JobRecord struct {
 	ID           string     `json:"id"`
 	Action       string     `json:"action"`
@@ -54,6 +58,7 @@ type JobRecord struct {
 	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }
 
+// Store is the JSON file-backed implementation of Repository, protected by a mutex.
 type Store struct {
 	path string
 	mu   sync.Mutex
@@ -62,6 +67,7 @@ type Store struct {
 
 var _ Repository = (*Store)(nil)
 
+// DefaultPath returns the default path for the server state file (~/.auto-pr/server/state.json).
 func DefaultPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -71,6 +77,7 @@ func DefaultPath() (string, error) {
 	return filepath.Join(home, ".auto-pr", "server", "state.json"), nil
 }
 
+// NewStore creates a Store backed by the JSON file at path, loading existing data if present.
 func NewStore(path string) (*Store, error) {
 	s := &Store{path: path, data: Data{
 		Repos:   map[string]RepoRecord{},
@@ -85,6 +92,7 @@ func NewStore(path string) (*Store, error) {
 	return s, nil
 }
 
+// UpsertRepo inserts or updates the record for repoPath and returns it.
 func (s *Store) UpsertRepo(repoPath string) (RepoRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,6 +111,7 @@ func (s *Store) UpsertRepo(repoPath string) (RepoRecord, error) {
 	return rec, nil
 }
 
+// UpsertTicket inserts or replaces the ticket metadata record.
 func (s *Store) UpsertTicket(rec TicketRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -112,6 +121,7 @@ func (s *Store) UpsertTicket(rec TicketRecord) error {
 	return s.saveLocked()
 }
 
+// DeleteTicket removes the metadata record for the given ticket.
 func (s *Store) DeleteTicket(repoID, ticketNumber string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -120,6 +130,7 @@ func (s *Store) DeleteTicket(repoID, ticketNumber string) error {
 	return s.saveLocked()
 }
 
+// DeleteJobs removes all job records associated with the given ticket.
 func (s *Store) DeleteJobs(repoID, ticketNumber string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -132,6 +143,7 @@ func (s *Store) DeleteJobs(repoID, ticketNumber string) error {
 	return s.saveLocked()
 }
 
+// PruneTicketJobs deletes jobs for any ticket in repoID that is not in keepTickets.
 func (s *Store) PruneTicketJobs(repoID string, keepTickets []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -152,6 +164,7 @@ func (s *Store) PruneTicketJobs(repoID string, keepTickets []string) error {
 	return s.saveLocked()
 }
 
+// ReplaceRepoTickets atomically replaces all ticket records for repoID with the provided slice.
 func (s *Store) ReplaceRepoTickets(repoID string, tickets []TicketRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -168,6 +181,8 @@ func (s *Store) ReplaceRepoTickets(repoID string, tickets []TicketRecord) error 
 	return s.saveLocked()
 }
 
+// ListTickets returns all ticket records, optionally filtered to repoID (empty = all repos).
+// Each record has its Jobs slice populated and Busy flag set.
 func (s *Store) ListTickets(repoID string) []TicketRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -217,6 +232,7 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 	return out
 }
 
+// NewJob creates a new queued job record and persists it.
 func (s *Store) NewJob(action, repoID, repoPath, ticketNumber, scope string) (JobRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -244,6 +260,7 @@ func (s *Store) NewJob(action, repoID, repoPath, ticketNumber, scope string) (Jo
 	return rec, nil
 }
 
+// UpdateJobStatus sets the job's status and records the appropriate timestamp.
 func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -265,6 +282,7 @@ func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
 	return s.saveLocked()
 }
 
+// GetJob returns the job record for id, and whether it was found.
 func (s *Store) GetJob(id string) (JobRecord, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -273,6 +291,7 @@ func (s *Store) GetJob(id string) (JobRecord, bool) {
 	return rec, ok
 }
 
+// ListRepos returns all known repository records, sorted by most recently updated.
 func (s *Store) ListRepos() []RepoRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()

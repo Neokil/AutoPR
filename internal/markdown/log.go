@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+// AppendSection appends a markdown H2 section with a timestamp and body to the file at path,
+// creating the file if it does not exist.
 func AppendSection(path, title, body string) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec,mnd // G304,G302: internal log path, 0644 intentional for readability
 	if err != nil {
@@ -21,6 +23,7 @@ func AppendSection(path, title, body string) error {
 	return nil
 }
 
+// Write writes content to path as a markdown file, trimming leading/trailing whitespace.
 func Write(path string, content string) error {
 	err := os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable artifact files
 	if err != nil {
@@ -30,6 +33,8 @@ func Write(path string, content string) error {
 	return nil
 }
 
+// Tail returns the last maxLines lines of the file at path, or the full content if shorter.
+// Returns an empty string if the file cannot be read.
 func Tail(path string, maxLines int) string {
 	data, err := os.ReadFile(path) //nolint:gosec // G304: internal log path, not user-controlled
 	if err != nil {
