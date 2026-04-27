@@ -27,6 +27,7 @@ func resolveServerURL() string {
 }
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	ctx := context.Background()
 	if len(os.Args) < minArgs {
 		usage()

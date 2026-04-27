@@ -9,6 +9,7 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	portFlag := flag.Int("port", 0, "HTTP port override (default uses config server_port)")
 	flag.Parse()
 
