@@ -1,4 +1,4 @@
-// Package state implements the filesystem-backed StateStore used in production.
+// Package state implements the filesystem-backed ticket state store used in production.
 package state
 
 import "errors"

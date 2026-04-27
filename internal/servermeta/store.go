@@ -58,14 +58,12 @@ type JobRecord struct {
 	FinishedAt   *time.Time `json:"finished_at,omitempty"`
 }
 
-// Store is the JSON file-backed implementation of Repository, protected by a mutex.
+// Store is the JSON file-backed server metadata store, protected by a mutex.
 type Store struct {
 	path string
 	mu   sync.Mutex
 	data Data
 }
-
-var _ Repository = (*Store)(nil)
 
 // DefaultPath returns the default path for the server state file (~/.auto-pr/server/state.json).
 func DefaultPath() (string, error) {

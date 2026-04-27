@@ -6,17 +6,17 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/Neokil/AutoPR/internal/application/orchestrator"
+	"github.com/Neokil/AutoPR/internal/application/tickets"
 	"github.com/Neokil/AutoPR/internal/config"
 	"github.com/Neokil/AutoPR/internal/contracts/api"
 	ticketdomain "github.com/Neokil/AutoPR/internal/domain/ticket"
@@ -35,13 +35,13 @@ const (
 	jobCleanupDone = "cleanup_done"
 	jobCleanupAll  = "cleanup_all"
 
-	jobQueueSize        = 256
+	jobQueueSize          = 256
 	httpReadHeaderTimeout = 30 * time.Second
-	sectionMatchLen     = 3 // full match + 2 capture groups
+	sectionMatchLen       = 3 // full match + 2 capture groups
 )
 
 type repoRuntime struct {
-	svc      orchestrator.Service
+	svc      *tickets.Orchestrator
 	repoRoot string
 	store    *state.Store
 }
@@ -62,7 +62,7 @@ type enqueueOptions struct {
 
 type server struct {
 	cfg      config.Config
-	meta     servermeta.Repository
+	meta     *servermeta.Store
 	runtimes map[string]*repoRuntime
 	mu       sync.Mutex
 	jobs     chan queuedJob

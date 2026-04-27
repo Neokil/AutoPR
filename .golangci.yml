@@ -12,14 +12,6 @@ linters:
     - wsl
     - wsl_v5
   settings:
-    ireturn:
-      allow:
-        - anon
-        - error
-        - empty
-        - stdlib
-        - github.com/Neokil/AutoPR/internal/application/orchestrator.Service
-        - github.com/Neokil/AutoPR/internal/providers.AIProvider
     tagliatelle:
       case:
         rules:

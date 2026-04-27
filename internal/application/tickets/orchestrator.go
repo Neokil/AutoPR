@@ -15,7 +15,6 @@ import (
 	ticketdomain "github.com/Neokil/AutoPR/internal/domain/ticket"
 	"github.com/Neokil/AutoPR/internal/gitutil"
 	"github.com/Neokil/AutoPR/internal/markdown"
-	"github.com/Neokil/AutoPR/internal/ports"
 	"github.com/Neokil/AutoPR/internal/providers"
 	"github.com/Neokil/AutoPR/internal/shell"
 	"github.com/Neokil/AutoPR/internal/state"
@@ -23,21 +22,33 @@ import (
 	"github.com/Neokil/AutoPR/internal/worktree"
 )
 
+type stateStore interface {
+	LoadState(ticketNumber string) (ticketdomain.State, error)
+	SaveState(ticketNumber string, st ticketdomain.State) error
+	ListTicketDirs() ([]string, error)
+	RemoveTicketDir(ticketNumber string) error
+}
+
+type promptExecutor interface {
+	Name() string
+	Execute(ctx context.Context, req providers.ExecuteRequest) (providers.ExecuteResult, error)
+}
+
 // Orchestrator drives the workflow state machine for a single repository.
 type Orchestrator struct {
 	Cfg      config.Config
 	RepoRoot string
-	Store    ports.StateStore
-	Provider providers.AIProvider
+	Store    stateStore
+	Provider promptExecutor
 }
 
 // New returns an Orchestrator using the default filesystem state store.
-func New(cfg config.Config, repoRoot string, provider providers.AIProvider) *Orchestrator {
+func New(cfg config.Config, repoRoot string, provider promptExecutor) *Orchestrator {
 	return NewWithStore(cfg, repoRoot, state.NewStore(repoRoot, cfg.StateDirName), provider)
 }
 
 // NewWithStore returns an Orchestrator with an explicitly provided state store (used in tests).
-func NewWithStore(cfg config.Config, repoRoot string, store ports.StateStore, provider providers.AIProvider) *Orchestrator {
+func NewWithStore(cfg config.Config, repoRoot string, store stateStore, provider promptExecutor) *Orchestrator {
 	return &Orchestrator{
 		Cfg:      cfg,
 		RepoRoot: repoRoot,

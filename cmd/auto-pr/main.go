@@ -64,7 +64,7 @@ func main() {
 	}
 }
 
-func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+func runCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
 	requireArgs("run", args, 1)
 	for _, ticket := range args {
 		err := svc.StartFlow(ctx, ticket)
@@ -75,7 +75,7 @@ func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	}
 }
 
-func statusCmd(svc orchestrator.Service, args []string) {
+func statusCmd(svc *orchestrator.RemoteService, args []string) {
 	if len(args) > 1 {
 		slog.Error("invalid usage", "err", errUsageStatus)
 		os.Exit(1)
@@ -94,7 +94,7 @@ func statusCmd(svc orchestrator.Service, args []string) {
 	}
 }
 
-func actionCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+func actionCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
 	requireArgs("action", args, 1)
 	ticket := args[0]
 
@@ -114,14 +114,9 @@ func actionCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 	}
 }
 
-func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+func waitForJobCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
 	requireArgs("wait-for-job", args, 1)
-	remote, ok := svc.(*orchestrator.RemoteService)
-	if !ok {
-		slog.Error("invalid usage", "err", errWaitForJobServerOnly)
-		os.Exit(1)
-	}
-	job, err := remote.WaitForJob(ctx, args[0])
+	job, err := svc.WaitForJob(ctx, args[0])
 	if err != nil {
 		slog.Error("wait for job", "err", err)
 		os.Exit(1)
@@ -129,7 +124,7 @@ func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string)
 	slog.Info("job completed", "job_id", job.ID, "status", job.Status)
 }
 
-func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+func cleanupCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
 	flags := flag.NewFlagSet("cleanup", flag.ExitOnError)
 	doneOnly := flags.Bool("done", false, "cleanup only done tickets")
 	all := flags.Bool("all", false, "cleanup all tickets")
@@ -190,7 +185,7 @@ Commands:
   auto-pr cleanup --all`)
 }
 
-func printNextSteps(svc orchestrator.Service, ticket string) {
+func printNextSteps(svc *orchestrator.RemoteService, ticket string) {
 	msg, err := svc.NextSteps(ticket)
 	if err != nil {
 		return

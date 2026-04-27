@@ -12,8 +12,7 @@ import (
 // StateFileName is the name of the JSON file that holds a ticket's persisted workflow state.
 const StateFileName = "state.json"
 
-// Store is the filesystem-backed implementation of ports.StateStore, keeping state files
-// inside the configured state directory under the repo root.
+// Store keeps ticket state files inside the configured state directory under the repo root.
 type Store struct {
 	RepoRoot  string
 	StateRoot string

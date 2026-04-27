@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Neokil/AutoPR/internal/application/orchestrator"
+	"github.com/Neokil/AutoPR/internal/application/tickets"
 	"github.com/Neokil/AutoPR/internal/contracts/api"
 	"github.com/Neokil/AutoPR/internal/gitutil"
 	"github.com/Neokil/AutoPR/internal/providers"
@@ -68,7 +68,7 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 		return nil, fmt.Errorf("create AI provider: %w", err)
 	}
 	repoRt := &repoRuntime{
-		svc:      orchestrator.NewWorkflowService(s.cfg, repoRoot, provider),
+		svc:      tickets.New(s.cfg, repoRoot, provider),
 		repoRoot: repoRoot,
 		store:    state.NewStore(repoRoot, s.cfg.StateDirName),
 	}

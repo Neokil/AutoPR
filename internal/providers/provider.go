@@ -1,9 +1,5 @@
 package providers
 
-import (
-	"context"
-)
-
 // ExecuteRequest carries the inputs needed to run a prompt through an AI provider.
 type ExecuteRequest struct {
 	PromptPath string // absolute path to the prompt file
@@ -15,10 +11,4 @@ type ExecuteRequest struct {
 type ExecuteResult struct {
 	RawOutput string
 	Stderr    string
-}
-
-// AIProvider is the interface that all AI execution backends must implement.
-type AIProvider interface {
-	Name() string
-	Execute(ctx context.Context, req ExecuteRequest) (ExecuteResult, error)
 }
