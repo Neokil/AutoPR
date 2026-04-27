@@ -130,10 +130,10 @@ func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string)
 }
 
 func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
-	fs := flag.NewFlagSet("cleanup", flag.ExitOnError)
-	doneOnly := fs.Bool("done", false, "cleanup only done tickets")
-	all := fs.Bool("all", false, "cleanup all tickets")
-	_ = fs.Parse(args)
+	flags := flag.NewFlagSet("cleanup", flag.ExitOnError)
+	doneOnly := flags.Bool("done", false, "cleanup only done tickets")
+	all := flags.Bool("all", false, "cleanup all tickets")
+	_ = flags.Parse(args)
 
 	if *doneOnly && *all {
 		slog.Error("invalid usage", "err", errCleanupFlags)
@@ -158,7 +158,7 @@ func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
 		return
 	}
 
-	rest := fs.Args()
+	rest := flags.Args()
 	if len(rest) != 1 {
 		slog.Error("invalid usage", "err", errUsageCleanup)
 		os.Exit(1)

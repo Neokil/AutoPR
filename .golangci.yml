@@ -29,21 +29,6 @@ linters:
     varnamelen:
       ignore-names:
         - ok
-        - r
-        - w
-        - ch
         - id
-        - fs
-        - b
-        - f
-        - u
-        - m
-        - s
-        - t
-        - e
         - i
         - j
-        - a
-        - rt
-        - wf
-        - st

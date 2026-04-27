@@ -107,7 +107,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	s := &server{
+	daemon := &server{
 		cfg:         cfg,
 		meta:        meta,
 		runtimes:    map[string]*repoRuntime{},
@@ -118,9 +118,9 @@ func main() {
 		subscribers: map[string]chan serverEvent{},
 	}
 	for range cfg.ServerWorkers {
-		go s.workerLoop()
+		go daemon.workerLoop()
 	}
-	go s.prMonitorLoop()
+	go daemon.prMonitorLoop()
 
 	port := cfg.ServerPort
 	if *portFlag > 0 {
@@ -130,21 +130,21 @@ func main() {
 		port = 8080
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", s.handleHealth)
-	mux.HandleFunc("GET /api/repositories", s.handleListRepositories)
-	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
-	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
-	mux.HandleFunc("GET /api/tickets/{id}/events", s.handleTicketEvents)
-	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name...}", s.handleTicketArtifact)
-	mux.HandleFunc("GET /api/tickets/{id}/execution-logs", s.handleExecutionLogs)
-	mux.HandleFunc("GET /api/jobs/{id}", s.handleGetJob)
-	mux.HandleFunc("GET /api/events", s.handleEvents)
-	mux.HandleFunc("POST /api/tickets/{id}/run", s.handleRunTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/action", s.handleActionTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/move-to-state", s.handleMoveToStateTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/cleanup", s.handleCleanupTicket)
-	mux.HandleFunc("POST /api/cleanup", s.handleCleanupScope)
-	mux.HandleFunc("/", s.handleFrontend)
+	mux.HandleFunc("GET /api/health", daemon.handleHealth)
+	mux.HandleFunc("GET /api/repositories", daemon.handleListRepositories)
+	mux.HandleFunc("GET /api/tickets", daemon.handleListTickets)
+	mux.HandleFunc("GET /api/tickets/{id}", daemon.handleGetTicket)
+	mux.HandleFunc("GET /api/tickets/{id}/events", daemon.handleTicketEvents)
+	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name...}", daemon.handleTicketArtifact)
+	mux.HandleFunc("GET /api/tickets/{id}/execution-logs", daemon.handleExecutionLogs)
+	mux.HandleFunc("GET /api/jobs/{id}", daemon.handleGetJob)
+	mux.HandleFunc("GET /api/events", daemon.handleEvents)
+	mux.HandleFunc("POST /api/tickets/{id}/run", daemon.handleRunTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/action", daemon.handleActionTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/move-to-state", daemon.handleMoveToStateTicket)
+	mux.HandleFunc("POST /api/tickets/{id}/cleanup", daemon.handleCleanupTicket)
+	mux.HandleFunc("POST /api/cleanup", daemon.handleCleanupScope)
+	mux.HandleFunc("/", daemon.handleFrontend)
 
 	addr := fmt.Sprintf(":%d", port)
 	slog.Info("AutoPR daemon listening", "addr", addr)
@@ -169,159 +169,159 @@ func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (s *server) handleRunTicket(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleRunTicket(resp http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, ok := s.repoRuntimeFromBody(resp, r)
 	if !ok {
 		return
 	}
-	s.enqueueAndRespond(w, jobRun, repoID, repoRoot, ticket, enqueueOptions{})
+	s.enqueueAndRespond(resp, jobRun, repoID, repoRoot, ticket, enqueueOptions{})
 }
 
-func (s *server) handleActionTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
+func (s *server) handleActionTicket(resp http.ResponseWriter, httpReq *http.Request) {
+	ticket := httpReq.PathValue("id")
 	var req api.ActionRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(httpReq.Body).Decode(&req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
+		writeError(resp, http.StatusBadRequest, "invalid json body")
 
 		return
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
-		writeError(w, http.StatusBadRequest, "repo_path is required")
+		writeError(resp, http.StatusBadRequest, "repo_path is required")
 
 		return
 	}
 	if strings.TrimSpace(req.Label) == "" {
-		writeError(w, http.StatusBadRequest, "label is required")
+		writeError(resp, http.StatusBadRequest, "label is required")
 
 		return
 	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(httpReq.Context(), req.RepoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
-	s.enqueueAndRespond(w, jobAction, repoID, repoRoot, ticket, enqueueOptions{
+	s.enqueueAndRespond(resp, jobAction, repoID, repoRoot, ticket, enqueueOptions{
 		message:     req.Message,
 		actionLabel: req.Label,
 	})
 }
 
-func (s *server) handleMoveToStateTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
+func (s *server) handleMoveToStateTicket(resp http.ResponseWriter, httpReq *http.Request) {
+	ticket := httpReq.PathValue("id")
 	var req api.MoveToStateRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(httpReq.Body).Decode(&req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
+		writeError(resp, http.StatusBadRequest, "invalid json body")
 
 		return
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
-		writeError(w, http.StatusBadRequest, "repo_path is required")
+		writeError(resp, http.StatusBadRequest, "repo_path is required")
 
 		return
 	}
 	if strings.TrimSpace(req.Target) == "" {
-		writeError(w, http.StatusBadRequest, "target is required")
+		writeError(resp, http.StatusBadRequest, "target is required")
 
 		return
 	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(httpReq.Context(), req.RepoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
-	s.enqueueAndRespond(w, jobMoveToState, repoID, repoRoot, ticket, enqueueOptions{
+	s.enqueueAndRespond(resp, jobMoveToState, repoID, repoRoot, ticket, enqueueOptions{
 		targetState: req.Target,
 	})
 }
 
-func (s *server) handleCleanupTicket(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleCleanupTicket(resp http.ResponseWriter, r *http.Request) {
 	ticket := r.PathValue("id")
-	repoRoot, repoID, ok := s.repoRuntimeFromBody(w, r)
+	repoRoot, repoID, ok := s.repoRuntimeFromBody(resp, r)
 	if !ok {
 		return
 	}
-	s.enqueueAndRespond(w, jobCleanup, repoID, repoRoot, ticket, enqueueOptions{})
+	s.enqueueAndRespond(resp, jobCleanup, repoID, repoRoot, ticket, enqueueOptions{})
 }
 
-func (s *server) handleCleanupScope(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleCleanupScope(resp http.ResponseWriter, httpReq *http.Request) {
 	var req api.CleanupScopeRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(httpReq.Body).Decode(&req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
+		writeError(resp, http.StatusBadRequest, "invalid json body")
 
 		return
 	}
 	scope := strings.TrimSpace(req.Scope)
 	if scope == "" {
-		scope = strings.TrimSpace(r.URL.Query().Get("scope"))
+		scope = strings.TrimSpace(httpReq.URL.Query().Get("scope"))
 	}
 	if strings.TrimSpace(req.RepoPath) == "" {
-		writeError(w, http.StatusBadRequest, "repo_path is required")
+		writeError(resp, http.StatusBadRequest, "repo_path is required")
 
 		return
 	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
+	repoRoot, repoID, _, err := s.runtimeForRepoPath(httpReq.Context(), req.RepoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
 
 	switch scope {
 	case "done":
-		s.enqueueAndRespond(w, jobCleanupDone, repoID, repoRoot, "", enqueueOptions{scope: scope})
+		s.enqueueAndRespond(resp, jobCleanupDone, repoID, repoRoot, "", enqueueOptions{scope: scope})
 	case "all":
-		s.enqueueAndRespond(w, jobCleanupAll, repoID, repoRoot, "", enqueueOptions{scope: scope})
+		s.enqueueAndRespond(resp, jobCleanupAll, repoID, repoRoot, "", enqueueOptions{scope: scope})
 	default:
-		writeError(w, http.StatusBadRequest, "scope must be 'done' or 'all'")
+		writeError(resp, http.StatusBadRequest, "scope must be 'done' or 'all'")
 	}
 }
 
-func (s *server) handleGetJob(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleGetJob(resp http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	job, ok := s.meta.GetJob(id)
 	if !ok {
-		writeError(w, http.StatusNotFound, "job not found")
+		writeError(resp, http.StatusNotFound, "job not found")
 
 		return
 	}
-	writeJSON(w, http.StatusOK, job)
+	writeJSON(resp, http.StatusOK, job)
 }
 
-func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
-	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+func (s *server) handleListTickets(resp http.ResponseWriter, req *http.Request) {
+	repoPath := strings.TrimSpace(req.URL.Query().Get("repo_path"))
 	if repoPath == "" {
-		writeJSON(w, http.StatusOK, map[string]any{
+		writeJSON(resp, http.StatusOK, map[string]any{
 			"tickets": s.meta.ListTickets(""),
 		})
 
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
+	repoRoot, repoID, repoRt, err := s.runtimeForRepoPath(req.Context(), repoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
-	err = s.syncRepoTickets(repoID, repoRoot, rt, false)
+	err = s.syncRepoTickets(repoID, repoRoot, repoRt, false)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(resp, http.StatusInternalServerError, err.Error())
 
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeJSON(resp, http.StatusOK, map[string]any{
 		"repo_id":   repoID,
 		"repo_path": repoRoot,
 		"tickets":   s.meta.ListTickets(repoID),
 	})
 }
 
-func (s *server) handleListRepositories(w http.ResponseWriter, _ *http.Request) {
+func (s *server) handleListRepositories(resp http.ResponseWriter, _ *http.Request) {
 	configured := discoverRepositoriesFromConfig(s.cfg.RepositoryDirs)
 	seen := s.meta.ListRepos()
 	paths := make([]string, 0, len(configured)+len(seen))
@@ -353,58 +353,58 @@ func (s *server) handleListRepositories(w http.ResponseWriter, _ *http.Request) 
 		paths = append(paths, abs)
 	}
 	sort.Strings(paths)
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeJSON(resp, http.StatusOK, map[string]any{
 		"repositories": paths,
 	})
 }
 
-func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+func (s *server) handleGetTicket(resp http.ResponseWriter, httpReq *http.Request) {
+	ticket := httpReq.PathValue("id")
+	repoPath := strings.TrimSpace(httpReq.URL.Query().Get("repo_path"))
 	if repoPath == "" {
-		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		writeError(resp, http.StatusBadRequest, "repo_path query param is required")
 
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
+	repoRoot, repoID, repoRt, err := s.runtimeForRepoPath(httpReq.Context(), repoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
-	err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, false)
+	err = s.syncTicketFromRepo(repoID, repoRoot, ticket, repoRt, false)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeError(w, http.StatusNotFound, "ticket not found")
+			writeError(resp, http.StatusNotFound, "ticket not found")
 
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(resp, http.StatusInternalServerError, err.Error())
 
 		return
 	}
 
-	st, err := rt.store.LoadState(ticket)
+	ticketState, err := repoRt.store.LoadState(ticket)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "ticket not found")
+		writeError(resp, http.StatusNotFound, "ticket not found")
 
 		return
 	}
-	nextSteps, _ := rt.svc.NextSteps(ticket)
-	githubBlobBase, _ := gitutil.GitHubBlobBase(r.Context(), repoRoot, s.cfg.BaseBranch)
+	nextSteps, _ := repoRt.svc.NextSteps(ticket)
+	githubBlobBase, _ := gitutil.GitHubBlobBase(httpReq.Context(), repoRoot, s.cfg.BaseBranch)
 
 	var availableActions []actionInfo
 	var workflowStates []workflowStateInfo
-	wf, wfErr := workflow.Load(repoRoot)
+	wflow, wfErr := workflow.Load(repoRoot)
 	if wfErr == nil {
-		for _, stateCfg := range wf.States {
+		for _, stateCfg := range wflow.States {
 			workflowStates = append(workflowStates, workflowStateInfo{
 				Name:        stateCfg.Name,
 				DisplayName: stateCfg.TimelineLabel(),
 			})
 		}
-		if st.FlowStatus == ticketdomain.FlowStatusWaiting {
-			if stateCfg, ok := wf.StateByName(st.CurrentState); ok {
+		if ticketState.FlowStatus == ticketdomain.FlowStatusWaiting {
+			if stateCfg, ok := wflow.StateByName(ticketState.CurrentState); ok {
 				for _, a := range stateCfg.Actions {
 					availableActions = append(availableActions, actionInfo{
 						Label: a.Label,
@@ -421,42 +421,42 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		workflowStates = []workflowStateInfo{}
 	}
 
-	resp := ticketDetails{
+	ticketResp := ticketDetails{
 		RepoID:           repoID,
 		RepoPath:         repoRoot,
 		TicketNumber:     ticket,
 		GitHubBlobBase:   githubBlobBase,
-		State:            st,
+		State:            ticketState,
 		NextSteps:        nextSteps,
 		WorkflowStates:   workflowStates,
 		AvailableActions: availableActions,
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(resp, http.StatusOK, ticketResp)
 }
 
-func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+func (s *server) handleTicketEvents(resp http.ResponseWriter, req *http.Request) {
+	ticket := req.PathValue("id")
+	repoPath := strings.TrimSpace(req.URL.Query().Get("repo_path"))
 	if repoPath == "" {
-		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		writeError(resp, http.StatusBadRequest, "repo_path query param is required")
 
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
+	repoRoot, repoID, repoRt, err := s.runtimeForRepoPath(req.Context(), repoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
-	st, stErr := rt.store.LoadState(ticket)
+	ticketState, stErr := repoRt.store.LoadState(ticket)
 	var logPath string
-	if stErr == nil && st.WorktreePath != "" && st.CurrentState != "" {
-		logPath = st.CurrentRunLogPath()
+	if stErr == nil && ticketState.WorktreePath != "" && ticketState.CurrentState != "" {
+		logPath = ticketState.CurrentRunLogPath()
 	}
 	events, err := parseLogEvents(logPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeJSON(w, http.StatusOK, map[string]any{
+			writeJSON(resp, http.StatusOK, map[string]any{
 				"repo_id":       repoID,
 				"repo_path":     repoRoot,
 				"ticket_number": ticket,
@@ -465,11 +465,11 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(resp, http.StatusInternalServerError, err.Error())
 
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeJSON(resp, http.StatusOK, map[string]any{
 		"repo_id":       repoID,
 		"repo_path":     repoRoot,
 		"ticket_number": ticket,
@@ -477,37 +477,37 @@ func (s *server) handleTicketEvents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	name := r.PathValue("name")
-	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+func (s *server) handleTicketArtifact(resp http.ResponseWriter, req *http.Request) {
+	ticket := req.PathValue("id")
+	name := req.PathValue("name")
+	repoPath := strings.TrimSpace(req.URL.Query().Get("repo_path"))
 	if repoPath == "" {
-		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		writeError(resp, http.StatusBadRequest, "repo_path query param is required")
 
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
+	repoRoot, repoID, repoRt, err := s.runtimeForRepoPath(req.Context(), repoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
-	st, stErr := rt.store.LoadState(ticket)
+	ticketState, stErr := repoRt.store.LoadState(ticket)
 	if stErr != nil {
-		writeError(w, http.StatusNotFound, "ticket not found")
+		writeError(resp, http.StatusNotFound, "ticket not found")
 
 		return
 	}
-	path, ok := artifactPath(st, filepath.Join(rt.store.TicketDir(ticket), state.StateFileName), name)
+	path, ok := artifactPath(ticketState, filepath.Join(repoRt.store.TicketDir(ticket), state.StateFileName), name)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "unknown artifact")
+		writeError(resp, http.StatusBadRequest, "unknown artifact")
 
 		return
 	}
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path resolved from trusted internal state
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeJSON(w, http.StatusOK, map[string]string{
+			writeJSON(resp, http.StatusOK, map[string]string{
 				"repo_id":       repoID,
 				"repo_path":     repoRoot,
 				"ticket_number": ticket,
@@ -518,11 +518,11 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(resp, http.StatusInternalServerError, err.Error())
 
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
+	writeJSON(resp, http.StatusOK, map[string]string{
 		"repo_id":       repoID,
 		"repo_path":     repoRoot,
 		"ticket_number": ticket,
@@ -532,32 +532,32 @@ func (s *server) handleTicketArtifact(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
-	ticket := r.PathValue("id")
-	repoPath := strings.TrimSpace(r.URL.Query().Get("repo_path"))
+func (s *server) handleExecutionLogs(resp http.ResponseWriter, req *http.Request) {
+	ticket := req.PathValue("id")
+	repoPath := strings.TrimSpace(req.URL.Query().Get("repo_path"))
 	if repoPath == "" {
-		writeError(w, http.StatusBadRequest, "repo_path query param is required")
+		writeError(resp, http.StatusBadRequest, "repo_path query param is required")
 
 		return
 	}
-	repoRoot, repoID, rt, err := s.runtimeForRepoPath(r.Context(), repoPath)
+	repoRoot, repoID, repoRt, err := s.runtimeForRepoPath(req.Context(), repoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return
 	}
-	st, err := rt.store.LoadState(ticket)
+	ticketState, err := repoRt.store.LoadState(ticket)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "ticket not found")
+		writeError(resp, http.StatusNotFound, "ticket not found")
 
 		return
 	}
-	logs := make([]executionLog, 0, len(st.StateHistory))
-	for _, run := range st.StateHistory {
+	logs := make([]executionLog, 0, len(ticketState.StateHistory))
+	for _, run := range ticketState.StateHistory {
 		runPath := filepath.ToSlash(filepath.Join("runs", run.ID, "raw-provider.log"))
-		content, readErr := os.ReadFile(st.ResolveRef(runPath)) //nolint:gosec // G703: path is constructed from trusted internal state
+		content, readErr := os.ReadFile(ticketState.ResolveRef(runPath)) //nolint:gosec // G703: path is constructed from trusted internal state
 		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-			writeError(w, http.StatusInternalServerError, readErr.Error())
+			writeError(resp, http.StatusInternalServerError, readErr.Error())
 
 			return
 		}
@@ -573,7 +573,7 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(logs, func(i, j int) bool {
 		return logs[i].Timestamp < logs[j].Timestamp
 	})
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeJSON(resp, http.StatusOK, map[string]any{
 		"repo_id":       repoID,
 		"repo_path":     repoRoot,
 		"ticket_number": ticket,
@@ -581,18 +581,18 @@ func (s *server) handleExecutionLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPath, ticket string, opts enqueueOptions) {
+func (s *server) enqueueAndRespond(resp http.ResponseWriter, action, repoID, repoPath, ticket string, opts enqueueOptions) {
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
 		err := s.ensureQueuedTicket(repoID, repoPath, ticket)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeError(resp, http.StatusInternalServerError, err.Error())
 
 			return
 		}
 	}
 	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, opts.scope)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(resp, http.StatusInternalServerError, err.Error())
 
 		return
 	}
@@ -614,7 +614,7 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 	})
 	select {
 	case s.jobs <- queued:
-		writeJSON(w, http.StatusAccepted, api.ActionAcceptedResponse{
+		writeJSON(resp, http.StatusAccepted, api.ActionAcceptedResponse{
 			Status:       "accepted",
 			JobID:        job.ID,
 			Action:       action,
@@ -635,7 +635,7 @@ func (s *server) enqueueAndRespond(w http.ResponseWriter, action, repoID, repoPa
 			Status:       "failed",
 			Error:        "job queue is full",
 		})
-		writeError(w, http.StatusServiceUnavailable, "job queue is full")
+		writeError(resp, http.StatusServiceUnavailable, "job queue is full")
 	}
 }
 
@@ -670,20 +670,20 @@ func parseLogEvents(path string) ([]logEvent, error) {
 	return events, nil
 }
 
-func artifactPath(st ticketdomain.State, stateFilePath, name string) (string, bool) {
-	if path, ok := resolveArtifactRef(st, name); ok {
+func artifactPath(ticketState ticketdomain.State, stateFilePath, name string) (string, bool) {
+	if path, ok := resolveArtifactRef(ticketState, name); ok {
 		return path, true
 	}
 	switch name {
 	case "state":
-		if st.WorktreePath != "" {
-			return st.ArtifactPath("state.json"), true
+		if ticketState.WorktreePath != "" {
+			return ticketState.ArtifactPath("state.json"), true
 		}
 
 		return stateFilePath, true
 	case "log":
-		if st.WorktreePath != "" && st.CurrentState != "" {
-			return st.CurrentRunLogPath(), true
+		if ticketState.WorktreePath != "" && ticketState.CurrentState != "" {
+			return ticketState.CurrentRunLogPath(), true
 		}
 
 		return "", false
@@ -692,8 +692,8 @@ func artifactPath(st ticketdomain.State, stateFilePath, name string) (string, bo
 	}
 }
 
-func resolveArtifactRef(st ticketdomain.State, name string) (string, bool) {
-	if st.WorktreePath == "" || strings.TrimSpace(name) == "" {
+func resolveArtifactRef(ticketState ticketdomain.State, name string) (string, bool) {
+	if ticketState.WorktreePath == "" || strings.TrimSpace(name) == "" {
 		return "", false
 	}
 	clean := filepath.Clean(strings.TrimSpace(name))
@@ -705,5 +705,5 @@ func resolveArtifactRef(st ticketdomain.State, name string) (string, bool) {
 		return "", false
 	}
 
-	return st.ResolveRef(filepath.ToSlash(clean)), true
+	return ticketState.ResolveRef(filepath.ToSlash(clean)), true
 }

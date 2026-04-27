@@ -11,29 +11,29 @@ import (
 )
 
 func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
-	rt, err := s.runtimeForRepo(repoRoot)
+	repoRt, err := s.runtimeForRepo(repoRoot)
 	if err != nil {
 		return err
 	}
-	_, loadErr := rt.store.LoadState(ticket)
+	_, loadErr := repoRt.store.LoadState(ticket)
 	if loadErr == nil {
-		return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+		return s.syncTicketFromRepo(repoID, repoRoot, ticket, repoRt, true)
 	}
 	if !errors.Is(loadErr, os.ErrNotExist) {
 		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
 
 	st := ticketdomain.NewState(ticket)
-	err = rt.store.SaveState(ticket, st)
+	err = repoRt.store.SaveState(ticket, st)
 	if err != nil {
 		return fmt.Errorf("save initial ticket state: %w", err)
 	}
 
-	return s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+	return s.syncTicketFromRepo(repoID, repoRoot, ticket, repoRt, true)
 }
 
 func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime, emitEvent bool) error {
-	st, err := rt.store.LoadState(ticket)
+	ticketState, err := rt.store.LoadState(ticket)
 	if errors.Is(err, os.ErrNotExist) {
 		delErr := s.meta.DeleteTicket(repoID, ticket)
 		if delErr != nil {
@@ -53,16 +53,16 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 	if err != nil {
 		return fmt.Errorf("load ticket state: %w", err)
 	}
-	title := ticketTitleForDisplay(st)
+	title := ticketTitleForDisplay(ticketState)
 	rec := servermeta.TicketRecord{
 		RepoID:       repoID,
 		RepoPath:     repoRoot,
 		TicketNumber: ticket,
 		Title:        title,
-		Status:       string(st.FlowStatus),
-		LastError:    strings.TrimSpace(st.LastError),
-		UpdatedAt:    st.UpdatedAt.UTC(),
-		PRURL:        st.PRURL,
+		Status:       string(ticketState.FlowStatus),
+		LastError:    strings.TrimSpace(ticketState.LastError),
+		UpdatedAt:    ticketState.UpdatedAt.UTC(),
+		PRURL:        ticketState.PRURL,
 	}
 	err = s.meta.UpsertTicket(rec)
 	if err != nil {
@@ -84,26 +84,26 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 	return nil
 }
 
-func (s *server) syncRepoTickets(repoID, repoRoot string, rt *repoRuntime, emitEvent bool) error {
-	tickets, err := rt.store.ListTicketDirs()
+func (s *server) syncRepoTickets(repoID, repoRoot string, repoRt *repoRuntime, emitEvent bool) error {
+	tickets, err := repoRt.store.ListTicketDirs()
 	if err != nil {
 		return fmt.Errorf("list ticket dirs: %w", err)
 	}
 	records := make([]servermeta.TicketRecord, 0, len(tickets))
-	for _, t := range tickets {
-		st, err := rt.store.LoadState(t)
+	for _, ticketNum := range tickets {
+		ticketState, err := repoRt.store.LoadState(ticketNum)
 		if err != nil {
 			continue
 		}
 		records = append(records, servermeta.TicketRecord{
 			RepoID:       repoID,
 			RepoPath:     repoRoot,
-			TicketNumber: t,
-			Title:        ticketTitleForDisplay(st),
-			Status:       string(st.FlowStatus),
-			LastError:    strings.TrimSpace(st.LastError),
-			UpdatedAt:    st.UpdatedAt.UTC(),
-			PRURL:        st.PRURL,
+			TicketNumber: ticketNum,
+			Title:        ticketTitleForDisplay(ticketState),
+			Status:       string(ticketState.FlowStatus),
+			LastError:    strings.TrimSpace(ticketState.LastError),
+			UpdatedAt:    ticketState.UpdatedAt.UTC(),
+			PRURL:        ticketState.PRURL,
 		})
 	}
 	err = s.meta.ReplaceRepoTickets(repoID, records)

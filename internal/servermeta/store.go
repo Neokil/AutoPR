@@ -79,17 +79,17 @@ func DefaultPath() (string, error) {
 
 // NewStore creates a Store backed by the JSON file at path, loading existing data if present.
 func NewStore(path string) (*Store, error) {
-	s := &Store{path: path, data: Data{
+	store := &Store{path: path, data: Data{
 		Repos:   map[string]RepoRecord{},
 		Tickets: map[string]TicketRecord{},
 		Jobs:    map[string]JobRecord{},
 	}}
-	err := s.load()
+	err := store.load()
 	if err != nil {
 		return nil, err
 	}
 
-	return s, nil
+	return store, nil
 }
 
 // UpsertRepo inserts or updates the record for repoPath and returns it.
@@ -202,20 +202,20 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 	}
 
 	out := make([]TicketRecord, 0, len(s.data.Tickets))
-	for _, t := range s.data.Tickets {
-		if repoID != "" && t.RepoID != repoID {
+	for _, rec := range s.data.Tickets {
+		if repoID != "" && rec.RepoID != repoID {
 			continue
 		}
-		t.Jobs = append([]JobRecord(nil), jobsByTicket[ticketKey(t.RepoID, t.TicketNumber)]...)
-		t.Busy = false
-		for _, job := range t.Jobs {
+		rec.Jobs = append([]JobRecord(nil), jobsByTicket[ticketKey(rec.RepoID, rec.TicketNumber)]...)
+		rec.Busy = false
+		for _, job := range rec.Jobs {
 			if job.Status == "queued" || job.Status == "running" {
-				t.Busy = true
+				rec.Busy = true
 
 				break
 			}
 		}
-		out = append(out, t)
+		out = append(out, rec)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
@@ -375,11 +375,11 @@ func ticketKey(repoID, ticketNumber string) string {
 }
 
 func randomID() (string, error) {
-	var b [12]byte
-	_, err := rand.Read(b[:])
+	var randBytes [12]byte
+	_, err := rand.Read(randBytes[:])
 	if err != nil {
 		return "", fmt.Errorf("rand read: %w", err)
 	}
 
-	return hex.EncodeToString(b[:]), nil
+	return hex.EncodeToString(randBytes[:]), nil
 }

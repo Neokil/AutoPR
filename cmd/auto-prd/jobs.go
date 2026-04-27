@@ -59,29 +59,29 @@ func (s *server) executeJob(job queuedJob) error {
 		}
 	}
 
-	rt, err := s.runtimeForRepo(repoRoot)
+	repoRt, err := s.runtimeForRepo(repoRoot)
 	if err != nil {
 		return err
 	}
 
 	switch job.record.Action {
 	case jobRun:
-		err = rt.svc.StartFlow(context.Background(), ticket)
+		err = repoRt.svc.StartFlow(context.Background(), ticket)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, repoRt, true)
 		}
 	case jobAction:
-		err = rt.svc.ApplyAction(context.Background(), ticket, job.actionLabel, job.message)
+		err = repoRt.svc.ApplyAction(context.Background(), ticket, job.actionLabel, job.message)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, repoRt, true)
 		}
 	case jobMoveToState:
-		err = rt.svc.MoveToState(context.Background(), ticket, job.targetState)
+		err = repoRt.svc.MoveToState(context.Background(), ticket, job.targetState)
 		if err == nil {
-			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, rt, true)
+			err = s.syncTicketFromRepo(repoID, repoRoot, ticket, repoRt, true)
 		}
 	case jobCleanup:
-		err = rt.svc.CleanupTicket(context.Background(), ticket)
+		err = repoRt.svc.CleanupTicket(context.Background(), ticket)
 		if err == nil {
 			err = s.meta.DeleteTicket(repoID, ticket)
 			if err == nil {
@@ -94,20 +94,20 @@ func (s *server) executeJob(job queuedJob) error {
 			}
 		}
 	case jobCleanupDone:
-		err = rt.svc.CleanupDone(context.Background())
+		err = repoRt.svc.CleanupDone(context.Background())
 		if err == nil {
-			err = s.syncRepoTickets(repoID, repoRoot, rt, true)
+			err = s.syncRepoTickets(repoID, repoRoot, repoRt, true)
 		}
 	case jobCleanupAll:
-		err = rt.svc.CleanupAll(context.Background())
+		err = repoRt.svc.CleanupAll(context.Background())
 		if err == nil {
-			err = s.syncRepoTickets(repoID, repoRoot, rt, true)
+			err = s.syncRepoTickets(repoID, repoRoot, repoRt, true)
 		}
 	default:
 		err = fmt.Errorf("%w: %s", errUnsupportedJobAction, job.record.Action)
 	}
 	if err != nil && ticket != "" {
-		persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, rt, job, err)
+		persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, repoRt, job, err)
 		if persistErr != nil {
 			return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
 		}

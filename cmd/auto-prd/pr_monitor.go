@@ -72,16 +72,16 @@ func (s *server) isPullRequestOpen(repoPath, prURL string) (bool, error) {
 }
 
 func parseGitHubPRURL(prURL string) (string, string, int, error) {
-	m := githubPRURLPattern.FindStringSubmatch(strings.TrimSpace(prURL))
-	if len(m) != prURLMatchLen {
+	matches := githubPRURLPattern.FindStringSubmatch(strings.TrimSpace(prURL))
+	if len(matches) != prURLMatchLen {
 		return "", "", 0, fmt.Errorf("%w: %s", errUnsupportedPRURL, prURL)
 	}
-	n, convErr := strconv.Atoi(m[3])
+	n, convErr := strconv.Atoi(matches[3])
 	if convErr != nil {
 		return "", "", 0, fmt.Errorf("parse PR number: %w", convErr)
 	}
 
-	return m[1], m[2], n, nil
+	return matches[1], matches[2], n, nil
 }
 
 func (s *server) autoCleanupTicket(rec servermeta.TicketRecord) error {

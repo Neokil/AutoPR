@@ -26,20 +26,20 @@ type serverEvent struct {
 	PRURL        string `json:"pr_url,omitempty"`
 }
 
-func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	flusher, ok := w.(http.Flusher)
+func (s *server) handleEvents(resp http.ResponseWriter, req *http.Request) {
+	flusher, ok := resp.(http.Flusher)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		writeError(resp, http.StatusInternalServerError, "streaming unsupported")
 
 		return
 	}
-	subID, ch := s.addSubscriber()
+	subID, eventCh := s.addSubscriber()
 	defer s.removeSubscriber(subID)
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.WriteHeader(http.StatusOK)
+	resp.Header().Set("Content-Type", "text/event-stream")
+	resp.Header().Set("Cache-Control", "no-cache")
+	resp.Header().Set("Connection", "keep-alive")
+	resp.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
 	keepAlive := time.NewTicker(keepAliveInterval)
@@ -47,17 +47,17 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 	for {
 		select {
-		case <-r.Context().Done():
+		case <-req.Context().Done():
 			return
 		case <-keepAlive.C:
-			_, _ = fmt.Fprint(w, ": keepalive\n\n")
+			_, _ = fmt.Fprint(resp, ": keepalive\n\n")
 			flusher.Flush()
-		case evt := <-ch:
+		case evt := <-eventCh:
 			data, err := json.Marshal(evt)
 			if err != nil {
 				continue
 			}
-			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", evt.Type, data)
+			_, _ = fmt.Fprintf(resp, "event: %s\ndata: %s\n\n", evt.Type, data)
 			flusher.Flush()
 		}
 	}
@@ -65,23 +65,23 @@ func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) addSubscriber() (string, chan serverEvent) {
 	id := fmt.Sprintf("sub-%d", time.Now().UnixNano())
-	ch := make(chan serverEvent, subscriberBufferSize)
+	eventCh := make(chan serverEvent, subscriberBufferSize)
 	s.subsMu.Lock()
-	s.subscribers[id] = ch
+	s.subscribers[id] = eventCh
 	s.subsMu.Unlock()
 
-	return id, ch
+	return id, eventCh
 }
 
 func (s *server) removeSubscriber(id string) {
 	s.subsMu.Lock()
-	ch, ok := s.subscribers[id]
+	eventCh, ok := s.subscribers[id]
 	if ok {
 		delete(s.subscribers, id)
 	}
 	s.subsMu.Unlock()
 	if ok {
-		close(ch)
+		close(eventCh)
 	}
 }
 

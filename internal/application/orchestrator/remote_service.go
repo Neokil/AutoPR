@@ -188,7 +188,7 @@ func (s *RemoteService) enqueueOnly(ctx context.Context, path string, body any, 
 }
 
 func (s *RemoteService) doJSON(ctx context.Context, method, path string, body any, out any) error {
-	u := s.baseURL + path
+	rawURL := s.baseURL + path
 	var reader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -197,7 +197,7 @@ func (s *RemoteService) doJSON(ctx context.Context, method, path string, body an
 		}
 		reader = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, reader)
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, reader)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}

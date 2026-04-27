@@ -17,22 +17,22 @@ import (
 	"github.com/Neokil/AutoPR/internal/state"
 )
 
-func (s *server) repoRuntimeFromBody(w http.ResponseWriter, r *http.Request) (string, string, bool) {
-	var req api.RepoRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+func (s *server) repoRuntimeFromBody(resp http.ResponseWriter, req *http.Request) (string, string, bool) {
+	var body api.RepoRequest
+	err := json.NewDecoder(req.Body).Decode(&body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
+		writeError(resp, http.StatusBadRequest, "invalid json body")
 
 		return "", "", false
 	}
-	if strings.TrimSpace(req.RepoPath) == "" {
-		writeError(w, http.StatusBadRequest, "repo_path is required")
+	if strings.TrimSpace(body.RepoPath) == "" {
+		writeError(resp, http.StatusBadRequest, "repo_path is required")
 
 		return "", "", false
 	}
-	root, id, _, err := s.runtimeForRepoPath(r.Context(), req.RepoPath)
+	root, id, _, err := s.runtimeForRepoPath(req.Context(), body.RepoPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(resp, http.StatusBadRequest, err.Error())
 
 		return "", "", false
 	}
@@ -67,14 +67,14 @@ func (s *server) runtimeForRepo(repoRoot string) (*repoRuntime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create AI provider: %w", err)
 	}
-	rt := &repoRuntime{
+	repoRt := &repoRuntime{
 		svc:      orchestrator.NewWorkflowService(s.cfg, repoRoot, provider),
 		repoRoot: repoRoot,
 		store:    state.NewStore(repoRoot, s.cfg.StateDirName),
 	}
-	s.runtimes[repoRoot] = rt
+	s.runtimes[repoRoot] = repoRt
 
-	return rt, nil
+	return repoRt, nil
 }
 
 func resolveRepoRoot(ctx context.Context, repoPath string) (string, error) {
@@ -163,10 +163,10 @@ func expandHome(path string) string {
 }
 
 func isGitRepositoryDir(path string) bool {
-	st, err := os.Stat(filepath.Join(path, ".git"))
+	info, err := os.Stat(filepath.Join(path, ".git"))
 	if err != nil {
 		return false
 	}
 
-	return st.IsDir() || st.Mode().IsRegular()
+	return info.IsDir() || info.Mode().IsRegular()
 }

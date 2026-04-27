@@ -51,34 +51,34 @@ type executionLog struct {
 	Content          string `json:"content"`
 }
 
-func (s *server) handleFrontend(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/api/") {
-		http.NotFound(w, r)
+func (s *server) handleFrontend(resp http.ResponseWriter, httpReq *http.Request) {
+	if strings.HasPrefix(httpReq.URL.Path, "/api/") {
+		http.NotFound(resp, httpReq)
 
 		return
 	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	if httpReq.Method != http.MethodGet && httpReq.Method != http.MethodHead {
+		resp.WriteHeader(http.StatusMethodNotAllowed)
 
 		return
 	}
-	requestPath := filepath.ToSlash(filepath.Clean("/" + r.URL.Path))
+	requestPath := filepath.ToSlash(filepath.Clean("/" + httpReq.URL.Path))
 	rel := strings.TrimPrefix(requestPath, "/")
 	if rel == "" {
 		rel = "index.html"
 	}
-	if s.serveEmbeddedFile(w, r, rel) {
+	if s.serveEmbeddedFile(resp, httpReq, rel) {
 		return
 	}
-	if s.serveEmbeddedFile(w, r, "index.html") {
+	if s.serveEmbeddedFile(resp, httpReq, "index.html") {
 		return
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = fmt.Fprint(w, "embedded frontend index.html not found")
+	resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	resp.WriteHeader(http.StatusNotFound)
+	_, _ = fmt.Fprint(resp, "embedded frontend index.html not found")
 }
 
-func (s *server) serveEmbeddedFile(w http.ResponseWriter, r *http.Request, rel string) bool {
+func (s *server) serveEmbeddedFile(resp http.ResponseWriter, httpReq *http.Request, rel string) bool {
 	if strings.Contains(rel, "..") {
 		return false
 	}
@@ -88,30 +88,30 @@ func (s *server) serveEmbeddedFile(w http.ResponseWriter, r *http.Request, rel s
 	}
 	ext := filepath.Ext(rel)
 	if ct := mime.TypeByExtension(ext); ct != "" {
-		w.Header().Set("Content-Type", ct)
+		resp.Header().Set("Content-Type", ct)
 	}
-	w.WriteHeader(http.StatusOK)
-	if r.Method != http.MethodHead {
-		_, _ = w.Write(data) //nolint:gosec // G705: writing pre-marshalled JSON, not HTML
+	resp.WriteHeader(http.StatusOK)
+	if httpReq.Method != http.MethodHead {
+		_, _ = resp.Write(data) //nolint:gosec // G705: writing pre-marshalled JSON, not HTML
 	}
 
 	return true
 }
 
-func writeError(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, api.ErrorResponse{Error: msg})
+func writeError(resp http.ResponseWriter, code int, msg string) {
+	writeJSON(resp, code, api.ErrorResponse{Error: msg})
 }
 
-func writeJSON(w http.ResponseWriter, code int, v any) {
+func writeJSON(resp http.ResponseWriter, code int, v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("json marshal: %v", err), http.StatusInternalServerError)
+		http.Error(resp, fmt.Sprintf("json marshal: %v", err), http.StatusInternalServerError)
 
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_, _ = w.Write(data)
+	resp.Header().Set("Content-Type", "application/json")
+	resp.WriteHeader(code)
+	_, _ = resp.Write(data)
 }
 
 type statusRecorder struct {

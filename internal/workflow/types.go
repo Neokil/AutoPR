@@ -75,45 +75,45 @@ func validateHandler(a ActionConfig, stateNames map[string]bool) error {
 	return validateActionNode(a, stateNames, false)
 }
 
-func validateActionNode(a ActionConfig, stateNames map[string]bool, requireLabel bool) error {
-	if requireLabel && a.Label == "" {
+func validateActionNode(action ActionConfig, stateNames map[string]bool, requireLabel bool) error {
+	if requireLabel && action.Label == "" {
 		return ErrActionEmptyLabel
 	}
-	switch a.Type {
+	switch action.Type {
 	case ActionProvideFeedback:
-		if len(a.Commands) > 0 {
+		if len(action.Commands) > 0 {
 			return ErrProvideFeedbackNoCommands
 		}
-		if a.OnSuccess != nil || a.OnFailure != nil || a.Always != nil {
+		if action.OnSuccess != nil || action.OnFailure != nil || action.Always != nil {
 			return ErrProvideFeedbackNoHandlers
 		}
-		if a.Target != "" {
+		if action.Target != "" {
 			return ErrProvideFeedbackNoTarget
 		}
 	case ActionMoveToState:
-		if a.Target == "" {
+		if action.Target == "" {
 			return ErrMoveToStateRequiresTarget
 		}
-		if !stateNames[a.Target] && !IsTerminal(a.Target) {
-			return fmt.Errorf("target %q: %w", a.Target, ErrInvalidStateTarget)
+		if !stateNames[action.Target] && !IsTerminal(action.Target) {
+			return fmt.Errorf("target %q: %w", action.Target, ErrInvalidStateTarget)
 		}
-		if len(a.Commands) > 0 {
+		if len(action.Commands) > 0 {
 			return ErrMoveToStateNoCommands
 		}
-		if a.OnSuccess != nil || a.OnFailure != nil || a.Always != nil {
+		if action.OnSuccess != nil || action.OnFailure != nil || action.Always != nil {
 			return ErrMoveToStateNoHandlers
 		}
 	case ActionRunScript:
-		if len(a.Commands) == 0 {
+		if len(action.Commands) == 0 {
 			return ErrRunScriptRequiresCommands
 		}
-		if a.OnSuccess == nil && a.OnFailure == nil && a.Always == nil {
+		if action.OnSuccess == nil && action.OnFailure == nil && action.Always == nil {
 			return ErrRunScriptRequiresHandler
 		}
-		if a.Target != "" {
+		if action.Target != "" {
 			return ErrRunScriptNoTarget
 		}
-		for _, sub := range []*ActionConfig{a.OnSuccess, a.OnFailure, a.Always} {
+		for _, sub := range []*ActionConfig{action.OnSuccess, action.OnFailure, action.Always} {
 			if sub == nil {
 				continue
 			}
@@ -126,7 +126,7 @@ func validateActionNode(a ActionConfig, stateNames map[string]bool, requireLabel
 			}
 		}
 	default:
-		return fmt.Errorf("action type %q: %w", a.Type, ErrUnknownActionType)
+		return fmt.Errorf("action type %q: %w", action.Type, ErrUnknownActionType)
 	}
 
 	return nil

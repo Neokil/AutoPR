@@ -52,16 +52,16 @@ func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 
 // SaveState persists st, writing to the worktree location once a worktree exists
 // and removing the pre-worktree copy to keep a single source of truth.
-func (s *Store) SaveState(ticketNumber string, st ticket.State) error {
-	st.Touch()
-	data, err := json.MarshalIndent(st, "", "  ")
+func (s *Store) SaveState(ticketNumber string, state ticket.State) error {
+	state.Touch()
+	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode state: %w", err)
 	}
 
-	if st.WorktreePath != "" {
+	if state.WorktreePath != "" {
 		// Once the worktree exists, state lives inside it.
-		autoPRDir := filepath.Join(st.WorktreePath, ".auto-pr")
+		autoPRDir := filepath.Join(state.WorktreePath, ".auto-pr")
 		err = os.MkdirAll(autoPRDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
 		if err != nil {
 			return fmt.Errorf("create worktree state dir: %w", err)
@@ -100,14 +100,14 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read state root: %w", err)
 	}
-	for _, e := range entries {
-		if !e.IsDir() || e.Name() == "worktrees" {
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "worktrees" {
 			continue
 		}
-		_, statErr := os.Stat(filepath.Join(s.StateRoot, e.Name(), StateFileName))
+		_, statErr := os.Stat(filepath.Join(s.StateRoot, entry.Name(), StateFileName))
 		if statErr == nil {
-			seen[e.Name()] = struct{}{}
-			out = append(out, e.Name())
+			seen[entry.Name()] = struct{}{}
+			out = append(out, entry.Name())
 		}
 	}
 
@@ -117,18 +117,18 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read worktrees dir: %w", err)
 	}
-	for _, e := range wtEntries {
-		if !e.IsDir() {
+	for _, entry := range wtEntries {
+		if !entry.IsDir() {
 			continue
 		}
-		statePath := filepath.Join(worktreesDir, e.Name(), ".auto-pr", StateFileName)
+		statePath := filepath.Join(worktreesDir, entry.Name(), ".auto-pr", StateFileName)
 		_, statErr := os.Stat(statePath)
 		if statErr != nil {
 			continue
 		}
-		if _, ok := seen[e.Name()]; !ok {
-			seen[e.Name()] = struct{}{}
-			out = append(out, e.Name())
+		if _, ok := seen[entry.Name()]; !ok {
+			seen[entry.Name()] = struct{}{}
+			out = append(out, entry.Name())
 		}
 	}
 
@@ -163,13 +163,13 @@ func parseStateJSON(ticketNumber string, data []byte) (ticket.State, error) {
 	if isV2StateJSON(data) {
 		return ticket.State{}, fmt.Errorf("ticket %s: %w", ticketNumber, ErrV2StateFile)
 	}
-	var st ticket.State
-	err := json.Unmarshal(data, &st)
+	var state ticket.State
+	err := json.Unmarshal(data, &state)
 	if err != nil {
 		return ticket.State{}, fmt.Errorf("parse state file: %w", err)
 	}
 
-	return st, nil
+	return state, nil
 }
 
 func isV2StateJSON(data []byte) bool {
