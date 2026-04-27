@@ -6,7 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Neokil/AutoPR/internal/domain/ticket"
+	"github.com/Neokil/AutoPR/internal/domain/workflowstate"
+	"github.com/Neokil/AutoPR/internal/gitutil"
 )
 
 // StateFileName is the name of the JSON file that holds a ticket's persisted workflow state.
@@ -33,7 +34,7 @@ func (s *Store) TicketDir(ticketNumber string) string {
 
 // LoadState reads the persisted state for the ticket, preferring the worktree location
 // when it exists and falling back to the pre-worktree state directory.
-func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
+func (s *Store) LoadState(ticketNumber string) (workflowstate.State, error) {
 	// Prefer the worktree location when it exists.
 	wtStatePath := filepath.Join(s.worktreePath(ticketNumber), ".auto-pr", StateFileName)
 	data, err := os.ReadFile(wtStatePath) //nolint:gosec // G304: path constructed from internal worktree state
@@ -43,7 +44,7 @@ func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 	// Fall back to the pre-worktree location.
 	data, err = os.ReadFile(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
 	if err != nil {
-		return ticket.State{}, fmt.Errorf("read state file: %w", err)
+		return workflowstate.State{}, fmt.Errorf("read state file: %w", err)
 	}
 
 	return parseStateJSON(ticketNumber, data)
@@ -51,7 +52,7 @@ func (s *Store) LoadState(ticketNumber string) (ticket.State, error) {
 
 // SaveState persists st, writing to the worktree location once a worktree exists
 // and removing the pre-worktree copy to keep a single source of truth.
-func (s *Store) SaveState(ticketNumber string, state ticket.State) error {
+func (s *Store) SaveState(ticketNumber string, state workflowstate.State) error {
 	state.Touch()
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -145,7 +146,7 @@ func (s *Store) RemoveTicketDir(ticketNumber string) error {
 }
 
 func (s *Store) worktreePath(ticketNumber string) string {
-	return filepath.Join(s.StateRoot, "worktrees", ticketNumber)
+	return gitutil.WorktreePath(s.RepoRoot, filepath.Base(s.StateRoot), ticketNumber)
 }
 
 func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
@@ -158,14 +159,14 @@ func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 	return dir, nil
 }
 
-func parseStateJSON(ticketNumber string, data []byte) (ticket.State, error) {
+func parseStateJSON(ticketNumber string, data []byte) (workflowstate.State, error) {
 	if isV2StateJSON(data) {
-		return ticket.State{}, fmt.Errorf("ticket %s: %w", ticketNumber, ErrV2StateFile)
+		return workflowstate.State{}, fmt.Errorf("ticket %s: %w", ticketNumber, ErrV2StateFile)
 	}
-	var state ticket.State
+	var state workflowstate.State
 	err := json.Unmarshal(data, &state)
 	if err != nil {
-		return ticket.State{}, fmt.Errorf("parse state file: %w", err)
+		return workflowstate.State{}, fmt.Errorf("parse state file: %w", err)
 	}
 
 	return state, nil

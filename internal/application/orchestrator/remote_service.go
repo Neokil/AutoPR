@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Neokil/AutoPR/internal/contracts/api"
+	"github.com/Neokil/AutoPR/internal/api"
 )
 
 const (
-	httpClientTimeout = 30 * time.Second
-	pollInterval      = 600 * time.Millisecond
+	httpClientTimeout  = 30 * time.Second
+	pollInterval       = 600 * time.Millisecond
 	httpErrorThreshold = 400
 )
 

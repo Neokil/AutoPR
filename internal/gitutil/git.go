@@ -3,6 +3,7 @@ package gitutil
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -107,6 +108,25 @@ func WorktreeAdd(ctx context.Context, repoRoot, branch, worktreePath, baseBranch
 // WorktreePath returns the conventional filesystem path for a ticket's worktree.
 func WorktreePath(repoRoot, stateDirName, ticketNumber string) string {
 	return filepath.Join(repoRoot, stateDirName, "worktrees", ticketNumber)
+}
+
+// EnsureWorktree returns the ticket worktree path, creating it if needed.
+func EnsureWorktree(ctx context.Context, repoRoot, stateDirName, ticketNumber, branchName, baseBranch string) (string, error) {
+	path := WorktreePath(repoRoot, stateDirName, ticketNumber)
+	_, err := os.Stat(path)
+	if err == nil {
+		return path, nil
+	}
+	err = os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		return "", fmt.Errorf("prepare worktree parent: %w", err)
+	}
+	err = WorktreeAdd(ctx, repoRoot, branchName, path, baseBranch)
+	if err != nil {
+		return "", fmt.Errorf("create worktree: %w", err)
+	}
+
+	return path, nil
 }
 
 // WorktreeRemove force-removes the worktree at worktreePath from the repository.

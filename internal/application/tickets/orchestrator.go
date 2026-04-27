@@ -12,19 +12,18 @@ import (
 	"time"
 
 	"github.com/Neokil/AutoPR/internal/config"
-	ticketdomain "github.com/Neokil/AutoPR/internal/domain/ticket"
+	workflowstate "github.com/Neokil/AutoPR/internal/domain/workflowstate"
 	"github.com/Neokil/AutoPR/internal/gitutil"
 	"github.com/Neokil/AutoPR/internal/markdown"
 	"github.com/Neokil/AutoPR/internal/providers"
 	"github.com/Neokil/AutoPR/internal/shell"
 	"github.com/Neokil/AutoPR/internal/state"
 	"github.com/Neokil/AutoPR/internal/workflow"
-	"github.com/Neokil/AutoPR/internal/worktree"
 )
 
 type stateStore interface {
-	LoadState(ticketNumber string) (ticketdomain.State, error)
-	SaveState(ticketNumber string, st ticketdomain.State) error
+	LoadState(ticketNumber string) (workflowstate.State, error)
+	SaveState(ticketNumber string, st workflowstate.State) error
 	ListTicketDirs() ([]string, error)
 	RemoveTicketDir(ticketNumber string) error
 }
@@ -67,7 +66,7 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
 	if os.IsNotExist(loadErr) {
-		state = ticketdomain.NewState(ticketNumber)
+		state = workflowstate.New(ticketNumber)
 		saveErr := o.Store.SaveState(ticketNumber, state)
 		if saveErr != nil {
 			return fmt.Errorf("save initial ticket state: %w", saveErr)
@@ -75,12 +74,12 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	} else if loadErr != nil {
 		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
-	if state.FlowStatus == ticketdomain.FlowStatusDone || state.FlowStatus == ticketdomain.FlowStatusCancelled {
+	if state.FlowStatus == workflowstate.FlowStatusDone || state.FlowStatus == workflowstate.FlowStatusCancelled {
 		slog.Info("skipping ticket", "ticket", ticketNumber, "status", state.FlowStatus)
 
 		return nil
 	}
-	if state.FlowStatus == ticketdomain.FlowStatusRunning {
+	if state.FlowStatus == workflowstate.FlowStatusRunning {
 		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
 	err = o.ensureWorktreeAndContext(ctx, &state)
@@ -110,7 +109,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 	if err != nil {
 		return fmt.Errorf("load ticket state: %w", err)
 	}
-	if state.FlowStatus != ticketdomain.FlowStatusWaiting {
+	if state.FlowStatus != workflowstate.FlowStatusWaiting {
 		return fmt.Errorf("ticket %s (status: %s): %w", ticketNumber, state.FlowStatus, ErrTicketNotWaiting)
 	}
 
@@ -153,7 +152,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
 	if os.IsNotExist(loadErr) {
-		state = ticketdomain.NewState(ticketNumber)
+		state = workflowstate.New(ticketNumber)
 		saveErr := o.Store.SaveState(ticketNumber, state)
 		if saveErr != nil {
 			return fmt.Errorf("save initial ticket state: %w", saveErr)
@@ -161,7 +160,7 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 	} else if loadErr != nil {
 		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
-	if state.FlowStatus == ticketdomain.FlowStatusRunning {
+	if state.FlowStatus == workflowstate.FlowStatusRunning {
 		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
 	err = o.ensureWorktreeAndContext(ctx, &state)
@@ -233,7 +232,7 @@ func (o *Orchestrator) CleanupDone(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		if st.FlowStatus == ticketdomain.FlowStatusDone {
+		if st.FlowStatus == workflowstate.FlowStatusDone {
 			err = o.CleanupTicket(ctx, ticket)
 			if err != nil {
 				slog.Error("cleanup failed", "ticket", ticket, "err", err)
@@ -261,11 +260,11 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	return nil
 }
 
-func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *ticketdomain.State) error {
+func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *workflowstate.State) error {
 	if state.WorktreePath == "" {
 		branchName := "auto-pr/" + state.TicketNumber
 		slog.Info("creating worktree", "ticket", state.TicketNumber, "branch", branchName)
-		wtPath, err := worktree.Ensure(ctx, o.RepoRoot, o.Cfg.StateDirName, state.TicketNumber, branchName, o.Cfg.BaseBranch)
+		wtPath, err := gitutil.EnsureWorktree(ctx, o.RepoRoot, o.Cfg.StateDirName, state.TicketNumber, branchName, o.Cfg.BaseBranch)
 		if err != nil {
 			return fmt.Errorf("create worktree: %w", err)
 		}
@@ -299,7 +298,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *tick
 
 // --- internal helpers ---
 
-func (o *Orchestrator) runState(ctx context.Context, state *ticketdomain.State, stateCfg workflow.StateConfig) error {
+func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State, stateCfg workflow.StateConfig) error {
 	slog.Info("running state", "ticket", state.TicketNumber, "state", stateCfg.Name)
 	run, err := startStateRun(state, stateCfg)
 	if err != nil {
@@ -308,7 +307,7 @@ func (o *Orchestrator) runState(ctx context.Context, state *ticketdomain.State, 
 	logPath := state.ResolveRef(run.LogRef)
 
 	state.CurrentState = stateCfg.Name
-	state.FlowStatus = ticketdomain.FlowStatusRunning
+	state.FlowStatus = workflowstate.FlowStatusRunning
 	state.LastError = ""
 	err = o.Store.SaveState(state.TicketNumber, *state)
 	if err != nil {
@@ -366,7 +365,7 @@ func (o *Orchestrator) runState(ctx context.Context, state *ticketdomain.State, 
 	_ = os.Remove(state.ArtifactPath("feedback.md"))
 
 	slog.Info("state done, waiting for action", "ticket", state.TicketNumber, "state", stateCfg.Name)
-	state.FlowStatus = ticketdomain.FlowStatusWaiting
+	state.FlowStatus = workflowstate.FlowStatusWaiting
 	saveErr := o.Store.SaveState(state.TicketNumber, *state)
 	if saveErr != nil {
 		return fmt.Errorf("save ticket state: %w", saveErr)
@@ -375,16 +374,16 @@ func (o *Orchestrator) runState(ctx context.Context, state *ticketdomain.State, 
 	return nil
 }
 
-func (o *Orchestrator) failState(st *ticketdomain.State, cause error) error {
+func (o *Orchestrator) failState(st *workflowstate.State, cause error) error {
 	slog.Error("state failed", "ticket", st.TicketNumber, "state", st.CurrentState, "err", cause)
-	st.FlowStatus = ticketdomain.FlowStatusFailed
+	st.FlowStatus = workflowstate.FlowStatusFailed
 	st.LastError = cause.Error()
 	_ = o.Store.SaveState(st.TicketNumber, *st)
 
 	return cause
 }
 
-func (o *Orchestrator) dispatchAction(ctx context.Context, state *ticketdomain.State, wflow workflow.Config, action workflow.ActionConfig, message string) error {
+func (o *Orchestrator) dispatchAction(ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig, message string) error {
 	logPath := state.CurrentRunLogPath()
 	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
 
@@ -400,16 +399,16 @@ func (o *Orchestrator) dispatchAction(ctx context.Context, state *ticketdomain.S
 	}
 }
 
-func (o *Orchestrator) transitionTo(ctx context.Context, state *ticketdomain.State, wflow workflow.Config, target string) error {
+func (o *Orchestrator) transitionTo(ctx context.Context, state *workflowstate.State, wflow workflow.Config, target string) error {
 	if workflow.IsTerminal(target) {
 		slog.Info("reached terminal state", "ticket", state.TicketNumber, "state", target)
 		switch target {
 		case "done":
-			state.FlowStatus = ticketdomain.FlowStatusDone
+			state.FlowStatus = workflowstate.FlowStatusDone
 		case "cancelled":
-			state.FlowStatus = ticketdomain.FlowStatusCancelled
+			state.FlowStatus = workflowstate.FlowStatusCancelled
 		default:
-			state.FlowStatus = ticketdomain.FlowStatusFailed
+			state.FlowStatus = workflowstate.FlowStatusFailed
 		}
 
 		saveErr := o.Store.SaveState(state.TicketNumber, *state)
@@ -428,7 +427,7 @@ func (o *Orchestrator) transitionTo(ctx context.Context, state *ticketdomain.Sta
 	return o.runState(ctx, state, stateCfg)
 }
 
-func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *ticketdomain.State, wflow workflow.Config, message string) error {
+func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *workflowstate.State, wflow workflow.Config, message string) error {
 	if strings.TrimSpace(message) == "" {
 		return ErrFeedbackRequired
 	}
@@ -446,7 +445,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *ticketd
 	return o.runState(ctx, state, stateCfg)
 }
 
-func (o *Orchestrator) executeScript(ctx context.Context, state *ticketdomain.State, wflow workflow.Config, action workflow.ActionConfig) error {
+func (o *Orchestrator) executeScript(ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig) error {
 	logPath := state.CurrentRunLogPath()
 
 	var out strings.Builder
@@ -491,7 +490,7 @@ func (o *Orchestrator) executeScript(ctx context.Context, state *ticketdomain.St
 }
 
 func (o *Orchestrator) dispatchSubAction(
-	ctx context.Context, state *ticketdomain.State, wflow workflow.Config, action workflow.ActionConfig, message string,
+	ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig, message string,
 ) error {
 	switch action.Type {
 	case workflow.ActionProvideFeedback:
@@ -553,13 +552,13 @@ func (o *Orchestrator) printStatus(ticketNumber string) error {
 	return nil
 }
 
-func buildNextSteps(state ticketdomain.State, wflow workflow.Config) string {
+func buildNextSteps(state workflowstate.State, wflow workflow.Config) string {
 	switch state.FlowStatus {
-	case ticketdomain.FlowStatusPending:
+	case workflowstate.FlowStatusPending:
 		return "Run the ticket to start the workflow: auto-pr run " + state.TicketNumber
-	case ticketdomain.FlowStatusRunning:
+	case workflowstate.FlowStatusRunning:
 		return "Ticket is currently running."
-	case ticketdomain.FlowStatusWaiting:
+	case workflowstate.FlowStatusWaiting:
 		stateCfg, ok := wflow.StateByName(state.CurrentState)
 		if !ok {
 			return fmt.Sprintf("Waiting for action in state %q.", state.CurrentState)
@@ -571,18 +570,18 @@ func buildNextSteps(state ticketdomain.State, wflow workflow.Config) string {
 		}
 
 		return strings.TrimSpace(buf.String())
-	case ticketdomain.FlowStatusDone:
+	case workflowstate.FlowStatusDone:
 		return "Ticket is done."
-	case ticketdomain.FlowStatusFailed:
+	case workflowstate.FlowStatusFailed:
 		return fmt.Sprintf("Ticket failed: %s\n\nRetry: auto-pr run %s", state.LastError, state.TicketNumber)
-	case ticketdomain.FlowStatusCancelled:
+	case workflowstate.FlowStatusCancelled:
 		return "Ticket was cancelled."
 	}
 
 	return ""
 }
 
-func resolveStateForStart(state ticketdomain.State, wflow workflow.Config) (workflow.StateConfig, error) {
+func resolveStateForStart(state workflowstate.State, wflow workflow.Config) (workflow.StateConfig, error) {
 	if state.CurrentState == "" {
 		first, ok := wflow.FirstState()
 		if !ok {
@@ -599,16 +598,16 @@ func resolveStateForStart(state ticketdomain.State, wflow workflow.Config) (work
 	return stateCfg, nil
 }
 
-func startStateRun(state *ticketdomain.State, stateCfg workflow.StateConfig) (ticketdomain.StateRun, error) {
+func startStateRun(state *workflowstate.State, stateCfg workflow.StateConfig) (workflowstate.StateRun, error) {
 	runID, err := newUUID()
 	if err != nil {
-		return ticketdomain.StateRun{}, fmt.Errorf("generate state run id: %w", err)
+		return workflowstate.StateRun{}, fmt.Errorf("generate state run id: %w", err)
 	}
 	artifactName := stateCfg.PrimaryArtifact
 	if strings.TrimSpace(artifactName) == "" {
 		artifactName = stateCfg.Name + ".md"
 	}
-	run := ticketdomain.StateRun{
+	run := workflowstate.StateRun{
 		ID:               runID,
 		StateName:        stateCfg.Name,
 		StateDisplayName: stateCfg.TimelineLabel(),
@@ -623,7 +622,7 @@ func startStateRun(state *ticketdomain.State, stateCfg workflow.StateConfig) (ti
 }
 
 func (o *Orchestrator) prepareRunContext(
-	state ticketdomain.State, stateCfg workflow.StateConfig, run ticketdomain.StateRun,
+	state workflowstate.State, stateCfg workflow.StateConfig, run workflowstate.StateRun,
 ) error {
 	runDir := state.RunPath(run.ID)
 	err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
