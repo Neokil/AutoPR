@@ -31,17 +31,18 @@ type StateRun struct {
 
 // State is the persisted workflow state for a single ticket, written to state.json.
 type State struct {
-	TicketNumber string     `json:"ticket_number"`
-	CurrentState string     `json:"current_state"`
-	CurrentRunID string     `json:"current_run_id,omitempty"`
-	FlowStatus   FlowStatus `json:"flow_status"`
-	BranchName   string     `json:"branch_name"`
-	WorktreePath string     `json:"worktree_path"`
-	LastError    string     `json:"last_error,omitempty"`
-	PRURL        string     `json:"pr_url,omitempty"`
-	StateHistory []StateRun `json:"state_history,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	TicketNumber        string     `json:"ticket_number"`
+	CurrentState        string     `json:"current_state"`
+	CurrentRunID        string     `json:"current_run_id,omitempty"`
+	FlowStatus          FlowStatus `json:"flow_status"`
+	BranchName          string     `json:"branch_name"`
+	WorktreePath        string     `json:"worktree_path"`
+	LastError           string     `json:"last_error,omitempty"`
+	PRURL               string     `json:"pr_url,omitempty"`
+	ProviderSessionData string     `json:"provider_session_data,omitempty"`
+	StateHistory        []StateRun `json:"state_history,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 // New returns a new pending State for the given ticket number.

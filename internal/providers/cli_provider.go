@@ -36,6 +36,7 @@ func NewFromConfig(cfg config.Config) (*CLIProvider, error) {
 			providerName: cfg.Provider,
 			command:      providerCmd.Command,
 			args:         providerCmd.Args,
+			sessionCfg:   providerCmd.Session,
 		},
 	}, nil
 }
@@ -50,10 +51,15 @@ func (p *CLIProvider) Execute(ctx context.Context, req ExecuteRequest) (ExecuteR
 		return ExecuteResult{}, fmt.Errorf("read prompt %s: %w", req.PromptPath, err)
 	}
 	phase := strings.TrimSuffix(filepath.Base(req.PromptPath), ".md")
-	stdout, stderr, err := p.runner.Run(ctx, req.WorkDir, req.RuntimeDir, phase, string(content))
+	text, stderr, sessionData, err := p.runner.Run(ctx, req.WorkDir, req.RuntimeDir, phase, string(content), req.SessionData)
+	result := ExecuteResult{
+		RawOutput:   text,
+		Stderr:      stderr,
+		SessionData: sessionData,
+	}
 	if err != nil {
-		return ExecuteResult{RawOutput: stdout, Stderr: stderr}, err
+		return result, err
 	}
 
-	return ExecuteResult{RawOutput: stdout, Stderr: stderr}, nil
+	return result, nil
 }

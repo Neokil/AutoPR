@@ -343,10 +343,14 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 
 	slog.Info("executing provider", "ticket", state.TicketNumber, "state", stateCfg.Name)
 	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
-		PromptPath: promptPath,
-		WorkDir:    state.WorktreePath,
-		RuntimeDir: runtimeDir,
+		PromptPath:  promptPath,
+		WorkDir:     state.WorktreePath,
+		RuntimeDir:  runtimeDir,
+		SessionData: state.ProviderSessionData,
 	})
+	if result.SessionData != "" {
+		state.ProviderSessionData = result.SessionData
+	}
 	rawLogPath := state.RunPath(run.ID, "raw-provider.log")
 	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable log files
 	if err != nil {

@@ -17,16 +17,34 @@ providers:
   gemini:
     command: gemini
     args: []
+
   codex:
     command: codex
     args:
       - exec
       - "-"
-  claude:
+    session:
+      init_args: ["exec", "-", "--json"]
+      resume_args: ["exec", "resume", "{{.SessionID}}", "--json"]
+      id_source: jsonl_first
+      id_field: payload.id
+      result_source: jsonl_last
+      result_field: content
+      result_event_type: agent_message  # verify against actual codex --json output
+
+  claude-code:
     command: claude
     args:
       - --print
-  # example for adding another provider without code changes:
+    session:
+      init_args: ["--print", "--output-format", "json"]
+      resume_args: ["--print", "--output-format", "json", "--resume", "{{.SessionID}}"]
+      id_source: json
+      id_field: session_id
+      result_source: json
+      result_field: result
+
+  # Session disabled — each run is independent (omit the session block):
   # my-provider:
   #   command: my-provider-cli
   #   args:

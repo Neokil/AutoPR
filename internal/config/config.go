@@ -14,10 +14,50 @@ const (
 	defaultServerWorkers = 4
 )
 
+// ProviderSessionConfig defines how a provider maintains conversation context across state runs.
+// Leave all fields empty to disable session support for that provider.
+type ProviderSessionConfig struct {
+	// InitArgs replaces Args on the first run of a session (no existing session ID).
+	// If empty, the provider's Args are used unchanged.
+	InitArgs []string `yaml:"init_args"`
+
+	// ResumeArgs replaces Args when resuming an existing session.
+	// Use {{.SessionID}} as a placeholder for the session ID.
+	ResumeArgs []string `yaml:"resume_args"`
+
+	// IDSource controls how the session ID is extracted from provider stdout.
+	// "json"        – stdout is a single JSON object; extract IDField from it.
+	// "jsonl_first" – first non-empty line of stdout is a JSON event; extract IDField from it.
+	IDSource string `yaml:"id_source"`
+
+	// IDField is a dot-notated path to the session ID within the parsed JSON.
+	// Examples: "session_id", "payload.id"
+	IDField string `yaml:"id_field"`
+
+	// ResultSource controls how the text result is extracted when the provider
+	// returns structured output instead of plain text.
+	// "json"       – stdout is a JSON object; extract ResultField from it.
+	// "jsonl_last" – scan stdout JSONL lines for the last event of ResultEventType; extract ResultField.
+	// Empty        – raw stdout is the result (default when session is not configured).
+	ResultSource string `yaml:"result_source"`
+
+	// ResultField is the JSON field containing the text response.
+	ResultField string `yaml:"result_field"`
+
+	// ResultEventType is the JSONL event type to match when ResultSource is "jsonl_last".
+	ResultEventType string `yaml:"result_event_type"`
+}
+
+// Enabled reports whether session support is fully configured.
+func (s ProviderSessionConfig) Enabled() bool {
+	return len(s.ResumeArgs) > 0 && s.IDSource != "" && s.IDField != ""
+}
+
 // ProviderCommand specifies the executable and arguments used to invoke an AI provider.
 type ProviderCommand struct {
-	Command string   `yaml:"command"`
-	Args    []string `yaml:"args"`
+	Command string                `yaml:"command"`
+	Args    []string              `yaml:"args"`
+	Session ProviderSessionConfig `yaml:"session"`
 }
 
 // Config holds all runtime configuration for an AutoPR instance, loaded from ~/.auto-pr/config.yaml.
@@ -49,9 +89,32 @@ func Default() Config {
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{},
 		Providers: map[string]ProviderCommand{
-			"gemini":      {Command: "gemini", Args: []string{}},
-			"codex":       {Command: "codex", Args: []string{"exec", "-"}},
-			"claude-code": {Command: "claude", Args: []string{"--print"}},
+			"gemini": {Command: "gemini", Args: []string{}},
+			"codex": {
+				Command: "codex",
+				Args:    []string{"exec", "-"},
+				Session: ProviderSessionConfig{
+					InitArgs:        []string{"exec", "-", "--json"},
+					ResumeArgs:      []string{"exec", "resume", "{{.SessionID}}", "--json"},
+					IDSource:        "jsonl_first",
+					IDField:         "payload.id",
+					ResultSource:    "jsonl_last",
+					ResultField:     "content",
+					ResultEventType: "agent_message", // NOTE: verify against actual codex --json output
+				},
+			},
+			"claude-code": {
+				Command: "claude",
+				Args:    []string{"--print"},
+				Session: ProviderSessionConfig{
+					InitArgs:     []string{"--print", "--output-format", "json"},
+					ResumeArgs:   []string{"--print", "--output-format", "json", "--resume", "{{.SessionID}}"},
+					IDSource:     "json",
+					IDField:      "session_id",
+					ResultSource: "json",
+					ResultField:  "result",
+				},
+			},
 		},
 	}
 }
