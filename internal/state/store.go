@@ -159,10 +159,7 @@ func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 	return dir, nil
 }
 
-func parseStateJSON(ticketNumber string, data []byte) (workflowstate.State, error) {
-	if isV2StateJSON(data) {
-		return workflowstate.State{}, fmt.Errorf("ticket %s: %w", ticketNumber, ErrV2StateFile)
-	}
+func parseStateJSON(_ string, data []byte) (workflowstate.State, error) {
 	var state workflowstate.State
 	err := json.Unmarshal(data, &state)
 	if err != nil {
@@ -170,29 +167,4 @@ func parseStateJSON(ticketNumber string, data []byte) (workflowstate.State, erro
 	}
 
 	return state, nil
-}
-
-func isV2StateJSON(data []byte) bool {
-	var raw map[string]json.RawMessage
-	err := json.Unmarshal(data, &raw)
-	if err != nil {
-		return false
-	}
-	rawStatus, hasStatus := raw["status"]
-	_, hasFlowStatus := raw["flow_status"]
-	if !hasStatus || hasFlowStatus {
-		return false
-	}
-	var statusStr string
-	err = json.Unmarshal(rawStatus, &statusStr)
-	if err != nil {
-		return false
-	}
-	v2States := map[string]bool{
-		"queued": true, "investigating": true, "proposal_ready": true,
-		"waiting_for_human": true, "implementing": true, "validating": true,
-		"pr_ready": true,
-	}
-
-	return v2States[statusStr]
 }
