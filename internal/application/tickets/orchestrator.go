@@ -3,6 +3,7 @@ package tickets
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -349,6 +350,9 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 	rawLogPath := state.RunPath(run.ID, "raw-provider.log")
 	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable log files
 	if err != nil {
+		if errors.Is(err, providers.ErrTokensExhausted) {
+			err = fmt.Errorf("token usage limit reached — wait for your quota to reset, then rerun this ticket to continue: %w", err)
+		}
 		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
 
 		return o.failState(state, err)

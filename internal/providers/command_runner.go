@@ -27,6 +27,10 @@ func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir,
 	res, err := shell.Run(ctx, worktreePath, nil, prompt, r.command, r.args...)
 	_ = writePromptArtifacts(runtimeDir, phase, prompt, res.Stdout, res.Stderr)
 	if err != nil {
+		if looksLikeTokensExhausted(res.Stderr, res.Stdout) {
+			return res.Stdout, res.Stderr, fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrTokensExhausted)
+		}
+
 		return res.Stdout, res.Stderr, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, err)
 	}
 	if strings.TrimSpace(res.Stdout) == "" {
@@ -34,6 +38,30 @@ func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir,
 	}
 
 	return res.Stdout, res.Stderr, nil
+}
+
+func looksLikeTokensExhausted(stderr, stdout string) bool {
+	combined := strings.ToLower(stderr + stdout)
+	patterns := []string{
+		"usage limit",
+		"usage_limit",
+		"rate limit",
+		"rate_limit",
+		"quota exceeded",
+		"insufficient_quota",
+		"daily limit",
+		"monthly limit",
+		"token limit exceeded",
+		"credit balance",
+		"billing limit",
+	}
+	for _, p := range patterns {
+		if strings.Contains(combined, p) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func writePromptArtifacts(runtimeDir, phase, prompt, stdout, stderr string) error {
