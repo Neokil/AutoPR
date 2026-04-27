@@ -40,23 +40,20 @@ Add this to repositories you manage with AutoPR:
 
 ## Quickstart
 
-### 1. Install the binaries and scaffold config
+### 1. Build the binaries
 
 ```bash
-make install
-source ~/.zshrc
+make build
 ```
 
-`make install` does the following:
+`make build` does the following:
 
 - builds `auto-pr` and `auto-prd`
-- registers shell aliases / PATH wiring
-- creates `~/.auto-pr/config.yaml` if it does not exist
+- builds the web UI into `web/dist` when the frontend is present
 
 Notes:
 
-- Existing config files are kept as-is.
-- Service-management targets currently no-op with a message because `launchd` / `systemd` integration is intentionally disabled.
+- The binaries are written to `.build/`.
 
 ### 2. Configure your repositories and provider
 
@@ -199,27 +196,8 @@ Common make targets:
 ```bash
 make build
 make start
-make install
-make uninstall
+make clean-build
 ```
-
-Additional lifecycle targets:
-
-- `make clean-build`
-- `make register-alias`
-- `make unregister-alias`
-- `make init-config`
-- `make remove-config`
-- `make register-service`
-- `make unregister-service`
-- `make refresh-service`
-- `make service-status`
-- `make service-logs`
-
-Current behavior:
-
-- Service-related commands currently return early because OS service integration is disabled.
-- `make uninstall` removes the local scaffolding in `~/.auto-pr`, unregisters aliases, and cleans `.build/`.
 
 ## More Details
 
