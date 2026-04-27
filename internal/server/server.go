@@ -123,27 +123,28 @@ func Run(portOverride int) error {
 		port = 8080
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", daemon.handleHealth)
-	mux.HandleFunc("GET /api/repositories", daemon.handleListRepositories)
-	mux.HandleFunc("GET /api/tickets", daemon.handleListTickets)
-	mux.HandleFunc("GET /api/tickets/{id}", daemon.handleGetTicket)
-	mux.HandleFunc("GET /api/tickets/{id}/events", daemon.handleTicketEvents)
-	mux.HandleFunc("GET /api/tickets/{id}/artifacts/{name...}", daemon.handleTicketArtifact)
-	mux.HandleFunc("GET /api/tickets/{id}/execution-logs", daemon.handleExecutionLogs)
-	mux.HandleFunc("GET /api/jobs/{id}", daemon.handleGetJob)
+	strictAPI := api.NewStrictHandlerWithOptions(daemon, nil, api.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
+			writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: err.Error()})
+		},
+		ResponseErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
+			writeJSON(w, http.StatusInternalServerError, api.ErrorResponse{Error: err.Error()})
+		},
+	})
+	apiHandler := api.HandlerWithOptions(strictAPI, api.StdHTTPServerOptions{
+		BaseRouter: mux,
+		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
+			writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Error: err.Error()})
+		},
+	})
 	mux.HandleFunc("GET /api/events", daemon.handleEvents)
-	mux.HandleFunc("POST /api/tickets/{id}/run", daemon.handleRunTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/action", daemon.handleActionTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/move-to-state", daemon.handleMoveToStateTicket)
-	mux.HandleFunc("POST /api/tickets/{id}/cleanup", daemon.handleCleanupTicket)
-	mux.HandleFunc("POST /api/cleanup", daemon.handleCleanupScope)
 	mux.HandleFunc("/", daemon.handleFrontend)
 
 	addr := fmt.Sprintf(":%d", port)
 	slog.Info("AutoPR daemon listening", "addr", addr)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           loggingMiddleware(mux),
+		Handler:           loggingMiddleware(apiHandler),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 	}
 	err = srv.ListenAndServe()
@@ -198,7 +199,7 @@ func (s *server) handleActionTicket(resp http.ResponseWriter, httpReq *http.Requ
 		return
 	}
 	s.enqueueAndRespond(resp, jobAction, repoID, repoRoot, ticket, enqueueOptions{
-		message:     req.Message,
+		message:     derefString(req.Message),
 		actionLabel: req.Label,
 	})
 }
@@ -250,7 +251,7 @@ func (s *server) handleCleanupScope(resp http.ResponseWriter, httpReq *http.Requ
 
 		return
 	}
-	scope := strings.TrimSpace(req.Scope)
+	scope := strings.TrimSpace(string(req.Scope))
 	if scope == "" {
 		scope = strings.TrimSpace(httpReq.URL.Query().Get("scope"))
 	}
@@ -284,14 +285,14 @@ func (s *server) handleGetJob(resp http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	writeJSON(resp, http.StatusOK, job)
+	writeJSON(resp, http.StatusOK, toJobResponse(job))
 }
 
 func (s *server) handleListTickets(resp http.ResponseWriter, req *http.Request) {
 	repoPath := strings.TrimSpace(req.URL.Query().Get("repo_path"))
 	if repoPath == "" {
-		writeJSON(resp, http.StatusOK, map[string]any{
-			"tickets": s.meta.ListTickets(""),
+		writeJSON(resp, http.StatusOK, api.TicketListResponse{
+			Tickets: toTicketSummaryResponses(s.meta.ListTickets("")),
 		})
 
 		return
@@ -308,10 +309,10 @@ func (s *server) handleListTickets(resp http.ResponseWriter, req *http.Request) 
 
 		return
 	}
-	writeJSON(resp, http.StatusOK, map[string]any{
-		"repo_id":   repoID,
-		"repo_path": repoRoot,
-		"tickets":   s.meta.ListTickets(repoID),
+	writeJSON(resp, http.StatusOK, api.TicketListResponse{
+		RepoId:   stringPtr(repoID),
+		RepoPath: stringPtr(repoRoot),
+		Tickets:  toTicketSummaryResponses(s.meta.ListTickets(repoID)),
 	})
 }
 
@@ -416,12 +417,12 @@ func (s *server) handleGetTicket(resp http.ResponseWriter, httpReq *http.Request
 	}
 
 	ticketResp := api.TicketDetailsResponse{
-		RepoID:           repoID,
+		RepoId:           repoID,
 		RepoPath:         repoRoot,
 		TicketNumber:     ticket,
-		GitHubBlobBase:   githubBlobBase,
+		GithubBlobBase:   stringPtr(githubBlobBase),
 		State:            toTicketStateResponse(ticketState),
-		NextSteps:        nextSteps,
+		NextSteps:        stringPtr(nextSteps),
 		WorkflowStates:   toWorkflowStateResponses(workflowStates),
 		AvailableActions: toActionResponses(availableActions),
 	}
@@ -450,11 +451,11 @@ func (s *server) handleTicketEvents(resp http.ResponseWriter, req *http.Request)
 	events, err := parseLogEvents(logPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeJSON(resp, http.StatusOK, map[string]any{
-				"repo_id":       repoID,
-				"repo_path":     repoRoot,
-				"ticket_number": ticket,
-				"events":        []api.LogEventResponse{},
+			writeJSON(resp, http.StatusOK, api.TicketEventsResponse{
+				RepoId:       repoID,
+				RepoPath:     repoRoot,
+				TicketNumber: ticket,
+				Events:       []api.LogEventResponse{},
 			})
 
 			return
@@ -463,11 +464,11 @@ func (s *server) handleTicketEvents(resp http.ResponseWriter, req *http.Request)
 
 		return
 	}
-	writeJSON(resp, http.StatusOK, map[string]any{
-		"repo_id":       repoID,
-		"repo_path":     repoRoot,
-		"ticket_number": ticket,
-		"events":        events,
+	writeJSON(resp, http.StatusOK, api.TicketEventsResponse{
+		RepoId:       repoID,
+		RepoPath:     repoRoot,
+		TicketNumber: ticket,
+		Events:       events,
 	})
 }
 
@@ -501,13 +502,13 @@ func (s *server) handleTicketArtifact(resp http.ResponseWriter, req *http.Reques
 	data, err := os.ReadFile(path) //nolint:gosec // G304: path resolved from trusted internal state
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			writeJSON(resp, http.StatusOK, map[string]string{
-				"repo_id":       repoID,
-				"repo_path":     repoRoot,
-				"ticket_number": ticket,
-				"name":          name,
-				"path":          path,
-				"content":       "",
+			writeJSON(resp, http.StatusOK, api.TicketArtifactResponse{
+				RepoId:       repoID,
+				RepoPath:     repoRoot,
+				TicketNumber: ticket,
+				Name:         name,
+				Path:         path,
+				Content:      "",
 			})
 
 			return
@@ -516,13 +517,13 @@ func (s *server) handleTicketArtifact(resp http.ResponseWriter, req *http.Reques
 
 		return
 	}
-	writeJSON(resp, http.StatusOK, map[string]string{
-		"repo_id":       repoID,
-		"repo_path":     repoRoot,
-		"ticket_number": ticket,
-		"name":          name,
-		"path":          path,
-		"content":       string(data),
+	writeJSON(resp, http.StatusOK, api.TicketArtifactResponse{
+		RepoId:       repoID,
+		RepoPath:     repoRoot,
+		TicketNumber: ticket,
+		Name:         name,
+		Path:         path,
+		Content:      string(data),
 	})
 }
 
@@ -556,9 +557,9 @@ func (s *server) handleExecutionLogs(resp http.ResponseWriter, req *http.Request
 			return
 		}
 		logs = append(logs, api.ExecutionLogResponse{
-			RunID:            run.ID,
+			RunId:            run.ID,
 			State:            run.StateName,
-			StateDisplayName: run.StateDisplayName,
+			StateDisplayName: stringPtr(run.StateDisplayName),
 			Timestamp:        run.StartedAt.Format(time.RFC3339),
 			Path:             runPath,
 			Content:          string(content),
@@ -567,11 +568,11 @@ func (s *server) handleExecutionLogs(resp http.ResponseWriter, req *http.Request
 	sort.Slice(logs, func(i, j int) bool {
 		return logs[i].Timestamp < logs[j].Timestamp
 	})
-	writeJSON(resp, http.StatusOK, map[string]any{
-		"repo_id":       repoID,
-		"repo_path":     repoRoot,
-		"ticket_number": ticket,
-		"logs":          logs,
+	writeJSON(resp, http.StatusOK, api.ExecutionLogsResponse{
+		RepoId:       repoID,
+		RepoPath:     repoRoot,
+		TicketNumber: ticket,
+		Logs:         logs,
 	})
 }
 
@@ -598,36 +599,36 @@ func (s *server) enqueueAndRespond(resp http.ResponseWriter, action, repoID, rep
 	}
 	s.broadcast(api.ServerEvent{
 		Type:         "job",
-		RepoID:       repoID,
-		RepoPath:     repoPath,
-		TicketNumber: ticket,
-		JobID:        job.ID,
-		Action:       action,
-		Scope:        opts.scope,
-		Status:       "queued",
+		RepoId:       stringPtr(repoID),
+		RepoPath:     stringPtr(repoPath),
+		TicketNumber: stringPtr(ticket),
+		JobId:        stringPtr(job.ID),
+		Action:       stringPtr(action),
+		Scope:        stringPtr(opts.scope),
+		Status:       stringPtr("queued"),
 	})
 	select {
 	case s.jobs <- queued:
 		writeJSON(resp, http.StatusAccepted, api.ActionAcceptedResponse{
 			Status:       "accepted",
-			JobID:        job.ID,
+			JobId:        job.ID,
 			Action:       action,
-			RepoID:       repoID,
+			RepoId:       repoID,
 			RepoPath:     repoPath,
-			TicketNumber: ticket,
+			TicketNumber: stringPtr(ticket),
 		})
 	default:
 		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
 		s.broadcast(api.ServerEvent{
 			Type:         "job",
-			RepoID:       repoID,
-			RepoPath:     repoPath,
-			TicketNumber: ticket,
-			JobID:        job.ID,
-			Action:       action,
-			Scope:        opts.scope,
-			Status:       "failed",
-			Error:        "job queue is full",
+			RepoId:       stringPtr(repoID),
+			RepoPath:     stringPtr(repoPath),
+			TicketNumber: stringPtr(ticket),
+			JobId:        stringPtr(job.ID),
+			Action:       stringPtr(action),
+			Scope:        stringPtr(opts.scope),
+			Status:       stringPtr("failed"),
+			Error:        stringPtr("job queue is full"),
 		})
 		writeError(resp, http.StatusServiceUnavailable, "job queue is full")
 	}

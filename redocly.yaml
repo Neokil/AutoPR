@@ -1,0 +1,8 @@
+apis:
+  autopr@v1:
+    root: ./openapi/openapi.yaml
+
+rules:
+  operation-operationId: error
+  operation-2xx-response: error
+  path-parameters-defined: error

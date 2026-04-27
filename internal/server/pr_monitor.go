@@ -111,9 +111,9 @@ func (s *server) autoCleanupTicket(rec serverstate.TicketRecord) error {
 	}
 	s.broadcast(api.ServerEvent{
 		Type:         "ticket_deleted",
-		RepoID:       rec.RepoID,
-		RepoPath:     rec.RepoPath,
-		TicketNumber: rec.TicketNumber,
+		RepoId:       stringPtr(rec.RepoID),
+		RepoPath:     stringPtr(rec.RepoPath),
+		TicketNumber: stringPtr(rec.TicketNumber),
 	})
 
 	return nil

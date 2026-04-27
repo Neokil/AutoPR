@@ -3,4 +3,5 @@
 web/node_modules/
 web/dist
 web/tsconfig.tsbuildinfo
+openapi/openapi.bundle.yaml
 .DS_Store

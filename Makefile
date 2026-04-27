@@ -1,6 +1,6 @@
 SHELL := /bin/zsh
 
-.PHONY: build start clean-build
+.PHONY: build start clean-build generate-openapi
 
 build:
 	@mkdir -p "$(CURDIR)/.build"
@@ -18,3 +18,8 @@ start: build
 clean-build:
 	@rm -rf "$(CURDIR)/.build"
 	@echo "removed $(CURDIR)/.build"
+
+generate-openapi:
+	@cd "$(CURDIR)/web" && npm run openapi:lint
+	@cd "$(CURDIR)/web" && npm run openapi:generate
+	@go generate ./internal/api

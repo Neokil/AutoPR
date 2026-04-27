@@ -43,9 +43,9 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		if emitEvent {
 			s.broadcast(api.ServerEvent{
 				Type:         "ticket_deleted",
-				RepoID:       repoID,
-				RepoPath:     repoRoot,
-				TicketNumber: ticket,
+				RepoId:       stringPtr(repoID),
+				RepoPath:     stringPtr(repoRoot),
+				TicketNumber: stringPtr(ticket),
 			})
 		}
 
@@ -72,13 +72,13 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 	if emitEvent {
 		s.broadcast(api.ServerEvent{
 			Type:         "ticket_updated",
-			RepoID:       repoID,
-			RepoPath:     repoRoot,
-			TicketNumber: ticket,
-			Title:        rec.Title,
-			Status:       rec.Status,
-			Error:        rec.LastError,
-			PRURL:        rec.PRURL,
+			RepoId:       stringPtr(repoID),
+			RepoPath:     stringPtr(repoRoot),
+			TicketNumber: stringPtr(ticket),
+			Title:        stringPtr(rec.Title),
+			Status:       stringPtr(rec.Status),
+			Error:        stringPtr(rec.LastError),
+			PrUrl:        stringPtr(rec.PRURL),
 		})
 	}
 
@@ -118,8 +118,8 @@ func (s *server) syncRepoTickets(repoID, repoRoot string, repoRt *repoRuntime, e
 	if emitEvent {
 		s.broadcast(api.ServerEvent{
 			Type:     "repo_tickets_synced",
-			RepoID:   repoID,
-			RepoPath: repoRoot,
+			RepoId:   stringPtr(repoID),
+			RepoPath: stringPtr(repoRoot),
 		})
 	}
 

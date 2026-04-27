@@ -121,7 +121,7 @@ func waitForJobCmd(ctx context.Context, svc *orchestrator.RemoteService, args []
 		slog.Error("wait for job", "err", err)
 		os.Exit(1)
 	}
-	slog.Info("job completed", "job_id", job.ID, "status", job.Status)
+	slog.Info("job completed", "job_id", job.Id, "status", job.Status)
 }
 
 func cleanupCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {

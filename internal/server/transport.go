@@ -10,25 +10,25 @@ func toTicketStateResponse(st workflowstate.State) api.TicketStateResponse {
 	history := make([]api.StateRunResponse, 0, len(st.StateHistory))
 	for _, run := range st.StateHistory {
 		history = append(history, api.StateRunResponse{
-			ID:               run.ID,
+			Id:               run.ID,
 			StateName:        run.StateName,
-			StateDisplayName: run.StateDisplayName,
+			StateDisplayName: stringPtr(run.StateDisplayName),
 			StartedAt:        run.StartedAt,
-			ArtifactRef:      run.ArtifactRef,
-			LogRef:           run.LogRef,
+			ArtifactRef:      stringPtr(run.ArtifactRef),
+			LogRef:           stringPtr(run.LogRef),
 		})
 	}
 
 	return api.TicketStateResponse{
 		TicketNumber: st.TicketNumber,
 		CurrentState: st.CurrentState,
-		CurrentRunID: st.CurrentRunID,
-		FlowStatus:   string(st.FlowStatus),
+		CurrentRunId: stringPtr(st.CurrentRunID),
+		FlowStatus:   api.FlowStatus(st.FlowStatus),
 		BranchName:   st.BranchName,
 		WorktreePath: st.WorktreePath,
-		LastError:    st.LastError,
-		PRURL:        st.PRURL,
-		StateHistory: history,
+		LastError:    stringPtr(st.LastError),
+		PrUrl:        stringPtr(st.PRURL),
+		StateHistory: slicePtr(history),
 		CreatedAt:    st.CreatedAt,
 		UpdatedAt:    st.UpdatedAt,
 	}
@@ -36,14 +36,14 @@ func toTicketStateResponse(st workflowstate.State) api.TicketStateResponse {
 
 func toJobResponse(job serverstate.JobRecord) api.JobStatusResponse {
 	return api.JobStatusResponse{
-		ID:           job.ID,
+		Id:           job.ID,
 		Action:       job.Action,
-		RepoID:       job.RepoID,
+		RepoId:       job.RepoID,
 		RepoPath:     job.RepoPath,
-		TicketNumber: job.TicketNumber,
-		Status:       job.Status,
-		Scope:        job.Scope,
-		Error:        job.Error,
+		TicketNumber: stringPtr(job.TicketNumber),
+		Status:       api.JobStatus(job.Status),
+		Scope:        stringPtr(job.Scope),
+		Error:        stringPtr(job.Error),
 		CreatedAt:    job.CreatedAt,
 		StartedAt:    job.StartedAt,
 		FinishedAt:   job.FinishedAt,
@@ -57,17 +57,17 @@ func toTicketSummaryResponse(rec serverstate.TicketRecord) api.TicketSummaryResp
 	}
 
 	return api.TicketSummaryResponse{
-		RepoID:       rec.RepoID,
+		RepoId:       rec.RepoID,
 		RepoPath:     rec.RepoPath,
 		TicketNumber: rec.TicketNumber,
-		Title:        rec.Title,
-		Status:       rec.Status,
+		Title:        stringPtr(rec.Title),
+		Status:       api.FlowStatus(rec.Status),
 		Busy:         rec.Busy,
 		Approved:     rec.Approved,
-		LastError:    rec.LastError,
+		LastError:    stringPtr(rec.LastError),
 		UpdatedAt:    rec.UpdatedAt,
-		PRURL:        rec.PRURL,
-		Jobs:         jobs,
+		PrUrl:        stringPtr(rec.PRURL),
+		Jobs:         slicePtr(jobs),
 	}
 }
 
@@ -85,11 +85,35 @@ func toWorkflowStateResponses(states []workflowStateInfo) []api.WorkflowStateInf
 	for _, st := range states {
 		out = append(out, api.WorkflowStateInfo{
 			Name:        st.Name,
-			DisplayName: st.DisplayName,
+			DisplayName: stringPtr(st.DisplayName),
 		})
 	}
 
 	return out
+}
+
+func stringPtr(v string) *string {
+	if v == "" {
+		return nil
+	}
+
+	return &v
+}
+
+func derefString(v *string) string {
+	if v == nil {
+		return ""
+	}
+
+	return *v
+}
+
+func slicePtr[T any](v []T) *[]T {
+	if len(v) == 0 {
+		return nil
+	}
+
+	return &v
 }
 
 func toActionResponses(actions []actionInfo) []api.ActionInfo {

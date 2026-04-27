@@ -46,10 +46,15 @@ func (s *RemoteService) StartFlow(ctx context.Context, ticketNumber string) erro
 
 // ApplyAction enqueues an action job for a waiting ticket.
 func (s *RemoteService) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
+	var msg *string
+	if strings.TrimSpace(message) != "" {
+		msg = &message
+	}
+
 	return s.enqueueOnly(ctx, fmt.Sprintf("/api/tickets/%s/action", url.PathEscape(ticketNumber)), api.ActionRequest{
 		RepoPath: s.repoPath,
 		Label:    actionLabel,
-		Message:  message,
+		Message:  msg,
 	}, actionLabel, ticketNumber)
 }
 
@@ -125,13 +130,13 @@ func (s *RemoteService) NextSteps(ticketNumber string) (string, error) {
 // CleanupDone enqueues a cleanup job that removes all completed tickets.
 func (s *RemoteService) CleanupDone(ctx context.Context) error {
 	return s.enqueueOnly(ctx, "/api/cleanup",
-		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "done"}, "cleanup done", "")
+		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: api.CleanupScopeRequestScopeDone}, "cleanup done", "")
 }
 
 // CleanupAll enqueues a cleanup job that removes all tickets regardless of status.
 func (s *RemoteService) CleanupAll(ctx context.Context) error {
 	return s.enqueueOnly(ctx, "/api/cleanup",
-		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: "all"}, "cleanup all", "")
+		api.CleanupScopeRequest{RepoPath: s.repoPath, Scope: api.CleanupScopeRequestScopeAll}, "cleanup all", "")
 }
 
 // CleanupTicket enqueues a cleanup job for a single ticket.
@@ -148,15 +153,15 @@ func (s *RemoteService) WaitForJob(ctx context.Context, jobID string) (api.JobSt
 			return api.JobStatusResponse{}, err
 		}
 		switch job.Status {
-		case "done":
+		case api.Done:
 			return job, nil
-		case "failed":
-			if strings.TrimSpace(job.Error) == "" {
+		case api.Failed:
+			if job.Error == nil || strings.TrimSpace(*job.Error) == "" {
 				return job, fmt.Errorf("job %s: %w", jobID, ErrJobFailed)
 			}
 
-			return job, fmt.Errorf("%w: %s", ErrJobFailed, job.Error)
-		case "queued", "running":
+			return job, fmt.Errorf("%w: %s", ErrJobFailed, *job.Error)
+		case api.Queued, api.Running:
 			select {
 			case <-ctx.Done():
 				return api.JobStatusResponse{}, fmt.Errorf("wait for job: %w", ctx.Err())
@@ -174,7 +179,7 @@ func (s *RemoteService) enqueueOnly(ctx context.Context, path string, body any, 
 	if err != nil {
 		return err
 	}
-	jobID := strings.TrimSpace(accepted.JobID)
+	jobID := strings.TrimSpace(accepted.JobId)
 	if jobID == "" {
 		return ErrMissingJobID
 	}

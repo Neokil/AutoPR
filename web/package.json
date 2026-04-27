@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "openapi:lint": "redocly lint ../openapi/openapi.yaml --config ../redocly.yaml",
+    "openapi:bundle": "redocly bundle ../openapi/openapi.yaml --config ../redocly.yaml -o ../openapi/openapi.bundle.yaml",
+    "openapi:generate": "npm run openapi:bundle && openapi-typescript ../openapi/openapi.bundle.yaml -o src/generated/api.ts"
   },
   "dependencies": {
     "react": "^19.2.5",
@@ -15,10 +18,12 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.30.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "typescript": "^6.0.3",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
     "vite": "^8.0.10"
   }
 }

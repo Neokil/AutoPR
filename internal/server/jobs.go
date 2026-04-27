@@ -30,14 +30,14 @@ func (s *server) setJobStatus(job serverstate.JobRecord, status, errMsg string) 
 	_ = s.meta.UpdateJobStatus(job.ID, status, errMsg)
 	s.broadcast(api.ServerEvent{
 		Type:         "job",
-		RepoID:       job.RepoID,
-		RepoPath:     job.RepoPath,
-		TicketNumber: job.TicketNumber,
-		JobID:        job.ID,
-		Action:       job.Action,
-		Scope:        job.Scope,
-		Status:       status,
-		Error:        strings.TrimSpace(errMsg),
+		RepoId:       stringPtr(job.RepoID),
+		RepoPath:     stringPtr(job.RepoPath),
+		TicketNumber: stringPtr(job.TicketNumber),
+		JobId:        stringPtr(job.ID),
+		Action:       stringPtr(job.Action),
+		Scope:        stringPtr(job.Scope),
+		Status:       stringPtr(status),
+		Error:        stringPtr(strings.TrimSpace(errMsg)),
 	})
 }
 
@@ -88,9 +88,9 @@ func (s *server) executeJob(job queuedJob) error {
 			if err == nil {
 				s.broadcast(api.ServerEvent{
 					Type:         "ticket_deleted",
-					RepoID:       repoID,
-					RepoPath:     repoRoot,
-					TicketNumber: ticket,
+					RepoId:       stringPtr(repoID),
+					RepoPath:     stringPtr(repoRoot),
+					TicketNumber: stringPtr(ticket),
 				})
 			}
 		}
