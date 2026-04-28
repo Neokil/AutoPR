@@ -4,7 +4,9 @@ Read `.auto-pr/run-context.md`.
 
 Read the ticket details from the latest `fetch-ticket-data` artifact path listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`.
 
-If the `Feedback File` listed in `.auto-pr/run-context.md` exists, incorporate that feedback into your analysis.
+If a previous `investigation` artifact is listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`, read it and use it as the starting point — revise and extend it rather than starting from scratch.
+
+If an `investigation-feedback` artifact is listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`, read it and incorporate that feedback into your analysis.
 
 If a `Guidelines File` is listed in `.auto-pr/run-context.md`, read and follow those guidelines.
 

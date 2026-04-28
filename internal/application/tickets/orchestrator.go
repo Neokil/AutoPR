@@ -369,9 +369,6 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 		return o.failState(state, err)
 	}
 
-	// Remove feedback.md so stale feedback is not visible to the next run.
-	_ = os.Remove(state.ArtifactPath("feedback.md"))
-
 	slog.Info("state done, waiting for action", "ticket", state.TicketNumber, "state", stateCfg.Name)
 	state.FlowStatus = workflowstate.FlowStatusWaiting
 	saveErr := o.Store.SaveState(state.TicketNumber, *state)
@@ -440,9 +437,12 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *workflo
 		return ErrFeedbackRequired
 	}
 	slog.Info("applying feedback", "ticket", state.TicketNumber, "state", state.CurrentState)
-	feedbackPath := state.ArtifactPath("feedback.md")
-	err := os.WriteFile(feedbackPath, []byte(strings.TrimSpace(message)), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable feedback files
-	if err != nil {
+	if state.CurrentRunID == "" {
+		return fmt.Errorf("no current run ID to attach feedback to")
+	}
+	content := []byte(strings.TrimSpace(message))
+	runFeedbackPath := state.RunPath(state.CurrentRunID, "feedback.md")
+	if err := os.WriteFile(runFeedbackPath, content, 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable feedback files
 		return fmt.Errorf("write feedback file: %w", err)
 	}
 	stateCfg, ok := wflow.StateByName(state.CurrentState)
@@ -648,7 +648,6 @@ func (o *Orchestrator) prepareRunContext(
 	fmt.Fprintf(&buf, "Current State Log: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", run.LogRef)))
 	rawProviderLog := filepath.ToSlash(filepath.Join(".auto-pr", "runs", run.ID, "raw-provider.log"))
 	fmt.Fprintf(&buf, "Current Raw Provider Log: %s\n", rawProviderLog)
-	fmt.Fprintf(&buf, "Feedback File: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "feedback.md")))
 	fmt.Fprintf(&buf, "Shared Context File: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "context.md")))
 	guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
 	if guidelinesPath != "" {
@@ -657,13 +656,20 @@ func (o *Orchestrator) prepareRunContext(
 	buf.WriteString("\nLatest State Artifacts:\n")
 	seen := map[string]bool{}
 	for i := len(state.StateHistory) - 1; i >= 0; i-- {
-		stateName := state.StateHistory[i].StateName
-		if seen[stateName] {
+		entry := state.StateHistory[i]
+		if entry.ID == run.ID {
+			continue // skip current run — its artifact doesn't exist yet
+		}
+		if seen[entry.StateName] {
 			continue
 		}
-		seen[stateName] = true
-		if ref := state.LatestArtifactRef(stateName); ref != "" {
-			fmt.Fprintf(&buf, "- %s: %s\n", stateName, filepath.ToSlash(filepath.Join(".auto-pr", ref)))
+		seen[entry.StateName] = true
+		if entry.ArtifactRef != "" {
+			fmt.Fprintf(&buf, "- %s: %s\n", entry.StateName, filepath.ToSlash(filepath.Join(".auto-pr", entry.ArtifactRef)))
+		}
+		runFeedbackPath := filepath.Join("runs", entry.ID, "feedback.md")
+		if _, statErr := os.Stat(state.ResolveRef(runFeedbackPath)); statErr == nil {
+			fmt.Fprintf(&buf, "- %s-feedback: %s\n", entry.StateName, filepath.ToSlash(filepath.Join(".auto-pr", runFeedbackPath)))
 		}
 	}
 
