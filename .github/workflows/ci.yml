@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v3]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── 1. Build ──────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: make build
+
+  # ── 2a. Lint — backend ────────────────────────────────────────────────────
+  lint-be:
+    name: Lint (Go)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  # ── 2b. Lint — frontend ───────────────────────────────────────────────────
+  lint-fe:
+    name: Lint (Frontend)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --prefix web
+
+      - name: Type check
+        run: npm run typecheck --prefix web
+
+      - name: ESLint
+        run: npm run lint --prefix web
+
+  # ── 2c. Unit tests — backend ──────────────────────────────────────────────
+  test-be:
+    name: Tests (Go)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run unit tests
+        run: go test ./...
+
+  # ── 2d. Unit tests — frontend ─────────────────────────────────────────────
+  test-fe:
+    name: Tests (Frontend)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --prefix web
+
+      - name: Run unit tests
+        run: npm test --prefix web
+
+  # ── 3. E2E ────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [lint-be, lint-fe, test-be, test-fe]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run E2E tests
+        run: make test-e2e
