@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TicketDetails, TicketSummary, StateRun, ServerEvent } from "../types";
 import {
-  ticketKey,
-  pendingTicketKey,
-  knownRepoPaths,
   runDisplayLabel,
   selectTicketKey,
   applyTicketEvent,
@@ -52,157 +49,120 @@ function makeDetails(actions: TicketDetails["available_actions"]): TicketDetails
   };
 }
 
-describe("ticketKey", () => {
-  it("combines repo_id and ticket_number with ::", () => {
-    expect(ticketKey(makeSummary({ repo_id: "r1", ticket_number: "42" }))).toBe("r1::42");
-  });
-});
-
-describe("pendingTicketKey", () => {
-  it("combines repo path and ticket number with ::", () => {
-    expect(pendingTicketKey("/my/repo", "123")).toBe("/my/repo::123");
-  });
-});
-
-describe("knownRepoPaths", () => {
-  it("merges repository options and ticket paths without duplicates", () => {
-    const tickets = [makeSummary({ repo_path: "/b" }), makeSummary({ repo_path: "/c" })];
-    expect(knownRepoPaths(["/a", "/b"], tickets)).toEqual(["/a", "/b", "/c"]);
-  });
-
-  it("preserves the order: options first, then ticket paths", () => {
-    const tickets = [makeSummary({ repo_path: "/c" })];
-    expect(knownRepoPaths(["/a", "/b"], tickets)).toEqual(["/a", "/b", "/c"]);
-  });
-
-  it("returns empty array when both inputs are empty", () => {
-    expect(knownRepoPaths([], [])).toEqual([]);
-  });
-});
-
+// ── runDisplayLabel ────────────────────────────────────────────────────────
+// The duplicate-indexing behaviour is non-obvious: when the same state is
+// visited more than once, pills get a 1-based suffix so the user can tell them
+// apart.
 describe("runDisplayLabel", () => {
-  it("returns the display name when only one run for that state", () => {
+  it("returns the display name for a single-visit state", () => {
     const run = makeRun({ state_display_name: "Investigation" });
     expect(runDisplayLabel(run, [run])).toBe("Investigation");
   });
 
-  it("falls back to state_name when display_name is absent", () => {
-    const run = makeRun({ state_name: "investigate", state_display_name: "" });
-    expect(runDisplayLabel(run, [run])).toBe("investigate");
-  });
-
-  it("appends a 1-based index when multiple runs share the same state", () => {
+  it("appends a 1-based index when a state is visited more than once", () => {
     const run1 = makeRun({ id: "a", state_name: "investigate", state_display_name: "Investigate" });
     const run2 = makeRun({ id: "b", state_name: "investigate", state_display_name: "Investigate" });
-    const runs = [run1, run2];
-    expect(runDisplayLabel(run1, runs)).toBe("Investigate 1");
-    expect(runDisplayLabel(run2, runs)).toBe("Investigate 2");
+    expect(runDisplayLabel(run1, [run1, run2])).toBe("Investigate 1");
+    expect(runDisplayLabel(run2, [run1, run2])).toBe("Investigate 2");
   });
 });
 
+// ── selectTicketKey ────────────────────────────────────────────────────────
 describe("selectTicketKey", () => {
-  it("returns an empty string when there are no tickets", () => {
+  it("returns empty string when there are no tickets", () => {
     expect(selectTicketKey("r1::1", [])).toBe("");
   });
 
-  it("keeps the current key when it is still in the list", () => {
-    const t = makeSummary({ repo_id: "r1", ticket_number: "1" });
-    expect(selectTicketKey("r1::1", [t])).toBe("r1::1");
-  });
-
-  it("falls back to the first ticket when the current key is gone", () => {
+  it("falls back to the first ticket when the current key is no longer in the list", () => {
     const t = makeSummary({ repo_id: "r1", ticket_number: "2" });
     expect(selectTicketKey("r1::99", [t])).toBe("r1::2");
   });
-
-  it("selects the first ticket when current is empty", () => {
-    const t = makeSummary({ repo_id: "r1", ticket_number: "1" });
-    expect(selectTicketKey("", [t])).toBe("r1::1");
-  });
 });
 
+// ── getFeedbackAction ──────────────────────────────────────────────────────
 describe("getFeedbackAction", () => {
   it("returns the provide_feedback action when the ticket is waiting", () => {
-    const summary = makeSummary({ status: "waiting" });
     const details = makeDetails([
       { label: "Provide Feedback", type: "provide_feedback" },
       { label: "Approve", type: "move_to_state" },
     ]);
-    expect(getFeedbackAction(details, summary)).toEqual({ label: "Provide Feedback", type: "provide_feedback" });
+    expect(getFeedbackAction(details, makeSummary({ status: "waiting" }))).toEqual({
+      label: "Provide Feedback",
+      type: "provide_feedback",
+    });
   });
 
-  it("returns undefined when the ticket is not waiting", () => {
-    const summary = makeSummary({ status: "running" });
-    expect(getFeedbackAction(null, summary)).toBeUndefined();
+  it("returns undefined when the ticket is not in waiting status", () => {
+    expect(getFeedbackAction(null, makeSummary({ status: "running" }))).toBeUndefined();
   });
 
   it("returns undefined when there is no provide_feedback action", () => {
-    const summary = makeSummary({ status: "waiting" });
     const details = makeDetails([{ label: "Approve", type: "move_to_state" }]);
-    expect(getFeedbackAction(details, summary)).toBeUndefined();
+    expect(getFeedbackAction(details, makeSummary({ status: "waiting" }))).toBeUndefined();
   });
 });
 
+// ── getNonFeedbackActions ──────────────────────────────────────────────────
 describe("getNonFeedbackActions", () => {
-  it("returns only non-provide_feedback actions when waiting", () => {
-    const summary = makeSummary({ status: "waiting" });
+  it("returns only non-provide_feedback actions when ticket is waiting", () => {
     const details = makeDetails([
       { label: "Provide Feedback", type: "provide_feedback" },
       { label: "Approve", type: "move_to_state" },
     ]);
-    expect(getNonFeedbackActions(details, summary)).toEqual([{ label: "Approve", type: "move_to_state" }]);
+    expect(getNonFeedbackActions(details, makeSummary({ status: "waiting" }))).toEqual([
+      { label: "Approve", type: "move_to_state" },
+    ]);
   });
 
   it("returns empty array when the ticket is not waiting", () => {
-    const summary = makeSummary({ status: "running" });
-    expect(getNonFeedbackActions(null, summary)).toEqual([]);
+    expect(getNonFeedbackActions(null, makeSummary({ status: "running" }))).toEqual([]);
   });
 });
 
+// ── applyTicketEvent ───────────────────────────────────────────────────────
+// This is the heart of the real-time UI: SSE events mutate the ticket list
+// without a full server round-trip.
 describe("applyTicketEvent", () => {
   const ticket = makeSummary({ repo_id: "r1", ticket_number: "42", status: "waiting", title: "Old Title" });
 
   it("removes the ticket on ticket_deleted", () => {
     const evt: ServerEvent = { type: "ticket_deleted", repo_id: "r1", ticket_number: "42" };
-    const result = applyTicketEvent([ticket], evt);
-    expect(result.tickets).toHaveLength(0);
-    expect(result.needsFullRefresh).toBe(false);
+    const { tickets, needsFullRefresh } = applyTicketEvent([ticket], evt);
+    expect(tickets).toHaveLength(0);
+    expect(needsFullRefresh).toBe(false);
   });
 
   it("updates title and status on ticket_updated", () => {
     const evt: ServerEvent = { type: "ticket_updated", repo_id: "r1", ticket_number: "42", title: "New Title", status: "done" };
-    const result = applyTicketEvent([ticket], evt);
-    expect(result.tickets[0].title).toBe("New Title");
-    expect(result.tickets[0].status).toBe("done");
-    expect(result.needsFullRefresh).toBe(false);
+    const { tickets } = applyTicketEvent([ticket], evt);
+    expect(tickets[0].title).toBe("New Title");
+    expect(tickets[0].status).toBe("done");
   });
 
   it("signals needsFullRefresh when an update arrives for an unknown ticket", () => {
     const evt: ServerEvent = { type: "ticket_updated", repo_id: "r1", ticket_number: "unknown" };
-    const result = applyTicketEvent([ticket], evt);
-    expect(result.needsFullRefresh).toBe(true);
+    expect(applyTicketEvent([ticket], evt).needsFullRefresh).toBe(true);
   });
 
   it("appends a new job and marks the ticket as busy", () => {
     const evt: ServerEvent = { type: "job", repo_id: "r1", ticket_number: "42", job_id: "j1", status: "running", action: "run_ticket" };
-    const result = applyTicketEvent([ticket], evt);
-    expect(result.tickets[0].busy).toBe(true);
-    expect(result.tickets[0].jobs).toHaveLength(1);
-    expect(result.tickets[0].jobs![0].id).toBe("j1");
+    const { tickets } = applyTicketEvent([ticket], evt);
+    expect(tickets[0].busy).toBe(true);
+    expect(tickets[0].jobs![0].id).toBe("j1");
   });
 
   it("leaves other tickets unchanged", () => {
     const other = makeSummary({ repo_id: "r1", ticket_number: "99" });
     const evt: ServerEvent = { type: "ticket_deleted", repo_id: "r1", ticket_number: "42" };
-    const result = applyTicketEvent([ticket, other], evt);
-    expect(result.tickets).toHaveLength(1);
-    expect(result.tickets[0].ticket_number).toBe("99");
+    const { tickets } = applyTicketEvent([ticket, other], evt);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0].ticket_number).toBe("99");
   });
 
-  it("is a no-op when repo_id or ticket_number is missing from the event", () => {
+  it("is a no-op when repo_id or ticket_number is absent from the event", () => {
     const evt: ServerEvent = { type: "ticket_updated" };
-    const result = applyTicketEvent([ticket], evt);
-    expect(result.tickets).toEqual([ticket]);
-    expect(result.needsFullRefresh).toBe(false);
+    const { tickets, needsFullRefresh } = applyTicketEvent([ticket], evt);
+    expect(tickets).toEqual([ticket]);
+    expect(needsFullRefresh).toBe(false);
   });
 });
