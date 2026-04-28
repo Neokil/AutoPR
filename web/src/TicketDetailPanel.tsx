@@ -88,6 +88,7 @@ export function TicketDetailPanel({
             onMoveToState={onMoveToState}
             workflowStates={details?.workflow_states ?? []}
             currentStateName={details?.state.current_state}
+            rerunLabel={selectedSummary.status === "failed" ? "Retry" : "Rerun"}
             rerunDisabled={selectedSummary.status === "running"}
             cleanupDisabled={selectedSummary.status === "running"}
             moveDisabled={selectedSummary.status === "running"}

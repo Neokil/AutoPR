@@ -8,6 +8,7 @@ type Props = {
   onMoveToState: (target: string) => void;
   workflowStates: WorkflowStateInfo[];
   currentStateName?: string;
+  rerunLabel?: string;
   rerunDisabled?: boolean;
   cleanupDisabled?: boolean;
   moveDisabled?: boolean;
@@ -20,6 +21,7 @@ export function TicketMenu({
   onMoveToState,
   workflowStates,
   currentStateName,
+  rerunLabel = "Rerun",
   rerunDisabled,
   cleanupDisabled,
   moveDisabled
@@ -77,7 +79,7 @@ export function TicketMenu({
             disabled={rerunDisabled}
             onClick={() => handleSelect(onRerun)}
           >
-            Rerun
+            {rerunLabel}
           </button>
           <div className="menu-item menu-submenu-root" role="none">
             <button type="button" className="menu-item submenu-trigger" role="menuitem" disabled={moveDisabled}>
