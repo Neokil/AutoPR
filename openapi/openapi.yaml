@@ -255,6 +255,26 @@ paths:
           $ref: "#/components/responses/ErrorResponse"
         "503":
           $ref: "#/components/responses/ErrorResponse"
+  /api/discover-tickets:
+    post:
+      operationId: discoverTickets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepoRequest"
+      responses:
+        "200":
+          description: Discovered tickets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverTicketsResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
 components:
   parameters:
     TicketID:
@@ -409,6 +429,19 @@ components:
         jobs:
           type: array
           items: { $ref: "#/components/schemas/JobStatusResponse" }
+    DiscoveredTicket:
+      type: object
+      required: [ticket_number, title]
+      properties:
+        ticket_number: { type: string }
+        title: { type: string }
+    DiscoverTicketsResponse:
+      type: object
+      required: [tickets]
+      properties:
+        tickets:
+          type: array
+          items: { $ref: "#/components/schemas/DiscoveredTicket" }
     TicketPayload:
       type: object
       additionalProperties: true

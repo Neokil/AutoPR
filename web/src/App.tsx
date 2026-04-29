@@ -5,6 +5,7 @@ import {
   cleanupDone,
   cleanupTicket,
   connectEvents,
+  discoverTickets,
   getArtifact,
   getExecutionLogs,
   getJob,
@@ -15,6 +16,7 @@ import {
   runTicket
 } from "./api";
 import { AddTicketDialog } from "./AddTicketDialog";
+import { DiscoverTicketsModal } from "./DiscoverTicketsModal";
 import { ExecutionLogsModal } from "./ExecutionLogsModal";
 import { TicketDetailPanel } from "./TicketDetailPanel";
 import { TicketList } from "./TicketList";
@@ -27,7 +29,7 @@ import {
   stateRunsFromDetails,
   ticketKey
 } from "./tickets";
-import type { ExecutionLog, Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { DiscoveredTicket, ExecutionLog, Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 export function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
@@ -50,6 +52,11 @@ export function App() {
   const [newTicketNumber, setNewTicketNumber] = useState("");
   const [pendingAddedTickets, setPendingAddedTickets] = useState<string[]>([]);
   const [addTicketError, setAddTicketError] = useState("");
+  const [showDiscoverModal, setShowDiscoverModal] = useState(false);
+  const [discoverRepoPath, setDiscoverRepoPath] = useState("");
+  const [discoveredTickets, setDiscoveredTickets] = useState<DiscoveredTicket[]>([]);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverError, setDiscoverError] = useState("");
 
   const selectedSummary = useMemo(() => tickets.find((ticket) => ticketKey(ticket) === selectedKey) ?? null, [tickets, selectedKey]);
   const availableRepoPaths = useMemo(() => knownRepoPaths(repositoryOptions, tickets), [repositoryOptions, tickets]);
@@ -435,6 +442,29 @@ export function App() {
     void queueAction(() => moveToState(selectedSummary.repo_path, selectedSummary.ticket_number, target));
   }
 
+  function openDiscoverModal() {
+    const repoPath = selectedSummary?.repo_path ?? availableRepoPaths[0] ?? "";
+    setDiscoverRepoPath(repoPath);
+    setDiscoveredTickets([]);
+    setDiscoverError("");
+    setDiscoverLoading(true);
+    setShowDiscoverModal(true);
+    void discoverTickets(repoPath)
+      .then((found) => { setDiscoveredTickets(found); })
+      .catch((err) => { setDiscoverError(err instanceof Error ? err.message : "discovery failed"); })
+      .finally(() => { setDiscoverLoading(false); });
+  }
+
+  function handleDiscoverAdd(ticketNumber: string) {
+    setShowDiscoverModal(false);
+    setError("");
+    setAddTicketError("");
+    setNewTicketRepoPath(discoverRepoPath);
+    setNewTicketNumber(ticketNumber);
+    setShowAddTicketDialog(true);
+    void refreshRepositories();
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -456,6 +486,9 @@ export function App() {
             disabled={!selectedSummary}
           >
             Cleanup All
+          </button>
+          <button onClick={openDiscoverModal} disabled={availableRepoPaths.length === 0}>
+            Discover Tickets
           </button>
         </div>
       </header>
@@ -501,6 +534,17 @@ export function App() {
           onTicketNumberChange={updateAddTicketNumber}
           onSubmit={submitAddTicket}
           onClose={closeAddTicketDialog}
+        />
+      ) : null}
+
+      {showDiscoverModal ? (
+        <DiscoverTicketsModal
+          repoPath={discoverRepoPath}
+          tickets={discoveredTickets}
+          loading={discoverLoading}
+          error={discoverError}
+          onAdd={handleDiscoverAdd}
+          onClose={() => setShowDiscoverModal(false)}
         />
       ) : null}
 

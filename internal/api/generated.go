@@ -120,6 +120,17 @@ type CleanupScopeRequest struct {
 // CleanupScopeRequestScope defines model for CleanupScopeRequest.Scope.
 type CleanupScopeRequestScope string
 
+// DiscoverTicketsResponse defines model for DiscoverTicketsResponse.
+type DiscoverTicketsResponse struct {
+	Tickets []DiscoveredTicket `json:"tickets"`
+}
+
+// DiscoveredTicket defines model for DiscoveredTicket.
+type DiscoveredTicket struct {
+	TicketNumber string `json:"ticket_number"`
+	Title        string `json:"title"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error string `json:"error"`
@@ -337,6 +348,9 @@ type GetExecutionLogsParams struct {
 // CleanupScopeJSONRequestBody defines body for CleanupScope for application/json ContentType.
 type CleanupScopeJSONRequestBody = CleanupScopeRequest
 
+// DiscoverTicketsJSONRequestBody defines body for DiscoverTickets for application/json ContentType.
+type DiscoverTicketsJSONRequestBody = RepoRequest
+
 // ApplyActionJSONRequestBody defines body for ApplyAction for application/json ContentType.
 type ApplyActionJSONRequestBody = ActionRequest
 
@@ -423,6 +437,9 @@ type ServerInterface interface {
 	// (POST /api/cleanup)
 	CleanupScope(w http.ResponseWriter, r *http.Request)
 
+	// (POST /api/discover-tickets)
+	DiscoverTickets(w http.ResponseWriter, r *http.Request)
+
 	// (GET /api/health)
 	GetHealth(w http.ResponseWriter, r *http.Request)
 
@@ -474,6 +491,20 @@ func (siw *ServerInterfaceWrapper) CleanupScope(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CleanupScope(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DiscoverTickets operation middleware
+func (siw *ServerInterfaceWrapper) DiscoverTickets(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DiscoverTickets(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -965,6 +996,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/api/cleanup", wrapper.CleanupScope)
+	m.HandleFunc("POST "+options.BaseURL+"/api/discover-tickets", wrapper.DiscoverTickets)
 	m.HandleFunc("GET "+options.BaseURL+"/api/health", wrapper.GetHealth)
 	m.HandleFunc("GET "+options.BaseURL+"/api/jobs/{id}", wrapper.GetJob)
 	m.HandleFunc("GET "+options.BaseURL+"/api/repositories", wrapper.ListRepositories)
@@ -1023,6 +1055,41 @@ type CleanupScope503JSONResponse ErrorResponse
 func (response CleanupScope503JSONResponse) VisitCleanupScopeResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(503)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DiscoverTicketsRequestObject struct {
+	Body *DiscoverTicketsJSONRequestBody
+}
+
+type DiscoverTicketsResponseObject interface {
+	VisitDiscoverTicketsResponse(w http.ResponseWriter) error
+}
+
+type DiscoverTickets200JSONResponse DiscoverTicketsResponse
+
+func (response DiscoverTickets200JSONResponse) VisitDiscoverTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DiscoverTickets400JSONResponse struct{ ErrorResponseJSONResponse }
+
+func (response DiscoverTickets400JSONResponse) VisitDiscoverTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DiscoverTickets500JSONResponse ErrorResponse
+
+func (response DiscoverTickets500JSONResponse) VisitDiscoverTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1478,6 +1545,9 @@ type StrictServerInterface interface {
 	// (POST /api/cleanup)
 	CleanupScope(ctx context.Context, request CleanupScopeRequestObject) (CleanupScopeResponseObject, error)
 
+	// (POST /api/discover-tickets)
+	DiscoverTickets(ctx context.Context, request DiscoverTicketsRequestObject) (DiscoverTicketsResponseObject, error)
+
 	// (GET /api/health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
 
@@ -1568,6 +1638,37 @@ func (sh *strictHandler) CleanupScope(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CleanupScopeResponseObject); ok {
 		if err := validResponse.VisitCleanupScopeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DiscoverTickets operation middleware
+func (sh *strictHandler) DiscoverTickets(w http.ResponseWriter, r *http.Request) {
+	var request DiscoverTicketsRequestObject
+
+	var body DiscoverTicketsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DiscoverTickets(ctx, request.(DiscoverTicketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DiscoverTickets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DiscoverTicketsResponseObject); ok {
+		if err := validResponse.VisitDiscoverTicketsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

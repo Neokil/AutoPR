@@ -1,4 +1,4 @@
-import type { AcceptedJob, ExecutionLog, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { AcceptedJob, DiscoveredTicket, ExecutionLog, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -115,4 +115,13 @@ export function cleanupDone(repoPath: string): Promise<AcceptedJob> {
 
 export function cleanupAll(repoPath: string): Promise<AcceptedJob> {
   return postAccepted("/api/cleanup", { repo_path: repoPath, scope: "all" });
+}
+
+export async function discoverTickets(repoPath: string): Promise<DiscoveredTicket[]> {
+  const data = await requestJSON<{ tickets: DiscoveredTicket[] }>("/api/discover-tickets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo_path: repoPath })
+  });
+  return data.tickets ?? [];
 }

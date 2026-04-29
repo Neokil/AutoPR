@@ -19,6 +19,29 @@ import (
 
 var _ api.StrictServerInterface = (*server)(nil)
 
+func (s *server) DiscoverTickets(ctx context.Context, request api.DiscoverTicketsRequestObject) (api.DiscoverTicketsResponseObject, error) {
+	if request.Body == nil {
+		return api.DiscoverTickets400JSONResponse{ErrorResponseJSONResponse: api.ErrorResponseJSONResponse{Error: "invalid json body"}}, nil
+	}
+	repoPath := strings.TrimSpace(request.Body.RepoPath)
+	if repoPath == "" {
+		return api.DiscoverTickets400JSONResponse{ErrorResponseJSONResponse: api.ErrorResponseJSONResponse{Error: "repo_path is required"}}, nil
+	}
+	_, _, repoRt, err := s.runtimeForRepoPath(ctx, repoPath)
+	if err != nil {
+		return api.DiscoverTickets400JSONResponse{ErrorResponseJSONResponse: api.ErrorResponseJSONResponse{Error: err.Error()}}, nil
+	}
+	found, err := repoRt.svc.DiscoverTickets(ctx)
+	if err != nil {
+		return api.DiscoverTickets500JSONResponse{Error: err.Error()}, nil
+	}
+	tickets := make([]api.DiscoveredTicket, len(found))
+	for i, t := range found {
+		tickets[i] = api.DiscoveredTicket{TicketNumber: t.TicketNumber, Title: t.Title}
+	}
+	return api.DiscoverTickets200JSONResponse(api.DiscoverTicketsResponse{Tickets: tickets}), nil
+}
+
 func (s *server) CleanupScope(ctx context.Context, request api.CleanupScopeRequestObject) (api.CleanupScopeResponseObject, error) {
 	if request.Body == nil {
 		return badCleanupScope("invalid json body"), nil

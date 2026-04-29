@@ -3,6 +3,7 @@ package tickets
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -697,6 +698,49 @@ func newUUID() (string, error) {
 		buf[8:10],
 		buf[10:16],
 	), nil
+}
+
+// DiscoveredTicket is a Shortcut story returned by the discovery prompt.
+type DiscoveredTicket struct {
+	TicketNumber string `json:"ticket_number"`
+	Title        string `json:"title"`
+}
+
+// DiscoverTickets runs the discover-shortcut-tickets prompt via the configured provider
+// and returns the list of stories tagged "auto-pr" that are not done or in progress.
+func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket, error) {
+	promptContent, err := workflow.ReadPrompt(o.RepoRoot, "prompts/discover-shortcut-tickets.md")
+	if err != nil {
+		return nil, fmt.Errorf("read discover prompt: %w", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "autopr-discover-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
+
+	promptPath := filepath.Join(tmpDir, "prompt.md")
+	if err = os.WriteFile(promptPath, promptContent, 0o600); err != nil {
+		return nil, fmt.Errorf("write discover prompt: %w", err)
+	}
+
+	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
+		PromptPath: promptPath,
+		WorkDir:    tmpDir,
+		RuntimeDir: tmpDir,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("execute provider: %w", err)
+	}
+
+	raw := strings.TrimSpace(result.RawOutput)
+	var tickets []DiscoveredTicket
+	if err = json.Unmarshal([]byte(raw), &tickets); err != nil {
+		return nil, fmt.Errorf("parse provider output: %w", err)
+	}
+
+	return tickets, nil
 }
 
 // EnsureStateIgnored ensures the state directory is listed in .gitignore.

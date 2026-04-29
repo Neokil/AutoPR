@@ -574,6 +574,44 @@ pre {
   justify-content: flex-end;
 }
 
+.discover-modal {
+  width: min(640px, 100%);
+}
+
+.discover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.discover-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--soft-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--soft-bg);
+}
+
+.discover-ticket-id {
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.discover-ticket-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 980px) {
   .header {
     flex-direction: column;
