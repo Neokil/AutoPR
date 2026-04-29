@@ -93,6 +93,7 @@ body {
 }
 
 input,
+textarea,
 button {
   border: 1px solid var(--input-border);
   border-radius: 8px;
@@ -100,6 +101,10 @@ button {
   font: inherit;
   background: var(--input-bg);
   color: var(--text);
+}
+
+textarea {
+  resize: vertical;
 }
 
 button {

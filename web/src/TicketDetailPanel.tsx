@@ -109,10 +109,11 @@ export function TicketDetailPanel({
               onSubmitFeedback();
             }}
           >
-            <input
+            <textarea
               value={feedbackMessage}
               onChange={(event) => onFeedbackMessageChange(event.target.value)}
               placeholder={`Send feedback (${feedbackAction.label})`}
+              rows={3}
             />
             <button type="submit">{feedbackAction.label}</button>
           </form>
