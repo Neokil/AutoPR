@@ -60,6 +60,7 @@ export function App() {
   const activeJobIdRef = useRef("");
   const showLogsModalRef = useRef(false);
   const fullRefreshScheduledRef = useRef(false);
+  const prevLastRunIdRef = useRef("");
   const reconnectErrorMessage = "event stream connection lost; reconnecting";
 
   useEffect(() => {
@@ -107,18 +108,23 @@ export function App() {
 
   useEffect(() => {
     if (stateRuns.length === 0) {
+      prevLastRunIdRef.current = "";
       setSelectedRunId("");
       return;
     }
+    const lastRunId = stateRuns[stateRuns.length - 1].id;
     const currentRunId = details?.state.current_run_id;
+    const prevLastRunId = prevLastRunIdRef.current;
+    prevLastRunIdRef.current = lastRunId;
+
     setSelectedRunId((current) => {
-      if (current && stateRuns.some((run) => run.id === current)) {
-        return current;
+      if (!current || !stateRuns.some((run) => run.id === current)) {
+        return (currentRunId && stateRuns.some((run) => run.id === currentRunId)) ? currentRunId : lastRunId;
       }
-      if (currentRunId && stateRuns.some((run) => run.id === currentRunId)) {
-        return currentRunId;
+      if (current === prevLastRunId) {
+        return (currentRunId && stateRuns.some((run) => run.id === currentRunId)) ? currentRunId : lastRunId;
       }
-      return stateRuns[stateRuns.length - 1]?.id ?? "";
+      return current;
     });
   }, [details?.state.current_run_id, stateRuns]);
 
