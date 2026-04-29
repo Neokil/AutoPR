@@ -727,7 +727,7 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 
 	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
 		PromptPath: promptPath,
-		WorkDir:    tmpDir,
+		WorkDir:    o.RepoRoot,
 		RuntimeDir: tmpDir,
 	})
 	if err != nil {
