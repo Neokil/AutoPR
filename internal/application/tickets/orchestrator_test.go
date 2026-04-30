@@ -53,12 +53,14 @@ func (m *memStore) RemoveTicketDir(ticketNumber string) error {
 }
 
 type mockProvider struct {
-	result providers.ExecuteResult
-	err    error
+	result  providers.ExecuteResult
+	err     error
+	lastReq providers.ExecuteRequest
 }
 
 func (p *mockProvider) Name() string { return "mock" }
-func (p *mockProvider) Execute(_ context.Context, _ providers.ExecuteRequest) (providers.ExecuteResult, error) {
+func (p *mockProvider) Execute(_ context.Context, req providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	p.lastReq = req
 	return p.result, p.err
 }
 
@@ -123,6 +125,14 @@ func newOrchestrator(repoRoot string, store *memStore, prov *mockProvider) *tick
 		store,
 		prov,
 	)
+}
+
+func writeDiscoverPrompt(t *testing.T, repoRoot string, content string) {
+	t.Helper()
+	promptPath := filepath.Join(repoRoot, ".auto-pr", "prompts", "discover-shortcut-tickets.md")
+	if err := os.WriteFile(promptPath, []byte(content), 0o644); err != nil { //nolint:gosec // test file
+		t.Fatal(err)
+	}
 }
 
 // ── StartFlow ─────────────────────────────────────────────────────────────
@@ -202,6 +212,40 @@ func TestStartFlow_providerError_setsFailedStatus(t *testing.T) {
 	}
 	if st.LastError == "" {
 		t.Error("expected LastError to be set")
+	}
+}
+
+func TestDiscoverTickets_persistsLogsUnderUserHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	root := setupRepo(t, minimalWorkflow, ".")
+	writeDiscoverPrompt(t, root, "Discover tickets.")
+	store := newMemStore()
+	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: `[{"ticket_number":"SC-1","title":"Test"}]`}}
+
+	found, err := newOrchestrator(root, store, prov).DiscoverTickets(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(found) != 1 || found[0].TicketNumber != "SC-1" {
+		t.Fatalf("unexpected discovered tickets: %#v", found)
+	}
+
+	expectedPrefix := filepath.Join(home, ".auto-pr", "logs", "discover-tickets") + string(os.PathSeparator)
+	if !strings.HasPrefix(prov.lastReq.RuntimeDir, expectedPrefix) {
+		t.Fatalf("runtime dir %q does not live under %q", prov.lastReq.RuntimeDir, expectedPrefix)
+	}
+	if _, err := os.Stat(filepath.Join(prov.lastReq.RuntimeDir, "prompt.md")); err != nil {
+		t.Fatalf("expected persisted prompt.md: %v", err)
+	}
+	resultPath := filepath.Join(prov.lastReq.RuntimeDir, "result.json")
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		t.Fatalf("read result.json: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != `[{"ticket_number":"SC-1","title":"Test"}]` {
+		t.Fatalf("unexpected result.json contents: %q", string(data))
 	}
 }
 
@@ -415,4 +459,3 @@ func TestApplyAction_moveToNextState_runsNextState(t *testing.T) {
 		t.Errorf("expected waiting, got %q", result.FlowStatus)
 	}
 }
-

@@ -714,13 +714,20 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 		return nil, fmt.Errorf("read discover prompt: %w", err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "autopr-discover-*")
+	logsRoot, err := config.LogsDirPath()
 	if err != nil {
-		return nil, fmt.Errorf("create temp dir: %w", err)
+		return nil, fmt.Errorf("resolve logs dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir) //nolint:errcheck
+	runID, err := newUUID()
+	if err != nil {
+		return nil, fmt.Errorf("generate discover log id: %w", err)
+	}
+	runDir := filepath.Join(logsRoot, "discover-tickets", time.Now().UTC().Format("20060102T150405Z")+"-"+runID)
+	if err = os.MkdirAll(runDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create discover log dir: %w", err)
+	}
 
-	promptPath := filepath.Join(tmpDir, "prompt.md")
+	promptPath := filepath.Join(runDir, "prompt.md")
 	if err = os.WriteFile(promptPath, promptContent, 0o600); err != nil {
 		return nil, fmt.Errorf("write discover prompt: %w", err)
 	}
@@ -728,13 +735,16 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
 		PromptPath: promptPath,
 		WorkDir:    o.RepoRoot,
-		RuntimeDir: tmpDir,
+		RuntimeDir: runDir,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("execute provider: %w", err)
 	}
 
 	raw := strings.TrimSpace(result.RawOutput)
+	if writeErr := os.WriteFile(filepath.Join(runDir, "result.json"), []byte(raw+"\n"), 0o644); writeErr != nil {
+		return nil, fmt.Errorf("write discover result: %w", writeErr)
+	}
 	var tickets []DiscoveredTicket
 	if err = json.Unmarshal([]byte(raw), &tickets); err != nil {
 		return nil, fmt.Errorf("parse provider output: %w", err)

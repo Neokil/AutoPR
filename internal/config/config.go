@@ -139,6 +139,16 @@ func PromptsDirPath() (string, error) {
 	return filepath.Join(home, ".auto-pr", "prompts"), nil
 }
 
+// LogsDirPath returns the absolute path to the user-level logs directory (~/.auto-pr/logs).
+func LogsDirPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+
+	return filepath.Join(home, ".auto-pr", "logs"), nil
+}
+
 // Load reads the config file and merges it over the defaults, returning the result.
 // Missing file is not an error; individual unset fields fall back to their defaults.
 func Load() (Config, error) {
