@@ -12,6 +12,13 @@ base_branch: ""
 check_commands: []
 format_commands: []
 lint_commands: []
+discover_tickets_command: |
+  curl -fsSL \
+    -H "Content-Type: application/json" \
+    -H "Shortcut-Token: ${SHORTCUT_API_TOKEN:?SHORTCUT_API_TOKEN is required}" \
+    -d '{"label_name":"auto-pr","workflow_state_types":["backlog","unstarted"]}' \
+    https://api.app.shortcut.com/api/v3/stories/search \
+  | python3 -c 'import json, sys; stories = json.load(sys.stdin); print(json.dumps([{"ticket_number": "SC-{}".format(story["id"]), "title": story["name"]} for story in stories]))'
 
 providers:
   gemini:

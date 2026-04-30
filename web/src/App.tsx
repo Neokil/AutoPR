@@ -8,6 +8,7 @@ import {
   discoverTickets,
   getArtifact,
   getExecutionLogs,
+  getHealth,
   getJob,
   getTicket,
   listRepositories,
@@ -57,6 +58,7 @@ export function App() {
   const [discoveredTickets, setDiscoveredTickets] = useState<DiscoveredTicket[]>([]);
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverError, setDiscoverError] = useState("");
+  const [discoverConfigured, setDiscoverConfigured] = useState(false);
 
   const selectedSummary = useMemo(() => tickets.find((ticket) => ticketKey(ticket) === selectedKey) ?? null, [tickets, selectedKey]);
   const availableRepoPaths = useMemo(() => knownRepoPaths(repositoryOptions, tickets), [repositoryOptions, tickets]);
@@ -85,6 +87,9 @@ export function App() {
   useEffect(() => {
     void refreshTickets();
     void refreshRepositories();
+    void getHealth()
+      .then((health) => { setDiscoverConfigured(health.discover_tickets_configured); })
+      .catch(() => { setDiscoverConfigured(false); });
     const stream = connectEvents(
       (evt) => {
         void handleServerEvent(evt);
@@ -443,6 +448,9 @@ export function App() {
   }
 
   function openDiscoverModal() {
+    if (!discoverConfigured) {
+      return;
+    }
     const repoPath = selectedSummary?.repo_path ?? availableRepoPaths[0] ?? "";
     setDiscoverRepoPath(repoPath);
     setDiscoveredTickets([]);
@@ -487,9 +495,11 @@ export function App() {
           >
             Cleanup All
           </button>
-          <button onClick={openDiscoverModal} disabled={availableRepoPaths.length === 0}>
-            Discover Tickets
-          </button>
+          <span title={!discoverConfigured ? "not configured" : ""}>
+            <button onClick={openDiscoverModal} disabled={!discoverConfigured || availableRepoPaths.length === 0}>
+              Discover Tickets
+            </button>
+          </span>
         </div>
       </header>
 

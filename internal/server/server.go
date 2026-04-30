@@ -157,10 +157,11 @@ func Run(portOverride int) error {
 
 func (s *server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":       "ok",
-		"server_state": "~/.auto-pr/server/state.json",
-		"queue_depth":  len(s.jobs),
-		"frontend":     "embedded",
+		"status":                      "ok",
+		"server_state":                "~/.auto-pr/server/state.json",
+		"queue_depth":                 len(s.jobs),
+		"frontend":                    "embedded",
+		"discover_tickets_configured": strings.TrimSpace(s.cfg.DiscoverTicketsCommand) != "",
 	})
 }
 

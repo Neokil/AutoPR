@@ -241,6 +241,7 @@ export interface components {
             server_state: string;
             queue_depth: number;
             frontend: string;
+            discover_tickets_configured: boolean;
         };
         RepoRequest: {
             repo_path: string;

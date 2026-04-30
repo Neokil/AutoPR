@@ -59,6 +59,8 @@ Notes:
 
 Edit `~/.auto-pr/config.yaml` and at minimum set `repository_directories` to the folders AutoPR should scan.
 
+If you want the web UI "Discover Tickets" button enabled, configure `discover_tickets_command` and export `SHORTCUT_API_TOKEN`. The default command uses the Shortcut REST API via `curl`.
+
 Starter config:
 
 - [`config.example.yaml`](./config.example.yaml)

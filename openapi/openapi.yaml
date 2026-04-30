@@ -311,12 +311,13 @@ components:
       enum: [queued, running, done, failed]
     HealthResponse:
       type: object
-      required: [status, server_state, queue_depth, frontend]
+      required: [status, server_state, queue_depth, frontend, discover_tickets_configured]
       properties:
         status: { type: string }
         server_state: { type: string }
         queue_depth: { type: integer }
         frontend: { type: string }
+        discover_tickets_configured: { type: boolean }
     RepoRequest:
       type: object
       required: [repo_path]

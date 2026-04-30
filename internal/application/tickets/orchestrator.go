@@ -706,12 +706,11 @@ type DiscoveredTicket struct {
 	Title        string `json:"title"`
 }
 
-// DiscoverTickets runs the discover-shortcut-tickets prompt via the configured provider
-// and returns the list of stories tagged "auto-pr" that are not done or in progress.
+// DiscoverTickets runs the configured discovery command and returns the matching stories.
 func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket, error) {
-	promptContent, err := workflow.ReadPrompt(o.RepoRoot, "prompts/discover-shortcut-tickets.md")
-	if err != nil {
-		return nil, fmt.Errorf("read discover prompt: %w", err)
+	command := strings.TrimSpace(o.Cfg.DiscoverTicketsCommand)
+	if command == "" {
+		return nil, errors.New("discover tickets command is not configured")
 	}
 
 	logsRoot, err := config.LogsDirPath()
@@ -727,21 +726,26 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 		return nil, fmt.Errorf("create discover log dir: %w", err)
 	}
 
-	promptPath := filepath.Join(runDir, "prompt.md")
-	if err = os.WriteFile(promptPath, promptContent, 0o600); err != nil {
-		return nil, fmt.Errorf("write discover prompt: %w", err)
+	commandPath := filepath.Join(runDir, "command.sh")
+	if err = os.WriteFile(commandPath, []byte(command+"\n"), 0o600); err != nil {
+		return nil, fmt.Errorf("write discover command: %w", err)
 	}
 
-	result, err := o.Provider.Execute(ctx, providers.ExecuteRequest{
-		PromptPath: promptPath,
-		WorkDir:    o.RepoRoot,
-		RuntimeDir: runDir,
-	})
+	result, err := shell.Run(ctx, o.RepoRoot, map[string]string{
+		"AUTOPR_REPO_ROOT":          o.RepoRoot,
+		"AUTOPR_DISCOVER_LOG_DIR":   runDir,
+		"AUTOPR_DISCOVER_REPO_PATH": o.RepoRoot,
+	}, "", "/bin/zsh", "-lc", command)
+	_ = os.WriteFile(filepath.Join(runDir, "command-output.json"), []byte(result.Stdout), 0o644)
+	_ = os.WriteFile(filepath.Join(runDir, "command-stderr.log"), []byte(result.Stderr), 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("execute provider: %w", err)
+		return nil, fmt.Errorf("run discover command: %w", err)
 	}
 
-	raw := strings.TrimSpace(result.RawOutput)
+	raw := strings.TrimSpace(result.Stdout)
+	if raw == "" {
+		return nil, errors.New("discover command returned empty output")
+	}
 	if writeErr := os.WriteFile(filepath.Join(runDir, "result.json"), []byte(raw+"\n"), 0o644); writeErr != nil {
 		return nil, fmt.Errorf("write discover result: %w", writeErr)
 	}

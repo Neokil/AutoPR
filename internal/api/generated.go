@@ -159,10 +159,11 @@ type FlowStatus string
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
-	Frontend    string `json:"frontend"`
-	QueueDepth  int    `json:"queue_depth"`
-	ServerState string `json:"server_state"`
-	Status      string `json:"status"`
+	DiscoverTicketsConfigured bool   `json:"discover_tickets_configured"`
+	Frontend                  string `json:"frontend"`
+	QueueDepth                int    `json:"queue_depth"`
+	ServerState               string `json:"server_state"`
+	Status                    string `json:"status"`
 }
 
 // JobStatus defines model for JobStatus.

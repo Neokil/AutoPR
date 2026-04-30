@@ -14,3 +14,4 @@ export type AcceptedJob = components["schemas"]["ActionAcceptedResponse"];
 export type ServerEvent = components["schemas"]["ServerEvent"];
 export type RepositoryListResponse = components["schemas"]["RepositoryListResponse"];
 export type DiscoveredTicket = components["schemas"]["DiscoveredTicket"];
+export type HealthResponse = components["schemas"]["HealthResponse"];

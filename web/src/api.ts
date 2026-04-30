@@ -1,4 +1,4 @@
-import type { AcceptedJob, DiscoveredTicket, ExecutionLog, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { AcceptedJob, DiscoveredTicket, ExecutionLog, HealthResponse, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -25,6 +25,10 @@ export async function listTickets(repoPath?: string): Promise<TicketSummary[]> {
 export async function listRepositories(): Promise<string[]> {
   const data = await requestJSON<RepositoryListResponse>("/api/repositories");
   return data.repositories ?? [];
+}
+
+export function getHealth(): Promise<HealthResponse> {
+  return requestJSON<HealthResponse>("/api/health");
 }
 
 export async function getTicket(repoPath: string, ticket: string): Promise<TicketDetails> {

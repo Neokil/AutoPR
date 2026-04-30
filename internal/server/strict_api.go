@@ -68,10 +68,11 @@ func (s *server) CleanupScope(ctx context.Context, request api.CleanupScopeReque
 
 func (s *server) GetHealth(_ context.Context, _ api.GetHealthRequestObject) (api.GetHealthResponseObject, error) {
 	return api.GetHealth200JSONResponse(api.HealthResponse{
-		Status:      "ok",
-		ServerState: "~/.auto-pr/server/state.json",
-		QueueDepth:  len(s.jobs),
-		Frontend:    "embedded",
+		Status:                    "ok",
+		ServerState:               "~/.auto-pr/server/state.json",
+		QueueDepth:                len(s.jobs),
+		Frontend:                  "embedded",
+		DiscoverTicketsConfigured: strings.TrimSpace(s.cfg.DiscoverTicketsCommand) != "",
 	}), nil
 }
 

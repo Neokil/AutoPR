@@ -62,19 +62,20 @@ type ProviderCommand struct {
 
 // Config holds all runtime configuration for an AutoPR instance, loaded from ~/.auto-pr/config.yaml.
 type Config struct {
-	Provider       string                     `yaml:"provider"`
-	GuidelinesFile string                     `yaml:"guidelines_file"`
-	StateDirName   string                     `yaml:"state_dir_name"`
-	RepositoryDirs []string                   `yaml:"repository_directories"`
-	ServerPort     int                        `yaml:"server_port"`
-	ServerWorkers  int                        `yaml:"server_workers"`
-	CreatePR       bool                       `yaml:"create_pr"`
-	MaxFixAttempts int                        `yaml:"max_fix_attempts"`
-	BaseBranch     string                     `yaml:"base_branch"`
-	CheckCommands  []string                   `yaml:"check_commands"`
-	FormatCommands []string                   `yaml:"format_commands"`
-	LintCommands   []string                   `yaml:"lint_commands"`
-	Providers      map[string]ProviderCommand `yaml:"providers"`
+	Provider               string                     `yaml:"provider"`
+	GuidelinesFile         string                     `yaml:"guidelines_file"`
+	StateDirName           string                     `yaml:"state_dir_name"`
+	RepositoryDirs         []string                   `yaml:"repository_directories"`
+	ServerPort             int                        `yaml:"server_port"`
+	ServerWorkers          int                        `yaml:"server_workers"`
+	CreatePR               bool                       `yaml:"create_pr"`
+	MaxFixAttempts         int                        `yaml:"max_fix_attempts"`
+	BaseBranch             string                     `yaml:"base_branch"`
+	CheckCommands          []string                   `yaml:"check_commands"`
+	FormatCommands         []string                   `yaml:"format_commands"`
+	LintCommands           []string                   `yaml:"lint_commands"`
+	DiscoverTicketsCommand string                     `yaml:"discover_tickets_command"`
+	Providers              map[string]ProviderCommand `yaml:"providers"`
 }
 
 // Default returns a Config populated with built-in defaults.
@@ -88,6 +89,12 @@ func Default() Config {
 		CreatePR:       true,
 		MaxFixAttempts: 1,
 		CheckCommands:  []string{},
+		DiscoverTicketsCommand: `curl -fsSL \
+  -H "Content-Type: application/json" \
+  -H "Shortcut-Token: ${SHORTCUT_API_TOKEN:?SHORTCUT_API_TOKEN is required}" \
+  -d '{"label_name":"auto-pr","workflow_state_types":["backlog","unstarted"]}' \
+  https://api.app.shortcut.com/api/v3/stories/search \
+| python3 -c 'import json, sys; stories = json.load(sys.stdin); print(json.dumps([{"ticket_number": "SC-{}".format(story["id"]), "title": story["name"]} for story in stories]))'`,
 		Providers: map[string]ProviderCommand{
 			"gemini": {Command: "gemini", Args: []string{}},
 			"codex": {

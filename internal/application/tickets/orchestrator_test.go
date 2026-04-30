@@ -127,14 +127,6 @@ func newOrchestrator(repoRoot string, store *memStore, prov *mockProvider) *tick
 	)
 }
 
-func writeDiscoverPrompt(t *testing.T, repoRoot string, content string) {
-	t.Helper()
-	promptPath := filepath.Join(repoRoot, ".auto-pr", "prompts", "discover-shortcut-tickets.md")
-	if err := os.WriteFile(promptPath, []byte(content), 0o644); err != nil { //nolint:gosec // test file
-		t.Fatal(err)
-	}
-}
-
 // ── StartFlow ─────────────────────────────────────────────────────────────
 
 func TestStartFlow_newTicket_endsWaiting(t *testing.T) {
@@ -220,11 +212,19 @@ func TestDiscoverTickets_persistsLogsUnderUserHome(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	root := setupRepo(t, minimalWorkflow, ".")
-	writeDiscoverPrompt(t, root, "Discover tickets.")
 	store := newMemStore()
-	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: `[{"ticket_number":"SC-1","title":"Test"}]`}}
+	prov := &mockProvider{}
+	orch := tickets.NewWithStore(
+		config.Config{
+			StateDirName:           ".auto-pr-state",
+			DiscoverTicketsCommand: `printf '%s\n' '[{"ticket_number":"SC-1","title":"Test"}]'`,
+		},
+		root,
+		store,
+		prov,
+	)
 
-	found, err := newOrchestrator(root, store, prov).DiscoverTickets(context.Background())
+	found, err := orch.DiscoverTickets(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -232,14 +232,23 @@ func TestDiscoverTickets_persistsLogsUnderUserHome(t *testing.T) {
 		t.Fatalf("unexpected discovered tickets: %#v", found)
 	}
 
-	expectedPrefix := filepath.Join(home, ".auto-pr", "logs", "discover-tickets") + string(os.PathSeparator)
-	if !strings.HasPrefix(prov.lastReq.RuntimeDir, expectedPrefix) {
-		t.Fatalf("runtime dir %q does not live under %q", prov.lastReq.RuntimeDir, expectedPrefix)
+	logsRoot := filepath.Join(home, ".auto-pr", "logs", "discover-tickets")
+	entries, err := os.ReadDir(logsRoot)
+	if err != nil {
+		t.Fatalf("read discover logs dir: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(prov.lastReq.RuntimeDir, "prompt.md")); err != nil {
-		t.Fatalf("expected persisted prompt.md: %v", err)
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly one discover log dir, got %d", len(entries))
 	}
-	resultPath := filepath.Join(prov.lastReq.RuntimeDir, "result.json")
+	runDir := filepath.Join(logsRoot, entries[0].Name())
+	if _, err := os.Stat(filepath.Join(runDir, "command.sh")); err != nil {
+		t.Fatalf("expected persisted command.sh: %v", err)
+	}
+	stdoutPath := filepath.Join(runDir, "command-output.json")
+	if _, err := os.Stat(stdoutPath); err != nil {
+		t.Fatalf("expected persisted command-output.json: %v", err)
+	}
+	resultPath := filepath.Join(runDir, "result.json")
 	data, err := os.ReadFile(resultPath)
 	if err != nil {
 		t.Fatalf("read result.json: %v", err)
