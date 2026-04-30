@@ -37,7 +37,8 @@ func TestValidate_valid(t *testing.T) {
 			},
 		},
 	}
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		t.Fatalf("expected valid config, got error: %v", err)
 	}
 }
@@ -58,7 +59,8 @@ func TestValidate_terminalTargets(t *testing.T) {
 				},
 			},
 		}
-		if err := cfg.Validate(); err != nil {
+		err := cfg.Validate()
+		if err != nil {
 			t.Errorf("target %q should be valid terminal, got error: %v", target, err)
 		}
 	}

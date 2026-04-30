@@ -131,7 +131,7 @@ func ticketTitleForDisplay(st workflowstate.State) string {
 	if artifactRef == "" {
 		return ""
 	}
-	data, err := os.ReadFile(st.ResolveRef(artifactRef)) //nolint:gosec // G703: path resolved from trusted internal state
+	data, err := os.ReadFile(st.ResolveRef(artifactRef))
 	if err != nil {
 		return ""
 	}

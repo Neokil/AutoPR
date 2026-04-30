@@ -2,43 +2,17 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/Neokil/AutoPR/internal/api"
 	"github.com/Neokil/AutoPR/internal/application/tickets"
 	"github.com/Neokil/AutoPR/internal/gitutil"
 	"github.com/Neokil/AutoPR/internal/providers"
 	"github.com/Neokil/AutoPR/internal/state"
 )
-
-func (s *server) repoRuntimeFromBody(resp http.ResponseWriter, req *http.Request) (string, string, bool) {
-	var body api.RepoRequest
-	err := json.NewDecoder(req.Body).Decode(&body)
-	if err != nil {
-		writeError(resp, http.StatusBadRequest, "invalid json body")
-
-		return "", "", false
-	}
-	if strings.TrimSpace(body.RepoPath) == "" {
-		writeError(resp, http.StatusBadRequest, "repo_path is required")
-
-		return "", "", false
-	}
-	root, id, _, err := s.runtimeForRepoPath(req.Context(), body.RepoPath)
-	if err != nil {
-		writeError(resp, http.StatusBadRequest, err.Error())
-
-		return "", "", false
-	}
-
-	return root, id, true
-}
 
 func (s *server) runtimeForRepoPath(ctx context.Context, repoPath string) (string, string, *repoRuntime, error) {
 	repoRoot, err := resolveRepoRoot(ctx, repoPath)
@@ -86,7 +60,7 @@ func resolveRepoRoot(ctx context.Context, repoPath string) (string, error) {
 		return "", fmt.Errorf("resolve repo_path: %w", err)
 	}
 	dir := absPath
-	info, err := os.Stat(absPath) //nolint:gosec // G703: absPath is the resolved canonical repo path
+	info, err := os.Stat(absPath)
 	if err == nil && !info.IsDir() {
 		dir = filepath.Dir(absPath)
 	}

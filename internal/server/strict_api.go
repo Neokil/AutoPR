@@ -1,8 +1,10 @@
+//nolint:nilerr,ireturn
 package server
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -39,6 +41,7 @@ func (s *server) DiscoverTickets(ctx context.Context, request api.DiscoverTicket
 	for i, t := range found {
 		tickets[i] = api.DiscoveredTicket{TicketNumber: t.TicketNumber, Title: t.Title}
 	}
+
 	return api.DiscoverTickets200JSONResponse(api.DiscoverTicketsResponse{Tickets: tickets}), nil
 }
 
@@ -132,8 +135,9 @@ func (s *server) ListTickets(ctx context.Context, request api.ListTicketsRequest
 	if err != nil {
 		return api.ListTickets400JSONResponse{ErrorResponseJSONResponse: api.ErrorResponseJSONResponse{Error: err.Error()}}, nil
 	}
-	if err := s.syncRepoTickets(repoID, repoRoot, repoRt, false); err != nil {
-		return api.ListTickets500JSONResponse{Error: err.Error()}, nil
+	syncErr := s.syncRepoTickets(repoID, repoRoot, repoRt, false)
+	if syncErr != nil {
+		return api.ListTickets500JSONResponse{Error: syncErr.Error()}, nil
 	}
 
 	return api.ListTickets200JSONResponse(api.TicketListResponse{
@@ -148,12 +152,13 @@ func (s *server) GetTicket(ctx context.Context, request api.GetTicketRequestObje
 	if err != nil {
 		return api.GetTicket400JSONResponse{ErrorResponseJSONResponse: api.ErrorResponseJSONResponse{Error: err.Error()}}, nil
 	}
-	if err := s.syncTicketFromRepo(repoID, repoRoot, request.Id, repoRt, false); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+	syncErr := s.syncTicketFromRepo(repoID, repoRoot, request.Id, repoRt, false)
+	if syncErr != nil {
+		if errors.Is(syncErr, os.ErrNotExist) {
 			return api.GetTicket404JSONResponse{Error: "ticket not found"}, nil
 		}
 
-		return api.GetTicket500JSONResponse{Error: err.Error()}, nil
+		return api.GetTicket500JSONResponse{Error: syncErr.Error()}, nil
 	}
 
 	ticketState, err := repoRt.store.LoadState(request.Id)
@@ -232,7 +237,7 @@ func (s *server) GetTicketArtifact(ctx context.Context, request api.GetTicketArt
 	if !ok {
 		return api.GetTicketArtifact400JSONResponse{ErrorResponseJSONResponse: api.ErrorResponseJSONResponse{Error: "unknown artifact"}}, nil
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path resolved from trusted internal state
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return api.GetTicketArtifact200JSONResponse(api.TicketArtifactResponse{
@@ -318,7 +323,7 @@ func (s *server) GetExecutionLogs(ctx context.Context, request api.GetExecutionL
 	logs := make([]api.ExecutionLogResponse, 0, len(ticketState.StateHistory))
 	for _, run := range ticketState.StateHistory {
 		runPath := filepath.ToSlash(filepath.Join("runs", run.ID, "raw-provider.log"))
-		content, readErr := os.ReadFile(ticketState.ResolveRef(runPath)) //nolint:gosec // G703: path is constructed from trusted internal state
+		content, readErr := os.ReadFile(ticketState.ResolveRef(runPath))
 		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 			return api.GetExecutionLogs500JSONResponse{Error: readErr.Error()}, nil
 		}
@@ -382,13 +387,14 @@ func (s *server) RunTicket(ctx context.Context, request api.RunTicketRequestObje
 
 func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueueOptions) (api.ActionAcceptedResponse, int, error) {
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
-		if err := s.ensureQueuedTicket(repoID, repoPath, ticket); err != nil {
-			return api.ActionAcceptedResponse{}, http.StatusInternalServerError, err
+		queueErr := s.ensureQueuedTicket(repoID, repoPath, ticket)
+		if queueErr != nil {
+			return api.ActionAcceptedResponse{}, http.StatusInternalServerError, queueErr
 		}
 	}
 	job, err := s.meta.NewJob(action, repoID, repoPath, ticket, opts.scope)
 	if err != nil {
-		return api.ActionAcceptedResponse{}, http.StatusInternalServerError, err
+		return api.ActionAcceptedResponse{}, http.StatusInternalServerError, fmt.Errorf("create job: %w", err)
 	}
 	queued := queuedJob{
 		record:      job,
@@ -430,7 +436,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 			Error:        stringPtr("job queue is full"),
 		})
 
-		return api.ActionAcceptedResponse{}, http.StatusServiceUnavailable, errors.New("job queue is full")
+		return api.ActionAcceptedResponse{}, http.StatusServiceUnavailable, errJobQueueFull
 	}
 }
 

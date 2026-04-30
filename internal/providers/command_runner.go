@@ -23,30 +23,31 @@ type PromptCommandRunner struct {
 // Run executes the provider command in worktreePath, writing prompt artifacts to runtimeDir.
 // sessionData is the opaque session token from the previous run; empty on first run.
 // Returns the extracted text output, stderr, the new session token, and any execution error.
-func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir, phase, prompt, sessionData string) (text, stderr, newSessionData string, err error) {
-	if writeErr := writePromptArtifacts(runtimeDir, phase, prompt, "", ""); writeErr != nil {
+func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir, phase, prompt, sessionData string) (string, string, string, error) {
+	writeErr := writePromptArtifacts(runtimeDir, phase, prompt, "", "")
+	if writeErr != nil {
 		return "", "", "", writeErr
 	}
 
 	args := r.buildArgs(sessionData)
 	res, runErr := shell.Run(ctx, worktreePath, nil, prompt, r.command, args...)
 
-	text = extractTextResult(res.Stdout, r.sessionCfg)
-	newSessionData = extractSessionID(res.Stdout, r.sessionCfg)
-	_ = writePromptArtifacts(runtimeDir, phase, prompt, text, res.Stderr)
+	textResult := extractTextResult(res.Stdout, r.sessionCfg)
+	newSessionData := extractSessionID(res.Stdout, r.sessionCfg)
+	_ = writePromptArtifacts(runtimeDir, phase, prompt, textResult, res.Stderr)
 
 	if runErr != nil {
 		if looksLikeTokensExhausted(res.Stderr, res.Stdout) {
-			return text, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrTokensExhausted)
+			return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrTokensExhausted)
 		}
 
-		return text, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, runErr)
+		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, runErr)
 	}
-	if strings.TrimSpace(text) == "" {
+	if strings.TrimSpace(textResult) == "" {
 		return "", res.Stderr, "", fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrEmptyOutput)
 	}
 
-	return text, res.Stderr, newSessionData, nil
+	return textResult, res.Stderr, newSessionData, nil
 }
 
 // buildArgs returns the args to use for this invocation based on session state.
@@ -82,7 +83,8 @@ func extractSessionID(stdout string, cfg config.ProviderSessionConfig) string {
 	switch cfg.IDSource {
 	case "json":
 		var obj map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(stdout), &obj); err != nil {
+		err := json.Unmarshal([]byte(stdout), &obj)
+		if err != nil {
 			return ""
 		}
 
@@ -90,7 +92,8 @@ func extractSessionID(stdout string, cfg config.ProviderSessionConfig) string {
 	case "jsonl_first":
 		line := firstNonEmptyLine(stdout)
 		var obj map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+		err := json.Unmarshal([]byte(line), &obj)
+		if err != nil {
 			return ""
 		}
 
@@ -106,7 +109,8 @@ func extractTextResult(stdout string, cfg config.ProviderSessionConfig) string {
 	switch cfg.ResultSource {
 	case "json":
 		var obj map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(stdout), &obj); err != nil {
+		err := json.Unmarshal([]byte(stdout), &obj)
+		if err != nil {
 			return stdout
 		}
 		if text := extractJSONField(obj, cfg.ResultField); text != "" {
@@ -122,7 +126,8 @@ func extractTextResult(stdout string, cfg config.ProviderSessionConfig) string {
 				continue
 			}
 			var obj map[string]json.RawMessage
-			if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			unmarshalErr := json.Unmarshal([]byte(line), &obj)
+			if unmarshalErr != nil {
 				continue
 			}
 			typeRaw, ok := obj["type"]
@@ -130,7 +135,8 @@ func extractTextResult(stdout string, cfg config.ProviderSessionConfig) string {
 				continue
 			}
 			var typeName string
-			if err := json.Unmarshal(typeRaw, &typeName); err != nil || typeName != cfg.ResultEventType {
+			unmarshalErr = json.Unmarshal(typeRaw, &typeName)
+			if unmarshalErr != nil || typeName != cfg.ResultEventType {
 				continue
 			}
 			if text := extractJSONField(obj, cfg.ResultField); text != "" {
@@ -152,15 +158,17 @@ func extractJSONField(obj map[string]json.RawMessage, field string) string {
 		return ""
 	}
 	if tail == "" {
-		var s string
-		if err := json.Unmarshal(raw, &s); err != nil {
+		var strVal string
+		err := json.Unmarshal(raw, &strVal)
+		if err != nil {
 			return ""
 		}
 
-		return s
+		return strVal
 	}
 	var nested map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &nested); err != nil {
+	err := json.Unmarshal(raw, &nested)
+	if err != nil {
 		return ""
 	}
 
@@ -168,7 +176,7 @@ func extractJSONField(obj map[string]json.RawMessage, field string) string {
 }
 
 func firstNonEmptyLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if strings.TrimSpace(line) != "" {
 			return strings.TrimSpace(line)
 		}
@@ -205,12 +213,12 @@ func writePromptArtifacts(runtimeDir, phase, prompt, stdout, stderr string) erro
 	inputPath := filepath.Join(runtimeDir, phase+"-input.md")
 	outputPath := filepath.Join(runtimeDir, phase+"-output.md")
 	stderrPath := filepath.Join(runtimeDir, phase+"-stderr.log")
-	err := os.WriteFile(inputPath, []byte(prompt), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts
+	err := os.WriteFile(inputPath, []byte(prompt), 0o644) //nolint:gosec // G703: runtimeDir is an internal trusted path
 	if err != nil {
 		return fmt.Errorf("write input file: %w", err)
 	}
-	_ = os.WriteFile(outputPath, []byte(stdout), 0o644)  //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts
-	_ = os.WriteFile(stderrPath, []byte(stderr), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable run artifacts
+	_ = os.WriteFile(outputPath, []byte(stdout), 0o644) 
+	_ = os.WriteFile(stderrPath, []byte(stderr), 0o644)
 
 	return nil
 }

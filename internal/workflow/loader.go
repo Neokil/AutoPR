@@ -49,7 +49,7 @@ func Load(repoRoot string) (Config, error) {
 //  3. Embedded binary default
 func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 	projectPath := filepath.Join(repoRoot, ".auto-pr", promptRelPath)
-	data, err := os.ReadFile(projectPath) //nolint:gosec // G304: path built from trusted repo root
+	data, err := os.ReadFile(projectPath)
 	if err == nil {
 		return data, nil
 	}
@@ -59,7 +59,7 @@ func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 		return nil, fmt.Errorf("resolve home dir: %w", err)
 	}
 	globalPath := filepath.Join(home, ".auto-pr", promptRelPath)
-	data, err = os.ReadFile(globalPath) //nolint:gosec // G304: path built from trusted home dir
+	data, err = os.ReadFile(globalPath)
 	if err == nil {
 		return data, nil
 	}
@@ -77,7 +77,7 @@ func ReadPrompt(repoRoot, promptRelPath string) ([]byte, error) {
 }
 
 func loadFromFile(path string) (Config, bool, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path built from trusted config hierarchy
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Config{}, false, nil

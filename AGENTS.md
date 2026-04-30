@@ -59,6 +59,9 @@ All three must pass before considering the work done.
 - Keep CLI, daemon, OpenAPI, and web types in sync when changing API shapes.
 - Preserve repository-local runtime state semantics under `.auto-pr/`; do not commit runtime artifacts.
 - Avoid introducing new infrastructure or dependencies unless they clearly support the existing daemon/CLI/web architecture.
+- When implementing things, go with the simplest and most straightforward solution — no unnecessary abstractions or clever patterns.
+- Changing linter settings is a last resort. Always try to fix the actual issue first. Only suppress or reconfigure a linter when the code is genuinely correct and the lint rule cannot apply.
+- After implementing a change, check whether it allows simplifying anything else in the project. If yes, do that simplification as part of the same change.
 
 ## Generated Or Derived Files
 

@@ -262,6 +262,67 @@ func (o *Orchestrator) CleanupAll(ctx context.Context) error {
 	return nil
 }
 
+// DiscoveredTicket is a Shortcut story returned by the discovery prompt.
+type DiscoveredTicket struct {
+	TicketNumber string `json:"ticket_number"`
+	Title        string `json:"title"`
+}
+
+// DiscoverTickets runs the configured discovery command and returns the matching stories.
+func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket, error) {
+	command := strings.TrimSpace(o.Cfg.DiscoverTicketsCommand)
+	if command == "" {
+		return nil, ErrDiscoverNotConfigured
+	}
+
+	logsRoot, err := config.LogsDirPath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve logs dir: %w", err)
+	}
+	runID, err := newUUID()
+	if err != nil {
+		return nil, fmt.Errorf("generate discover log id: %w", err)
+	}
+	runDir := filepath.Join(logsRoot, "discover-tickets", time.Now().UTC().Format("20060102T150405Z")+"-"+runID)
+	err = os.MkdirAll(runDir, 0o755)
+	if err != nil {
+		return nil, fmt.Errorf("create discover log dir: %w", err)
+	}
+
+	commandPath := filepath.Join(runDir, "command.sh")
+	err = os.WriteFile(commandPath, []byte(command+"\n"), 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("write discover command: %w", err)
+	}
+
+	result, err := shell.Run(ctx, o.RepoRoot, map[string]string{
+		"AUTOPR_REPO_ROOT":          o.RepoRoot,
+		"AUTOPR_DISCOVER_LOG_DIR":   runDir,
+		"AUTOPR_DISCOVER_REPO_PATH": o.RepoRoot,
+	}, "", "/bin/zsh", "-lc", command)
+	_ = os.WriteFile(filepath.Join(runDir, "command-output.json"), []byte(result.Stdout), 0o644)
+	_ = os.WriteFile(filepath.Join(runDir, "command-stderr.log"), []byte(result.Stderr), 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("run discover command: %w", err)
+	}
+
+	raw := strings.TrimSpace(result.Stdout)
+	if raw == "" {
+		return nil, ErrDiscoverEmptyOutput
+	}
+	writeErr := os.WriteFile(filepath.Join(runDir, "result.json"), []byte(raw+"\n"), 0o644)
+	if writeErr != nil {
+		return nil, fmt.Errorf("write discover result: %w", writeErr)
+	}
+	var tickets []DiscoveredTicket
+	err = json.Unmarshal([]byte(raw), &tickets)
+	if err != nil {
+		return nil, fmt.Errorf("parse provider output: %w", err)
+	}
+
+	return tickets, nil
+}
+
 func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *workflowstate.State) error {
 	if state.WorktreePath == "" {
 		branchName := "auto-pr/" + state.TicketNumber
@@ -279,7 +340,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *work
 	}
 
 	autoPRDir := filepath.Join(state.WorktreePath, ".auto-pr")
-	err := os.MkdirAll(autoPRDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+	err := os.MkdirAll(autoPRDir, 0o755)
 	if err != nil {
 		return fmt.Errorf("create .auto-pr dir: %w", err)
 	}
@@ -289,7 +350,7 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *work
 	if os.IsNotExist(statErr) {
 		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
 		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", state.TicketNumber, state.WorktreePath, o.RepoRoot, guidelinesPath)
-		err = os.WriteFile(contextPath, []byte(content), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
+		err = os.WriteFile(contextPath, []byte(content), 0o644)
 		if err != nil {
 			return fmt.Errorf("write context file: %w", err)
 		}
@@ -331,13 +392,13 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 	}
 
 	promptPath := state.RunPath(run.ID, "prompt.md")
-	err = os.WriteFile(promptPath, promptContent, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable prompt files
+	err = os.WriteFile(promptPath, promptContent, 0o644)
 	if err != nil {
 		return o.failState(state, err)
 	}
 
 	runtimeDir := state.RunPath(run.ID, "provider")
-	err = os.MkdirAll(runtimeDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+	err = os.MkdirAll(runtimeDir, 0o755)
 	if err != nil {
 		return o.failState(state, err)
 	}
@@ -353,7 +414,7 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 		state.ProviderSessionData = result.SessionData
 	}
 	rawLogPath := state.RunPath(run.ID, "raw-provider.log")
-	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable log files
+	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644)
 	if err != nil {
 		if errors.Is(err, providers.ErrTokensExhausted) {
 			err = fmt.Errorf("token usage limit reached — wait for your quota to reset, then rerun this ticket to continue: %w", err)
@@ -439,12 +500,13 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *workflo
 	}
 	slog.Info("applying feedback", "ticket", state.TicketNumber, "state", state.CurrentState)
 	if state.CurrentRunID == "" {
-		return fmt.Errorf("no current run ID to attach feedback to")
+		return ErrNoCurrentRunID
 	}
 	content := []byte(strings.TrimSpace(message))
 	runFeedbackPath := state.RunPath(state.CurrentRunID, "feedback.md")
-	if err := os.WriteFile(runFeedbackPath, content, 0o644); err != nil { //nolint:gosec,mnd // G306: 0644 intentional for user-readable feedback files
-		return fmt.Errorf("write feedback file: %w", err)
+	writeErr := os.WriteFile(runFeedbackPath, content, 0o644)
+	if writeErr != nil {
+		return fmt.Errorf("write feedback file: %w", writeErr)
 	}
 	stateCfg, ok := wflow.StateByName(state.CurrentState)
 	if !ok {
@@ -634,7 +696,7 @@ func (o *Orchestrator) prepareRunContext(
 	state workflowstate.State, stateCfg workflow.StateConfig, run workflowstate.StateRun,
 ) error {
 	runDir := state.RunPath(run.ID)
-	err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+	err := os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755)
 	if err != nil {
 		return fmt.Errorf("create run artifacts dir: %w", err)
 	}
@@ -669,12 +731,13 @@ func (o *Orchestrator) prepareRunContext(
 			fmt.Fprintf(&buf, "- %s: %s\n", entry.StateName, filepath.ToSlash(filepath.Join(".auto-pr", entry.ArtifactRef)))
 		}
 		runFeedbackPath := filepath.Join("runs", entry.ID, "feedback.md")
-		if _, statErr := os.Stat(state.ResolveRef(runFeedbackPath)); statErr == nil {
+		_, statErr := os.Stat(state.ResolveRef(runFeedbackPath))
+		if statErr == nil {
 			fmt.Fprintf(&buf, "- %s-feedback: %s\n", entry.StateName, filepath.ToSlash(filepath.Join(".auto-pr", runFeedbackPath)))
 		}
 	}
 
-	err = os.WriteFile(state.ArtifactPath("run-context.md"), []byte(buf.String()), 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable context files
+	err = os.WriteFile(state.ArtifactPath("run-context.md"), []byte(buf.String()), 0o644)
 	if err != nil {
 		return fmt.Errorf("write run-context: %w", err)
 	}
@@ -700,75 +763,18 @@ func newUUID() (string, error) {
 	), nil
 }
 
-// DiscoveredTicket is a Shortcut story returned by the discovery prompt.
-type DiscoveredTicket struct {
-	TicketNumber string `json:"ticket_number"`
-	Title        string `json:"title"`
-}
-
-// DiscoverTickets runs the configured discovery command and returns the matching stories.
-func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket, error) {
-	command := strings.TrimSpace(o.Cfg.DiscoverTicketsCommand)
-	if command == "" {
-		return nil, errors.New("discover tickets command is not configured")
-	}
-
-	logsRoot, err := config.LogsDirPath()
-	if err != nil {
-		return nil, fmt.Errorf("resolve logs dir: %w", err)
-	}
-	runID, err := newUUID()
-	if err != nil {
-		return nil, fmt.Errorf("generate discover log id: %w", err)
-	}
-	runDir := filepath.Join(logsRoot, "discover-tickets", time.Now().UTC().Format("20060102T150405Z")+"-"+runID)
-	if err = os.MkdirAll(runDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create discover log dir: %w", err)
-	}
-
-	commandPath := filepath.Join(runDir, "command.sh")
-	if err = os.WriteFile(commandPath, []byte(command+"\n"), 0o600); err != nil {
-		return nil, fmt.Errorf("write discover command: %w", err)
-	}
-
-	result, err := shell.Run(ctx, o.RepoRoot, map[string]string{
-		"AUTOPR_REPO_ROOT":          o.RepoRoot,
-		"AUTOPR_DISCOVER_LOG_DIR":   runDir,
-		"AUTOPR_DISCOVER_REPO_PATH": o.RepoRoot,
-	}, "", "/bin/zsh", "-lc", command)
-	_ = os.WriteFile(filepath.Join(runDir, "command-output.json"), []byte(result.Stdout), 0o644)
-	_ = os.WriteFile(filepath.Join(runDir, "command-stderr.log"), []byte(result.Stderr), 0o644)
-	if err != nil {
-		return nil, fmt.Errorf("run discover command: %w", err)
-	}
-
-	raw := strings.TrimSpace(result.Stdout)
-	if raw == "" {
-		return nil, errors.New("discover command returned empty output")
-	}
-	if writeErr := os.WriteFile(filepath.Join(runDir, "result.json"), []byte(raw+"\n"), 0o644); writeErr != nil {
-		return nil, fmt.Errorf("write discover result: %w", writeErr)
-	}
-	var tickets []DiscoveredTicket
-	if err = json.Unmarshal([]byte(raw), &tickets); err != nil {
-		return nil, fmt.Errorf("parse provider output: %w", err)
-	}
-
-	return tickets, nil
-}
-
 // EnsureStateIgnored ensures the state directory is listed in .gitignore.
 func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	ignorePath := filepath.Join(repoRoot, ".gitignore")
 	entry := stateDirName + "/"
-	contents, err := os.ReadFile(ignorePath) //nolint:gosec // G304: path built from trusted repo root
+	contents, err := os.ReadFile(ignorePath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("read .gitignore: %w", err)
 	}
 	if strings.Contains(string(contents), entry) {
 		return nil
 	}
-	file, err := os.OpenFile(ignorePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec,mnd // G302: 0644 is correct for .gitignore
+	file, err := os.OpenFile(ignorePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("open .gitignore: %w", err)
 	}

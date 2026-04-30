@@ -13,7 +13,11 @@ var (
 	ErrTargetNotFound      = errors.New("target state not found in workflow")
 	ErrFeedbackRequired    = errors.New("feedback message is required")
 	ErrUnknownActionType   = errors.New("unknown action type")
-	ErrScriptSubAction     = errors.New("scripts cannot be used as sub-actions")
+	ErrScriptSubAction      = errors.New("scripts cannot be used as sub-actions")
 	ErrUnsupportedSubAction = errors.New("unsupported sub-action type")
 	ErrWorkflowNoStates     = errors.New("workflow has no states defined")
+
+	ErrNoCurrentRunID       = errors.New("no current run ID to attach feedback to")
+	ErrDiscoverNotConfigured = errors.New("discover tickets command is not configured")
+	ErrDiscoverEmptyOutput  = errors.New("discover command returned empty output")
 )

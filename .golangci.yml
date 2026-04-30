@@ -24,3 +24,20 @@ linters:
         - id
         - i
         - j
+
+    gosec:
+      excludes:
+        - G301
+        - G302
+        - G304
+        - G306
+
+    mnd:
+      ignored-numbers:
+        - "0o600"
+        - "0o644"
+        - "0o755"
+
+  exclusions:
+    paths:
+      - web/node_modules

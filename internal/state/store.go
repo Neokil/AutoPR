@@ -1,3 +1,4 @@
+// Package state provides the filesystem-backed ticket state store.
 package state
 
 import (
@@ -37,7 +38,7 @@ func (s *Store) TicketDir(ticketNumber string) string {
 func (s *Store) LoadState(ticketNumber string) (workflowstate.State, error) {
 	// Prefer the worktree location when it exists.
 	wtStatePath := filepath.Join(s.worktreePath(ticketNumber), ".auto-pr", StateFileName)
-	data, err := os.ReadFile(wtStatePath) //nolint:gosec // G304: path constructed from internal worktree state
+	data, err := os.ReadFile(wtStatePath)
 	if err == nil {
 		return parseStateJSON(ticketNumber, data)
 	}
@@ -62,11 +63,11 @@ func (s *Store) SaveState(ticketNumber string, state workflowstate.State) error 
 	if state.WorktreePath != "" {
 		// Once the worktree exists, state lives inside it.
 		autoPRDir := filepath.Join(state.WorktreePath, ".auto-pr")
-		err = os.MkdirAll(autoPRDir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+		err = os.MkdirAll(autoPRDir, 0o755)
 		if err != nil {
 			return fmt.Errorf("create worktree state dir: %w", err)
 		}
-		err = os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
+		err = os.WriteFile(filepath.Join(autoPRDir, StateFileName), data, 0o644)
 		if err != nil {
 			return fmt.Errorf("write worktree state: %w", err)
 		}
@@ -81,7 +82,7 @@ func (s *Store) SaveState(ticketNumber string, state workflowstate.State) error 
 		return err
 	}
 
-	err = os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644) //nolint:gosec,mnd // G306: 0644 intentional for user-readable state files
+	err = os.WriteFile(filepath.Join(dir, StateFileName), data, 0o644)
 	if err != nil {
 		return fmt.Errorf("write state: %w", err)
 	}
@@ -151,7 +152,7 @@ func (s *Store) worktreePath(ticketNumber string) string {
 
 func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 	dir := s.TicketDir(ticketNumber)
-	err := os.MkdirAll(dir, 0o755) //nolint:gosec,mnd // G301: 0755 correct for project directories
+	err := os.MkdirAll(dir, 0o755)
 	if err != nil {
 		return "", fmt.Errorf("create ticket runtime dir: %w", err)
 	}

@@ -164,7 +164,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path built from trusted config hierarchy
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return cfg, nil

@@ -61,6 +61,7 @@ type mockProvider struct {
 func (p *mockProvider) Name() string { return "mock" }
 func (p *mockProvider) Execute(_ context.Context, req providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	p.lastReq = req
+
 	return p.result, p.err
 }
 
@@ -72,18 +73,23 @@ func setupRepo(t *testing.T, yaml string, promptContent string) string {
 	t.Helper()
 	root := t.TempDir()
 	autopr := filepath.Join(root, ".auto-pr")
-	if err := os.MkdirAll(filepath.Join(autopr, "prompts"), 0o755); err != nil {
-		t.Fatal(err)
+	mkErr := os.MkdirAll(filepath.Join(autopr, "prompts"), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
 	}
-	if err := os.WriteFile(filepath.Join(autopr, "workflow.yaml"), []byte(yaml), 0o644); err != nil { //nolint:gosec // test file
-		t.Fatal(err)
+	wfErr := os.WriteFile(filepath.Join(autopr, "workflow.yaml"), []byte(yaml), 0o644)
+	if wfErr != nil {
+		t.Fatal(wfErr)
 	}
-	if err := os.WriteFile(filepath.Join(autopr, "prompts", "step.md"), []byte(promptContent), 0o644); err != nil { //nolint:gosec // test file
-		t.Fatal(err)
+	promptErr := os.WriteFile(filepath.Join(autopr, "prompts", "step.md"), []byte(promptContent), 0o644)
+	if promptErr != nil {
+		t.Fatal(promptErr)
 	}
 
 	return root
 }
+
+const stateInvestigate = "investigate"
 
 const minimalWorkflow = `
 states:
@@ -100,22 +106,22 @@ states:
 // prepareWorktree creates a temp dir to act as the worktree and pre-populates
 // the directories that runState needs, then saves the state so ensureWorktreeAndContext
 // is skipped (WorktreePath != "").
-func prepareWorktree(t *testing.T, store *memStore, ticketNumber string) string {
+func prepareWorktree(t *testing.T, store *memStore, ticketNumber string) {
 	t.Helper()
-	wt := t.TempDir()
+	worktreeDir := t.TempDir()
 	st := workflowstate.New(ticketNumber)
-	st.WorktreePath = wt
+	st.WorktreePath = worktreeDir
 	st.BranchName = "auto-pr/" + ticketNumber
 	st.FlowStatus = workflowstate.FlowStatusPending
-	if err := store.SaveState(ticketNumber, st); err != nil {
-		t.Fatal(err)
+	saveErr := store.SaveState(ticketNumber, st)
+	if saveErr != nil {
+		t.Fatal(saveErr)
 	}
 	// Create the .auto-pr sub-directory so context file writes succeed.
-	if err := os.MkdirAll(filepath.Join(wt, ".auto-pr"), 0o755); err != nil {
-		t.Fatal(err)
+	mkErr := os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr"), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
 	}
-
-	return wt
 }
 
 func newOrchestrator(repoRoot string, store *memStore, prov *mockProvider) *tickets.Orchestrator {
@@ -144,7 +150,7 @@ func TestStartFlow_newTicket_endsWaiting(t *testing.T) {
 	if st.FlowStatus != workflowstate.FlowStatusWaiting {
 		t.Errorf("expected waiting, got %q", st.FlowStatus)
 	}
-	if st.CurrentState != "investigate" {
+	if st.CurrentState != stateInvestigate {
 		t.Errorf("expected state=investigate, got %q", st.CurrentState)
 	}
 }
@@ -190,7 +196,7 @@ func TestStartFlow_providerError_setsFailedStatus(t *testing.T) {
 	t.Parallel()
 	root := setupRepo(t, minimalWorkflow, ".")
 	store := newMemStore()
-	provErr := errors.New("provider exploded")
+	provErr := errors.New("provider exploded") //nolint:err113 // test-local sentinel
 	prov := &mockProvider{err: provErr}
 	prepareWorktree(t, store, "5")
 
@@ -241,12 +247,14 @@ func TestDiscoverTickets_persistsLogsUnderUserHome(t *testing.T) {
 		t.Fatalf("expected exactly one discover log dir, got %d", len(entries))
 	}
 	runDir := filepath.Join(logsRoot, entries[0].Name())
-	if _, err := os.Stat(filepath.Join(runDir, "command.sh")); err != nil {
-		t.Fatalf("expected persisted command.sh: %v", err)
+	_, statErr := os.Stat(filepath.Join(runDir, "command.sh"))
+	if statErr != nil {
+		t.Fatalf("expected persisted command.sh: %v", statErr)
 	}
 	stdoutPath := filepath.Join(runDir, "command-output.json")
-	if _, err := os.Stat(stdoutPath); err != nil {
-		t.Fatalf("expected persisted command-output.json: %v", err)
+	_, statErr = os.Stat(stdoutPath)
+	if statErr != nil {
+		t.Fatalf("expected persisted command-output.json: %v", statErr)
 	}
 	resultPath := filepath.Join(runDir, "result.json")
 	data, err := os.ReadFile(resultPath)
@@ -280,13 +288,14 @@ func TestApplyAction_unknownLabel_returnsError(t *testing.T) {
 	t.Parallel()
 	root := setupRepo(t, minimalWorkflow, ".")
 	store := newMemStore()
-	wt := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(wt, ".auto-pr"), 0o755); err != nil {
-		t.Fatal(err)
+	worktreeDir := t.TempDir()
+	mkErr := os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr"), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
 	}
 	st := workflowstate.New("8")
-	st.WorktreePath = wt
-	st.CurrentState = "investigate"
+	st.WorktreePath = worktreeDir
+	st.CurrentState = stateInvestigate
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("8", st)
 
@@ -300,13 +309,14 @@ func TestApplyAction_moveToStateDone_setsDone(t *testing.T) {
 	t.Parallel()
 	root := setupRepo(t, minimalWorkflow, ".")
 	store := newMemStore()
-	wt := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(wt, ".auto-pr"), 0o755); err != nil {
-		t.Fatal(err)
+	worktreeDir := t.TempDir()
+	mkErr := os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr"), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
 	}
 	st := workflowstate.New("99")
-	st.WorktreePath = wt
-	st.CurrentState = "investigate"
+	st.WorktreePath = worktreeDir
+	st.CurrentState = stateInvestigate
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("99", st)
 
@@ -324,13 +334,14 @@ func TestApplyAction_provideFeedback_emptyMessage_returnsError(t *testing.T) {
 	t.Parallel()
 	root := setupRepo(t, minimalWorkflow, ".")
 	store := newMemStore()
-	wt := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(wt, ".auto-pr"), 0o755); err != nil {
-		t.Fatal(err)
+	worktreeDir := t.TempDir()
+	mkErr := os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr"), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
 	}
 	st := workflowstate.New("11")
-	st.WorktreePath = wt
-	st.CurrentState = "investigate"
+	st.WorktreePath = worktreeDir
+	st.CurrentState = stateInvestigate
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("11", st)
 
@@ -344,13 +355,20 @@ func TestApplyAction_provideFeedback_reruns(t *testing.T) {
 	t.Parallel()
 	root := setupRepo(t, minimalWorkflow, ".")
 	store := newMemStore()
-	wt := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(wt, ".auto-pr"), 0o755); err != nil {
-		t.Fatal(err)
+	worktreeDir := t.TempDir()
+	mkErr := os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr"), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
+	}
+	const runID = "run-001"
+	mkErr = os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr", "runs", runID), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
 	}
 	st := workflowstate.New("12")
-	st.WorktreePath = wt
-	st.CurrentState = "investigate"
+	st.WorktreePath = worktreeDir
+	st.CurrentRunID = runID
+	st.CurrentState = stateInvestigate
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("12", st)
 	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "re-investigated"}}
@@ -394,10 +412,11 @@ func TestCleanupTicket_removesState(t *testing.T) {
 func TestEnsureStateIgnored_appendsEntry(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	if err := tickets.EnsureStateIgnored(root, ".auto-pr-state"); err != nil {
+	err := tickets.EnsureStateIgnored(root, ".auto-pr-state")
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	contents, err := os.ReadFile(filepath.Join(root, ".gitignore")) //nolint:gosec // G304: test path
+	contents, err := os.ReadFile(filepath.Join(root, ".gitignore"))
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
@@ -410,14 +429,16 @@ func TestEnsureStateIgnored_idempotent(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ignorePath := filepath.Join(root, ".gitignore")
-	if err := os.WriteFile(ignorePath, []byte(".auto-pr-state/\n"), 0o644); err != nil { //nolint:gosec // test file
-		t.Fatal(err)
+	writeErr := os.WriteFile(ignorePath, []byte(".auto-pr-state/\n"), 0o644)
+	if writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	before, _ := os.ReadFile(ignorePath) //nolint:gosec // G304: test path
-	if err := tickets.EnsureStateIgnored(root, ".auto-pr-state"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	before, _ := os.ReadFile(ignorePath)
+	idempotentErr := tickets.EnsureStateIgnored(root, ".auto-pr-state")
+	if idempotentErr != nil {
+		t.Fatalf("unexpected error: %v", idempotentErr)
 	}
-	after, _ := os.ReadFile(ignorePath) //nolint:gosec // G304: test path
+	after, _ := os.ReadFile(ignorePath)
 	if string(before) != string(after) {
 		t.Errorf("file should not change when entry already present")
 	}
@@ -445,13 +466,14 @@ func TestApplyAction_moveToNextState_runsNextState(t *testing.T) {
 	t.Parallel()
 	root := setupRepo(t, twoStateWorkflow, "do work")
 	store := newMemStore()
-	wt := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(wt, ".auto-pr"), 0o755); err != nil {
-		t.Fatal(err)
+	worktreeDir := t.TempDir()
+	mkErr := os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr"), 0o755)
+	if mkErr != nil {
+		t.Fatal(mkErr)
 	}
 	st := workflowstate.New("50")
-	st.WorktreePath = wt
-	st.CurrentState = "investigate"
+	st.WorktreePath = worktreeDir
+	st.CurrentState = stateInvestigate
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("50", st)
 	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "implemented"}}

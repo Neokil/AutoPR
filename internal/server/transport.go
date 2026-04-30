@@ -6,9 +6,9 @@ import (
 	"github.com/Neokil/AutoPR/internal/serverstate"
 )
 
-func toTicketStateResponse(st workflowstate.State) api.TicketStateResponse {
-	history := make([]api.StateRunResponse, 0, len(st.StateHistory))
-	for _, run := range st.StateHistory {
+func toTicketStateResponse(state workflowstate.State) api.TicketStateResponse {
+	history := make([]api.StateRunResponse, 0, len(state.StateHistory))
+	for _, run := range state.StateHistory {
 		history = append(history, api.StateRunResponse{
 			Id:               run.ID,
 			StateName:        run.StateName,
@@ -20,17 +20,17 @@ func toTicketStateResponse(st workflowstate.State) api.TicketStateResponse {
 	}
 
 	return api.TicketStateResponse{
-		TicketNumber: st.TicketNumber,
-		CurrentState: st.CurrentState,
-		CurrentRunId: stringPtr(st.CurrentRunID),
-		FlowStatus:   api.FlowStatus(st.FlowStatus),
-		BranchName:   st.BranchName,
-		WorktreePath: st.WorktreePath,
-		LastError:    stringPtr(st.LastError),
-		PrUrl:        stringPtr(st.PRURL),
+		TicketNumber: state.TicketNumber,
+		CurrentState: state.CurrentState,
+		CurrentRunId: stringPtr(state.CurrentRunID),
+		FlowStatus:   api.FlowStatus(state.FlowStatus),
+		BranchName:   state.BranchName,
+		WorktreePath: state.WorktreePath,
+		LastError:    stringPtr(state.LastError),
+		PrUrl:        stringPtr(state.PRURL),
 		StateHistory: slicePtr(history),
-		CreatedAt:    st.CreatedAt,
-		UpdatedAt:    st.UpdatedAt,
+		CreatedAt:    state.CreatedAt,
+		UpdatedAt:    state.UpdatedAt,
 	}
 }
 

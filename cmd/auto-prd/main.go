@@ -1,3 +1,4 @@
+// Package main is the entry point for the auto-prd daemon.
 package main
 
 import (

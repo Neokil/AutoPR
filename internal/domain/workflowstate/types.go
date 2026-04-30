@@ -69,7 +69,7 @@ func (s *State) ArtifactPath(name string) string {
 
 // RunPath returns the filesystem path to a file or directory within a state run's directory.
 func (s *State) RunPath(runID string, parts ...string) string {
-	pathParts := make([]string, 0, 4+len(parts))
+	pathParts := make([]string, 0, 4+len(parts)) //nolint:mnd // 4 fixed path components: WorktreePath + ".auto-pr" + "runs" + runID
 	pathParts = append(pathParts, s.WorktreePath, ".auto-pr", "runs", runID)
 	pathParts = append(pathParts, parts...)
 
