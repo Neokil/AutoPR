@@ -30,9 +30,10 @@ providers:
     args:
       - exec
       - "-"
+      - --dangerously-bypass-approvals-and-sandbox
     session:
-      init_args: ["exec", "-", "--json"]
-      resume_args: ["exec", "resume", "{{.SessionID}}", "--json"]
+      init_args: ["exec", "-", "--dangerously-bypass-approvals-and-sandbox", "--json"]
+      resume_args: ["exec", "resume", "{{.SessionID}}", "--dangerously-bypass-approvals-and-sandbox", "--json"]
       id_source: jsonl_first
       id_field: thread_id
       result_source: jsonl_last

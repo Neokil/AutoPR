@@ -99,10 +99,10 @@ func Default() Config {
 			"gemini": {Command: "gemini", Args: []string{}},
 			"codex": {
 				Command: "codex",
-				Args:    []string{"exec", "-"},
+				Args:    []string{"exec", "-", "--dangerously-bypass-approvals-and-sandbox"},
 				Session: ProviderSessionConfig{
-					InitArgs:        []string{"exec", "-", "--json"},
-					ResumeArgs:      []string{"exec", "resume", "{{.SessionID}}", "--json"},
+					InitArgs:        []string{"exec", "-", "--dangerously-bypass-approvals-and-sandbox", "--json"},
+					ResumeArgs:      []string{"exec", "resume", "{{.SessionID}}", "--dangerously-bypass-approvals-and-sandbox", "--json"},
 					IDSource:        "jsonl_first",
 					IDField:         "thread_id",
 					ResultSource:    "jsonl_last",
