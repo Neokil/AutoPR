@@ -43,7 +43,7 @@ func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir,
 
 		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, runErr)
 	}
-	if sessionErr := extractProviderSessionError(res.Stderr); sessionErr != "" {
+	if sessionErr := extractProviderSessionError(res.Stderr); sessionErr != "" && strings.TrimSpace(textResult) == "" {
 		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s: %s", r.providerName, phase, sessionErr)
 	}
 	if strings.TrimSpace(textResult) == "" {
