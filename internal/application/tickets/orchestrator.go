@@ -410,9 +410,6 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 		RuntimeDir:  runtimeDir,
 		SessionData: state.ProviderSessionData,
 	})
-	if result.SessionData != "" {
-		state.ProviderSessionData = result.SessionData
-	}
 	rawLogPath := state.RunPath(run.ID, "raw-provider.log")
 	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644)
 	if err != nil {
@@ -422,6 +419,9 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
 
 		return o.failState(state, err)
+	}
+	if result.SessionData != "" {
+		state.ProviderSessionData = result.SessionData
 	}
 
 	_ = markdown.AppendSection(logPath, stateCfg.Name, result.RawOutput)
