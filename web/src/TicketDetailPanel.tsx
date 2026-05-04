@@ -98,6 +98,10 @@ export function TicketDetailPanel({
         </div>
       </div>
 
+      {details?.state.last_error ? (
+        <div className="banner error">{details.state.last_error}</div>
+      ) : null}
+
       <article className="card">
         <span className="field-label">Timeline</span>
         <StateTimeline runs={stateRuns} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />

@@ -43,6 +43,9 @@ func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir,
 
 		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, runErr)
 	}
+	if sessionErr := extractProviderSessionError(res.Stderr); sessionErr != "" {
+		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s: %s", r.providerName, phase, sessionErr)
+	}
 	if strings.TrimSpace(textResult) == "" {
 		return "", res.Stderr, "", fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrEmptyOutput)
 	}
@@ -183,6 +186,20 @@ func firstNonEmptyLine(s string) string {
 	}
 
 	return ""
+}
+
+// extractProviderSessionError scans stderr for ERROR-level log lines emitted by the
+// provider process even when it exits successfully. Returns the last such line found,
+// so transient mid-run errors are superseded by any later ones.
+func extractProviderSessionError(stderr string) string {
+	var last string
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.Contains(line, " ERROR ") {
+			last = strings.TrimSpace(line)
+		}
+	}
+
+	return last
 }
 
 func looksLikeTokensExhausted(stderr, stdout string) bool {
