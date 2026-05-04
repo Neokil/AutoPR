@@ -34,10 +34,10 @@ providers:
       init_args: ["exec", "-", "--json"]
       resume_args: ["exec", "resume", "{{.SessionID}}", "--json"]
       id_source: jsonl_first
-      id_field: payload.id
+      id_field: thread_id
       result_source: jsonl_last
-      result_field: content
-      result_event_type: agent_message  # verify against actual codex --json output
+      result_field: item.text
+      result_event_type: item.completed
 
   claude-code:
     command: claude

@@ -104,10 +104,10 @@ func Default() Config {
 					InitArgs:        []string{"exec", "-", "--json"},
 					ResumeArgs:      []string{"exec", "resume", "{{.SessionID}}", "--json"},
 					IDSource:        "jsonl_first",
-					IDField:         "payload.id",
+					IDField:         "thread_id",
 					ResultSource:    "jsonl_last",
-					ResultField:     "content",
-					ResultEventType: "agent_message", // NOTE: verify against actual codex --json output
+					ResultField:     "item.text",
+					ResultEventType: "item.completed",
 				},
 			},
 			"claude-code": {
