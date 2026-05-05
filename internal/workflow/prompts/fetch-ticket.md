@@ -2,7 +2,10 @@ Read `.auto-pr/run-context.md`.
 
 Read the ticket number from the `Ticket Number` field in `.auto-pr/run-context.md`.
 
-Fetch the Shortcut ticket details and recommended branch name for that ticket number using your configured MCP integration (use both `stories-get-by-id` and `stories-get-branch-name`).
+Fetch the Shortcut ticket details for that ticket number using the `short` CLI:
+- Run `short story <ticket-number> --quiet` to get the full story details.
+
+Derive the branch name from the ticket number and title using this format: `sc-<id>-<slugified-title>`, where the slugified title is lowercase, with non-alphanumeric characters replaced by hyphens, consecutive hyphens collapsed, and leading/trailing hyphens removed. Example: ticket `67523` titled "Extend internal payload of loyalty" → `sc-67523-extend-internal-payload-of-loyalty`.
 
 Write the full ticket details as a markdown document to the `Current Primary Artifact` path listed in `.auto-pr/run-context.md`. Use the following structure exactly:
 

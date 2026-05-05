@@ -14,7 +14,7 @@ Implement all changes described in the proposal. Then:
 2. Discover commands from the repository itself (package scripts, Makefile targets, tool config files, or language-native defaults).
 3. If a command fails, fix the code and re-run until it passes or clearly report blockers.
 
-If the repository is connected to GitHub, create a pull request for the changes.
+Create a pull request for the changes using `gh pr create`.
 
 Write a summary to the `Current Primary Artifact` path listed in `.auto-pr/run-context.md` with the following sections:
 - Changes Made

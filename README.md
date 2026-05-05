@@ -9,7 +9,7 @@ AutoPR runs a config-driven ticket workflow around a local daemon, a CLI, and an
 Current validation status:
 
 - AutoPR is currently only tested with `codex`
-- The active integration setup uses MCP access to Shortcut for ticket data and GitHub for PR and review workflows
+- The active integration setup uses the `short` CLI for Shortcut ticket data and the `gh` CLI for GitHub PR and review workflows
 - Other providers or ticketing / VCS integrations may work, but are not yet validated
 
 ## Overview
@@ -37,6 +37,15 @@ Add this to repositories you manage with AutoPR:
 ```gitignore
 .auto-pr/
 ```
+
+## Optional CLI Tools
+
+The default prompt templates use these CLI tools. Install them to use the built-in workflow without modification:
+
+- [`short`](https://github.com/shortcut-cli/shortcut-cli) — Shortcut CLI, used for ticket discovery and fetching ticket data. Install: `npm install -g @shortcut-cli/shortcut-cli`. Configure by running `short install`.
+- [`gh`](https://cli.github.com/) — GitHub CLI, used for creating pull requests. Install: `brew install gh`. Authenticate with `gh auth login`.
+
+These are optional if you supply your own workflow prompt templates that use different tools.
 
 ## Quickstart
 
