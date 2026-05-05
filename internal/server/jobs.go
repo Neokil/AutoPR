@@ -29,7 +29,7 @@ func (s *server) workerLoop() {
 func (s *server) setJobStatus(job serverstate.JobRecord, status, errMsg string) {
 	_ = s.meta.UpdateJobStatus(job.ID, status, errMsg)
 	s.broadcast(api.ServerEvent{
-		Type:         "job",
+		Type:         eventTypeJob,
 		RepoId:       stringPtr(job.RepoID),
 		RepoPath:     stringPtr(job.RepoPath),
 		TicketNumber: stringPtr(job.TicketNumber),
@@ -87,7 +87,7 @@ func (s *server) executeJob(job queuedJob) error {
 			err = s.meta.DeleteTicket(repoID, ticket)
 			if err == nil {
 				s.broadcast(api.ServerEvent{
-					Type:         "ticket_deleted",
+					Type:         eventTypeTicketDeleted,
 					RepoId:       stringPtr(repoID),
 					RepoPath:     stringPtr(repoRoot),
 					TicketNumber: stringPtr(ticket),

@@ -155,7 +155,7 @@ func (s *server) GetTicket(ctx context.Context, request api.GetTicketRequestObje
 	syncErr := s.syncTicketFromRepo(repoID, repoRoot, request.Id, repoRt, false)
 	if syncErr != nil {
 		if errors.Is(syncErr, os.ErrNotExist) {
-			return api.GetTicket404JSONResponse{Error: "ticket not found"}, nil
+			return api.GetTicket404JSONResponse{Error: errMsgTicketNotFound}, nil
 		}
 
 		return api.GetTicket500JSONResponse{Error: syncErr.Error()}, nil
@@ -163,7 +163,7 @@ func (s *server) GetTicket(ctx context.Context, request api.GetTicketRequestObje
 
 	ticketState, err := repoRt.store.LoadState(request.Id)
 	if err != nil {
-		return api.GetTicket404JSONResponse{Error: "ticket not found"}, nil
+		return api.GetTicket404JSONResponse{Error: errMsgTicketNotFound}, nil
 	}
 	nextSteps, _ := repoRt.svc.NextSteps(request.Id)
 	githubBlobBase, _ := gitutil.GitHubBlobBase(ctx, repoRoot, s.cfg.BaseBranch)
@@ -231,7 +231,7 @@ func (s *server) GetTicketArtifact(ctx context.Context, request api.GetTicketArt
 	}
 	ticketState, err := repoRt.store.LoadState(request.Id)
 	if err != nil {
-		return api.GetTicketArtifact404JSONResponse{Error: "ticket not found"}, nil
+		return api.GetTicketArtifact404JSONResponse{Error: errMsgTicketNotFound}, nil
 	}
 	path, ok := artifactPath(ticketState, filepath.Join(repoRt.store.TicketDir(request.Id), state.StateFileName), request.Name)
 	if !ok {
@@ -318,7 +318,7 @@ func (s *server) GetExecutionLogs(ctx context.Context, request api.GetExecutionL
 	}
 	ticketState, err := repoRt.store.LoadState(request.Id)
 	if err != nil {
-		return api.GetExecutionLogs404JSONResponse{Error: "ticket not found"}, nil
+		return api.GetExecutionLogs404JSONResponse{Error: errMsgTicketNotFound}, nil
 	}
 	logs := make([]api.ExecutionLogResponse, 0, len(ticketState.StateHistory))
 	for _, run := range ticketState.StateHistory {
@@ -403,7 +403,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 		targetState: opts.targetState,
 	}
 	s.broadcast(api.ServerEvent{
-		Type:         "job",
+		Type:         eventTypeJob,
 		RepoId:       stringPtr(repoID),
 		RepoPath:     stringPtr(repoPath),
 		TicketNumber: stringPtr(ticket),
@@ -425,7 +425,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 	default:
 		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
 		s.broadcast(api.ServerEvent{
-			Type:         "job",
+			Type:         eventTypeJob,
 			RepoId:       stringPtr(repoID),
 			RepoPath:     stringPtr(repoPath),
 			TicketNumber: stringPtr(ticket),
@@ -449,7 +449,7 @@ func acceptedRunTicket(resp api.ActionAcceptedResponse, code int, err error) (ap
 	case http.StatusServiceUnavailable:
 		return api.RunTicket503JSONResponse{Error: err.Error()}, nil
 	default:
-		return api.RunTicket500JSONResponse{Error: "unexpected enqueue status"}, nil
+		return api.RunTicket500JSONResponse{Error: errMsgUnexpectedEnqueue}, nil
 	}
 }
 
@@ -462,7 +462,7 @@ func acceptedApplyAction(resp api.ActionAcceptedResponse, code int, err error) (
 	case http.StatusServiceUnavailable:
 		return api.ApplyAction503JSONResponse{Error: err.Error()}, nil
 	default:
-		return api.ApplyAction500JSONResponse{Error: "unexpected enqueue status"}, nil
+		return api.ApplyAction500JSONResponse{Error: errMsgUnexpectedEnqueue}, nil
 	}
 }
 
@@ -475,7 +475,7 @@ func acceptedMoveTicketToState(resp api.ActionAcceptedResponse, code int, err er
 	case http.StatusServiceUnavailable:
 		return api.MoveTicketToState503JSONResponse{Error: err.Error()}, nil
 	default:
-		return api.MoveTicketToState500JSONResponse{Error: "unexpected enqueue status"}, nil
+		return api.MoveTicketToState500JSONResponse{Error: errMsgUnexpectedEnqueue}, nil
 	}
 }
 
@@ -488,7 +488,7 @@ func acceptedCleanupTicket(resp api.ActionAcceptedResponse, code int, err error)
 	case http.StatusServiceUnavailable:
 		return api.CleanupTicket503JSONResponse{Error: err.Error()}, nil
 	default:
-		return api.CleanupTicket500JSONResponse{Error: "unexpected enqueue status"}, nil
+		return api.CleanupTicket500JSONResponse{Error: errMsgUnexpectedEnqueue}, nil
 	}
 }
 
@@ -501,7 +501,7 @@ func acceptedCleanupScope(resp api.ActionAcceptedResponse, code int, err error) 
 	case http.StatusServiceUnavailable:
 		return api.CleanupScope503JSONResponse{Error: err.Error()}, nil
 	default:
-		return api.CleanupScope500JSONResponse{Error: "unexpected enqueue status"}, nil
+		return api.CleanupScope500JSONResponse{Error: errMsgUnexpectedEnqueue}, nil
 	}
 }
 

@@ -110,7 +110,7 @@ func (s *server) autoCleanupTicket(rec serverstate.TicketRecord) error {
 		return fmt.Errorf("delete ticket jobs: %w", err)
 	}
 	s.broadcast(api.ServerEvent{
-		Type:         "ticket_deleted",
+		Type:         eventTypeTicketDeleted,
 		RepoId:       stringPtr(rec.RepoID),
 		RepoPath:     stringPtr(rec.RepoPath),
 		TicketNumber: stringPtr(rec.TicketNumber),

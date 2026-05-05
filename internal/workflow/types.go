@@ -152,10 +152,17 @@ func (c Config) FirstState() (StateConfig, bool) {
 	return c.States[0], true
 }
 
+// Terminal state name constants.
+const (
+	TerminalDone      = "done"
+	TerminalCancelled = "cancelled"
+	TerminalFailed    = "failed"
+)
+
 // IsTerminal reports whether name is a built-in terminal state name.
 func IsTerminal(name string) bool {
 	switch name {
-	case "done", "cancelled", "failed":
+	case TerminalDone, TerminalCancelled, TerminalFailed:
 		return true
 	default:
 		return false

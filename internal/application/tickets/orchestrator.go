@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -483,9 +484,9 @@ func (o *Orchestrator) transitionTo(ctx context.Context, state *workflowstate.St
 	if workflow.IsTerminal(target) {
 		slog.Info("reached terminal state", "ticket", state.TicketNumber, "state", target)
 		switch target {
-		case "done":
+		case workflow.TerminalDone:
 			state.FlowStatus = workflowstate.FlowStatusDone
-		case "cancelled":
+		case workflow.TerminalCancelled:
 			state.FlowStatus = workflowstate.FlowStatusCancelled
 		default:
 			state.FlowStatus = workflowstate.FlowStatusFailed
@@ -731,8 +732,7 @@ func (o *Orchestrator) prepareRunContext(
 	}
 	buf.WriteString("\nLatest State Artifacts:\n")
 	seen := map[string]bool{}
-	for i := len(state.StateHistory) - 1; i >= 0; i-- {
-		entry := state.StateHistory[i]
+	for _, entry := range slices.Backward(state.StateHistory) {
 		if entry.ID == run.ID {
 			continue // skip current run — its artifact doesn't exist yet
 		}

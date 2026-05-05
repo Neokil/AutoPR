@@ -42,7 +42,7 @@ func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRun
 		}
 		if emitEvent {
 			s.broadcast(api.ServerEvent{
-				Type:         "ticket_deleted",
+				Type:         eventTypeTicketDeleted,
 				RepoId:       stringPtr(repoID),
 				RepoPath:     stringPtr(repoRoot),
 				TicketNumber: stringPtr(ticket),

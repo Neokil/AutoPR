@@ -3,6 +3,7 @@ package workflowstate
 
 import (
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -94,8 +95,7 @@ func (s *State) CurrentRunLogPath() string {
 
 // LatestArtifactRef returns the artifact ref from the most recent run of the named state.
 func (s *State) LatestArtifactRef(stateName string) string {
-	for i := len(s.StateHistory) - 1; i >= 0; i-- {
-		run := s.StateHistory[i]
+	for _, run := range slices.Backward(s.StateHistory) {
 		if run.StateName == stateName && run.ArtifactRef != "" {
 			return run.ArtifactRef
 		}

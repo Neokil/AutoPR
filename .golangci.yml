@@ -41,3 +41,10 @@ linters:
   exclusions:
     paths:
       - web/node_modules
+    rules:
+      - linters:
+          - goconst
+        path: internal/config/config\.go
+      - linters:
+          - goconst
+        path: _test\.go$
