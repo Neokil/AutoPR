@@ -44,7 +44,7 @@ func (r *PromptCommandRunner) Run(ctx context.Context, worktreePath, runtimeDir,
 		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s failed: %w", r.providerName, phase, runErr)
 	}
 	if sessionErr := extractProviderSessionError(res.Stderr); sessionErr != "" && strings.TrimSpace(textResult) == "" {
-		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s: %s", r.providerName, phase, sessionErr)
+		return textResult, res.Stderr, newSessionData, fmt.Errorf("provider %s phase %s: %w: %s", r.providerName, phase, ErrSessionFailed, sessionErr)
 	}
 	if strings.TrimSpace(textResult) == "" {
 		return "", res.Stderr, "", fmt.Errorf("provider %s phase %s: %w", r.providerName, phase, ErrEmptyOutput)
@@ -193,7 +193,7 @@ func firstNonEmptyLine(s string) string {
 // so transient mid-run errors are superseded by any later ones.
 func extractProviderSessionError(stderr string) string {
 	var last string
-	for _, line := range strings.Split(stderr, "\n") {
+	for line := range strings.SplitSeq(stderr, "\n") {
 		if strings.Contains(line, " ERROR ") {
 			last = strings.TrimSpace(line)
 		}
