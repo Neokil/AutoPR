@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, v3]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   # ── 1. Build ──────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
-    needs: [lint-be, lint-fe, test-be, test-fe]
+    needs: [ lint-be, lint-fe, test-be, test-fe ]
     steps:
       - uses: actions/checkout@v4
 
