@@ -1,10 +1,8 @@
-SHELL := /bin/zsh
-
 .PHONY: build start clean-build generate-openapi test-e2e test-e2e-build
 
 build: generate-openapi
 	@mkdir -p "$(CURDIR)/.build"
-	@if [[ -f "$(CURDIR)/web/package.json" ]]; then \
+	@if [ -f "$(CURDIR)/web/package.json" ]; then \
 		echo "building frontend (web/dist)"; \
 		cd "$(CURDIR)/web" && npm install && npm run build; \
 	fi
