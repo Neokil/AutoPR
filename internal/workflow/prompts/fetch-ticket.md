@@ -2,7 +2,7 @@ Read `.auto-pr/run-context.md`.
 
 Read the ticket number from the `Ticket Number` field in `.auto-pr/run-context.md`.
 
-Fetch the Shortcut ticket details for that ticket number using your configured MCP integration.
+Fetch the Shortcut ticket details and recommended branch name for that ticket number using your configured MCP integration (use both `stories-get-by-id` and `stories-get-branch-name`).
 
 Write the full ticket details as a markdown document to the `Current Primary Artifact` path listed in `.auto-pr/run-context.md`. Use the following structure exactly:
 
@@ -12,6 +12,7 @@ Write the full ticket details as a markdown document to the `Current Primary Art
    - `Priority: <priority>`
    - `URL: <url>`
    - `Labels: <labels>`
+   - `Branch: <branch-name>`
 3. Sections (`##`) for the richer content:
    - Description
    - Acceptance criteria

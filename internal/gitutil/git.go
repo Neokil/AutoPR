@@ -129,6 +129,16 @@ func EnsureWorktree(ctx context.Context, repoRoot, stateDirName, ticketNumber, b
 	return path, nil
 }
 
+// RenameBranch renames the currently checked-out branch inside worktreePath.
+func RenameBranch(ctx context.Context, worktreePath, newName string) error {
+	_, err := shell.Run(ctx, worktreePath, nil, "", "git", "branch", "-m", newName)
+	if err != nil {
+		return fmt.Errorf("git branch -m: %w", err)
+	}
+
+	return nil
+}
+
 // WorktreeRemove force-removes the worktree at worktreePath from the repository.
 func WorktreeRemove(ctx context.Context, repoRoot, worktreePath string) error {
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "worktree", "remove", worktreePath, "--force")

@@ -431,6 +431,19 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 		return o.failState(state, err)
 	}
 
+	if run.ArtifactRef != "" {
+		artifactPath := state.ResolveRef(run.ArtifactRef)
+		if branchName := extractArtifactField(artifactPath, "Branch"); branchName != "" && branchName != state.BranchName {
+			slog.Info("renaming branch from artifact", "ticket", state.TicketNumber, "old", state.BranchName, "new", branchName)
+			renameErr := gitutil.RenameBranch(ctx, state.WorktreePath, branchName)
+			if renameErr != nil {
+				slog.Warn("rename branch failed, keeping existing name", "err", renameErr)
+			} else {
+				state.BranchName = branchName
+			}
+		}
+	}
+
 	slog.Info("state done, waiting for action", "ticket", state.TicketNumber, "state", stateCfg.Name)
 	state.FlowStatus = workflowstate.FlowStatusWaiting
 	saveErr := o.Store.SaveState(state.TicketNumber, *state)
@@ -743,6 +756,26 @@ func (o *Orchestrator) prepareRunContext(
 	}
 
 	return nil
+}
+
+// extractArtifactField reads field from the metadata section of a markdown artifact.
+// It stops scanning at the first ## heading so body content cannot produce false matches.
+func extractArtifactField(path, field string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	prefix := field + ": "
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if strings.HasPrefix(line, "## ") {
+			break
+		}
+		if val, ok := strings.CutPrefix(line, prefix); ok {
+			return strings.TrimSpace(val)
+		}
+	}
+
+	return ""
 }
 
 func newUUID() (string, error) {
