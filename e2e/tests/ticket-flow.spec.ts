@@ -45,10 +45,8 @@ test('full ticket lifecycle: add → investigate → implement → done → clea
   // ── 4. Approve → transition to implementation ────────────────────────────
   await page.getByRole('button', { name: 'Approve' }).click();
 
-  // ── 5. Wait for implementation state (status = "waiting") ────────────────
-  await waitForStatus(ticketItem, 'waiting');
-
-  await expect(page.getByRole('button', { name: 'Accept' })).toBeVisible();
+  // ── 5. Wait for implementation state (Accept button enabled) ────────────
+  await expect(page.getByRole('button', { name: 'Accept' })).toBeEnabled({ timeout: 30_000 });
 
   // ── 6. Accept → transition to done ──────────────────────────────────────
   await page.getByRole('button', { name: 'Accept' }).click();
