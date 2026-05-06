@@ -1,0 +1,52 @@
+states:
+  - name: fetch-ticket-data
+    display_name: Fetch Ticket Data
+    prompt: prompts/fetch-ticket.md
+    primary_artifact: ticket.md
+    pre_prompt_commands: []
+    post_prompt_commands: []
+    actions:
+      - label: "Continue"
+        type: move_to_state
+        target: investigation
+      - label: "Cancel"
+        type: move_to_state
+        target: cancelled
+
+  - name: investigation
+    display_name: Investigation
+    prompt: prompts/investigate.md
+    primary_artifact: investigation.md
+    pre_prompt_commands: []
+    post_prompt_commands: []
+    actions:
+      - label: "Provide Feedback"
+        type: provide_feedback
+      - label: "Approve"
+        type: move_to_state
+        target: implementation
+      - label: "Decline"
+        type: move_to_state
+        target: cancelled
+
+  - name: implementation
+    display_name: Implementation
+    prompt: prompts/implement.md
+    primary_artifact: implementation.md
+    pre_prompt_commands: []
+    post_prompt_commands: []
+    actions:
+      - label: "Provide Feedback"
+        type: provide_feedback
+      - label: "Fetch PR Feedback"
+        type: run_script
+        commands:
+          - gh pr view --json reviews --jq '[.reviews[].body] | join("\n\n")'
+        always:
+          type: provide_feedback
+      - label: "Accept"
+        type: move_to_state
+        target: done
+      - label: "Cancel"
+        type: move_to_state
+        target: cancelled

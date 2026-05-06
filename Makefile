@@ -1,47 +1,32 @@
-SHELL := /bin/zsh
+.PHONY: build start clean-build generate-openapi test-e2e test-e2e-build
 
-.PHONY: build start clean-build register-alias unregister-alias init-config remove-config register-service unregister-service refresh-service service-status service-logs install uninstall
-
-build:
-	@bash "$(CURDIR)/scripts/build.sh" "$(CURDIR)"
+build: generate-openapi
+	@mkdir -p "$(CURDIR)/.build"
+	@if [ -f "$(CURDIR)/web/package.json" ]; then \
+		echo "building frontend (web/dist)"; \
+		cd "$(CURDIR)/web" && npm run build; \
+	fi
+	@go build -o "$(CURDIR)/.build/auto-pr" "$(CURDIR)/cmd/auto-pr"
+	@go build -o "$(CURDIR)/.build/auto-prd" "$(CURDIR)/cmd/auto-prd"
+	@echo "built $(CURDIR)/.build/auto-pr and $(CURDIR)/.build/auto-prd"
 
 start: build
-	@bash "$(CURDIR)/scripts/start.sh" "$(CURDIR)"
+	@"$(CURDIR)/.build/auto-prd"
 
 clean-build:
-	@bash "$(CURDIR)/scripts/clean_build.sh" "$(CURDIR)"
+	@rm -rf "$(CURDIR)/.build"
+	@echo "removed $(CURDIR)/.build"
 
-register-alias:
-	@bash "$(CURDIR)/scripts/register_alias.sh" "$(CURDIR)"
+generate-openapi:
+	@cd "$(CURDIR)/web" && npm install
+	@cd "$(CURDIR)/web" && npm run openapi:lint
+	@cd "$(CURDIR)/web" && npm run openapi:generate
+	@go generate ./internal/api
 
-unregister-alias:
-	@bash "$(CURDIR)/scripts/unregister_alias.sh" "$(CURDIR)"
+# Build the E2E Docker image (re-runs only when sources change due to layer caching).
+test-e2e-build:
+	@docker build -f "$(CURDIR)/e2e/Dockerfile" -t autopr-e2e "$(CURDIR)"
 
-init-config:
-	@bash "$(CURDIR)/scripts/init_config.sh" "$(CURDIR)"
-
-remove-config:
-	@bash "$(CURDIR)/scripts/remove_config.sh" "$(CURDIR)"
-
-register-service: build init-config
-	@bash "$(CURDIR)/scripts/register_service.sh" "$(CURDIR)"
-
-unregister-service:
-	@bash "$(CURDIR)/scripts/unregister_service.sh" "$(CURDIR)"
-
-refresh-service: build
-	@bash "$(CURDIR)/scripts/refresh_service.sh" "$(CURDIR)"
-
-service-status:
-	@bash "$(CURDIR)/scripts/service_status.sh" "$(CURDIR)"
-
-service-logs:
-	@bash "$(CURDIR)/scripts/service_logs.sh" "$(CURDIR)"
-
-install: build register-alias init-config register-service
-	@echo "install complete"
-	@echo "run: source $$HOME/.zshrc"
-
-uninstall: unregister-service unregister-alias remove-config clean-build
-	@echo "uninstall complete"
-	@echo "run: source $$HOME/.zshrc"
+# Build the image (if needed) then run the Playwright E2E suite inside Docker.
+test-e2e: test-e2e-build
+	@docker run --rm autopr-e2e

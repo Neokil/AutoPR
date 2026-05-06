@@ -1,4 +1,4 @@
-import type { AcceptedJob, EventItem, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { AcceptedJob, DiscoveredTicket, ExecutionLog, HealthResponse, Job, RepositoryListResponse, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
 
@@ -27,17 +27,14 @@ export async function listRepositories(): Promise<string[]> {
   return data.repositories ?? [];
 }
 
+export function getHealth(): Promise<HealthResponse> {
+  return requestJSON<HealthResponse>("/api/health");
+}
+
 export async function getTicket(repoPath: string, ticket: string): Promise<TicketDetails> {
   return requestJSON<TicketDetails>(
     `/api/tickets/${encodeURIComponent(ticket)}?repo_path=${encodeURIComponent(repoPath)}`
   );
-}
-
-export async function getEvents(repoPath: string, ticket: string): Promise<EventItem[]> {
-  const data = await requestJSON<{ events: EventItem[] }>(
-    `/api/tickets/${encodeURIComponent(ticket)}/events?repo_path=${encodeURIComponent(repoPath)}`
-  );
-  return data.events ?? [];
 }
 
 export async function getArtifact(repoPath: string, ticket: string, name: string): Promise<string> {
@@ -45,6 +42,13 @@ export async function getArtifact(repoPath: string, ticket: string, name: string
     `/api/tickets/${encodeURIComponent(ticket)}/artifacts/${encodeURIComponent(name)}?repo_path=${encodeURIComponent(repoPath)}`
   );
   return data.content ?? "";
+}
+
+export async function getExecutionLogs(repoPath: string, ticket: string): Promise<ExecutionLog[]> {
+  const data = await requestJSON<{ logs: ExecutionLog[] }>(
+    `/api/tickets/${encodeURIComponent(ticket)}/execution-logs?repo_path=${encodeURIComponent(repoPath)}`
+  );
+  return data.logs ?? [];
 }
 
 export async function getJob(jobId: string): Promise<Job> {
@@ -90,34 +94,22 @@ export function runTicket(repoPath: string, ticket: string): Promise<AcceptedJob
   return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/run`, { repo_path: repoPath });
 }
 
-export function resumeTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/resume`, { repo_path: repoPath });
-}
-
-export function approveTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/approve`, { repo_path: repoPath });
-}
-
-export function rejectTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/reject`, { repo_path: repoPath });
-}
-
-export function createPR(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/pr`, { repo_path: repoPath });
-}
-
-export function applyPRComments(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/apply-pr-comments`, { repo_path: repoPath });
-}
-
 export function cleanupTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
   return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/cleanup`, { repo_path: repoPath });
 }
 
-export function feedbackTicket(repoPath: string, ticket: string, message: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/feedback`, {
+export function applyAction(repoPath: string, ticket: string, label: string, message?: string): Promise<AcceptedJob> {
+  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/action`, {
     repo_path: repoPath,
-    message
+    label,
+    message: message ?? ""
+  });
+}
+
+export function moveToState(repoPath: string, ticket: string, target: string): Promise<AcceptedJob> {
+  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/move-to-state`, {
+    repo_path: repoPath,
+    target
   });
 }
 
@@ -127,4 +119,13 @@ export function cleanupDone(repoPath: string): Promise<AcceptedJob> {
 
 export function cleanupAll(repoPath: string): Promise<AcceptedJob> {
   return postAccepted("/api/cleanup", { repo_path: repoPath, scope: "all" });
+}
+
+export async function discoverTickets(repoPath: string): Promise<DiscoveredTicket[]> {
+  const data = await requestJSON<{ tickets: DiscoveredTicket[] }>("/api/discover-tickets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo_path: repoPath })
+  });
+  return data.tickets ?? [];
 }

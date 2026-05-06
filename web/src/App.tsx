@@ -1,130 +1,75 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  approveTicket,
-  applyPRComments,
+  applyAction,
   cleanupAll,
   cleanupDone,
   cleanupTicket,
   connectEvents,
-  createPR,
-  feedbackTicket,
+  discoverTickets,
   getArtifact,
+  getExecutionLogs,
+  getHealth,
   getJob,
   getTicket,
-  listTickets,
   listRepositories,
-  rejectTicket,
-  resumeTicket,
+  listTickets,
+  moveToState,
   runTicket
 } from "./api";
-import { MarkdownView } from "./MarkdownView";
+import { AddTicketDialog } from "./AddTicketDialog";
+import { DiscoverTicketsModal } from "./DiscoverTicketsModal";
+import { ExecutionLogsModal } from "./ExecutionLogsModal";
+import { TicketDetailPanel } from "./TicketDetailPanel";
 import { TicketList } from "./TicketList";
-import type { Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
-
-function ticketKey(t: TicketSummary): string {
-  return `${t.repo_id}::${t.ticket_number}`;
-}
-
-function pendingTicketKey(repoPath: string, ticketNumber: string): string {
-  return `${repoPath}::${ticketNumber}`;
-}
-
-type Action = "run" | "resume" | "approve" | "reject" | "pr" | "apply_pr_comments" | "cleanup";
-
-function allowedActions(status: string): Action[] {
-  switch (status) {
-    case "queued":
-      return ["run", "cleanup"];
-    case "proposal_ready":
-    case "waiting_for_human":
-      return ["approve", "reject"];
-    case "failed":
-      return ["resume", "cleanup"];
-    case "pr_ready":
-      return ["pr", "apply_pr_comments", "cleanup"];
-    case "done":
-      return ["apply_pr_comments", "cleanup"];
-    case "investigating":
-    case "implementing":
-    case "validating":
-    default:
-      return ["resume", "cleanup"];
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function readString(record: Record<string, unknown> | null, key: string): string {
-  if (!record) {
-    return "";
-  }
-  const value = record[key];
-  return typeof value === "string" ? value : "";
-}
-
-function firstLinkedItem(ticket: Record<string, unknown> | null, keys: string[]): Record<string, unknown> | null {
-  if (!ticket) {
-    return null;
-  }
-  for (const key of keys) {
-    const candidate = asRecord(ticket[key]);
-    if (candidate) {
-      return candidate;
-    }
-  }
-  return null;
-}
+import {
+  applyTicketEvent,
+  getFeedbackAction,
+  knownRepoPaths,
+  pendingTicketKey,
+  selectTicketKey,
+  stateRunsFromDetails,
+  ticketKey
+} from "./tickets";
+import type { DiscoveredTicket, ExecutionLog, Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 export function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string>("");
+  const [selectedKey, setSelectedKey] = useState("");
   const [details, setDetails] = useState<TicketDetails | null>(null);
-  const [proposal, setProposal] = useState("");
-  const [logText, setLogText] = useState("");
-  const [activeTab, setActiveTab] = useState<"details" | "proposal" | "logs">("details");
+  const [selectedRunId, setSelectedRunId] = useState("");
+  const [selectedArtifactContent, setSelectedArtifactContent] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
-  const [activeJobId, setActiveJobId] = useState<string>("");
+  const [activeJobId, setActiveJobId] = useState("");
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>("");
+  const [artifactLoading, setArtifactLoading] = useState(false);
+  const [error, setError] = useState("");
   const [repositoryOptions, setRepositoryOptions] = useState<string[]>([]);
   const [showAddTicketDialog, setShowAddTicketDialog] = useState(false);
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  const [executionLogsLoading, setExecutionLogsLoading] = useState(false);
   const [newTicketRepoPath, setNewTicketRepoPath] = useState("");
   const [newTicketNumber, setNewTicketNumber] = useState("");
   const [pendingAddedTickets, setPendingAddedTickets] = useState<string[]>([]);
   const [addTicketError, setAddTicketError] = useState("");
+  const [showDiscoverModal, setShowDiscoverModal] = useState(false);
+  const [discoverRepoPath, setDiscoverRepoPath] = useState("");
+  const [discoveredTickets, setDiscoveredTickets] = useState<DiscoveredTicket[]>([]);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverError, setDiscoverError] = useState("");
+  const [discoverConfigured, setDiscoverConfigured] = useState(false);
 
-  const selectedSummary = useMemo(() => tickets.find((t) => ticketKey(t) === selectedKey) ?? null, [tickets, selectedKey]);
-  const knownRepoPaths = useMemo(() => {
-    const seen = new Set<string>();
-    const paths: string[] = [...repositoryOptions];
-    for (const p of repositoryOptions) {
-      seen.add(p);
-    }
-    for (const t of tickets) {
-      if (!seen.has(t.repo_path)) {
-        seen.add(t.repo_path);
-        paths.push(t.repo_path);
-      }
-    }
-    return paths;
-  }, [repositoryOptions, tickets]);
-  const ticketRecord = asRecord(details?.ticket);
-  const ticketTitle = readString(ticketRecord, "title") || selectedSummary?.title || "(no title)";
-  const ticketURL = readString(ticketRecord, "url");
-  const ticketDescription = readString(ticketRecord, "description");
-  const acceptanceCriteria = readString(ticketRecord, "acceptance_criteria");
-  const priority = readString(ticketRecord, "priority");
-  const parentTicket = firstLinkedItem(ticketRecord, ["parent_ticket"]);
-  const epicTicket = firstLinkedItem(ticketRecord, ["epic", "epic_ticket", "parent_epic", "epic_story"]);
+  const selectedSummary = useMemo(() => tickets.find((ticket) => ticketKey(ticket) === selectedKey) ?? null, [tickets, selectedKey]);
+  const availableRepoPaths = useMemo(() => knownRepoPaths(repositoryOptions, tickets), [repositoryOptions, tickets]);
+  const stateRuns = useMemo(() => stateRunsFromDetails(details), [details]);
+  const feedbackAction = useMemo(() => getFeedbackAction(details, selectedSummary), [details, selectedSummary]);
+
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
-  const activeJobIdRef = useRef<string>("");
+  const activeJobIdRef = useRef("");
+  const showLogsModalRef = useRef(false);
   const fullRefreshScheduledRef = useRef(false);
+  const prevLastRunIdRef = useRef("");
   const reconnectErrorMessage = "event stream connection lost; reconnecting";
 
   useEffect(() => {
@@ -136,8 +81,15 @@ export function App() {
   }, [activeJobId]);
 
   useEffect(() => {
+    showLogsModalRef.current = showLogsModal;
+  }, [showLogsModal]);
+
+  useEffect(() => {
     void refreshTickets();
     void refreshRepositories();
+    void getHealth()
+      .then((health) => { setDiscoverConfigured(health.discover_tickets_configured); })
+      .catch(() => { setDiscoverConfigured(false); });
     const stream = connectEvents(
       (evt) => {
         void handleServerEvent(evt);
@@ -155,13 +107,107 @@ export function App() {
   useEffect(() => {
     if (!selectedSummary) {
       setDetails(null);
-      setProposal("");
-      setLogText("");
+      setSelectedRunId("");
+      setSelectedArtifactContent("");
+      setArtifactLoading(false);
+      setShowLogsModal(false);
+      setExecutionLogs([]);
+      setExecutionLogsLoading(false);
       return;
     }
     void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
-    setActiveTab("details");
   }, [selectedSummary?.repo_path, selectedSummary?.ticket_number]);
+
+  useEffect(() => {
+    if (stateRuns.length === 0) {
+      prevLastRunIdRef.current = "";
+      setSelectedRunId("");
+      return;
+    }
+    const lastRunId = stateRuns[stateRuns.length - 1].id;
+    const currentRunId = details?.state.current_run_id;
+    const prevLastRunId = prevLastRunIdRef.current;
+    prevLastRunIdRef.current = lastRunId;
+
+    setSelectedRunId((current) => {
+      if (!current || !stateRuns.some((run) => run.id === current)) {
+        return (currentRunId && stateRuns.some((run) => run.id === currentRunId)) ? currentRunId : lastRunId;
+      }
+      if (current === prevLastRunId) {
+        return (currentRunId && stateRuns.some((run) => run.id === currentRunId)) ? currentRunId : lastRunId;
+      }
+      return current;
+    });
+  }, [details?.state.current_run_id, stateRuns]);
+
+  useEffect(() => {
+    if (!selectedSummary) {
+      setArtifactLoading(false);
+      return;
+    }
+    const selectedRun = stateRuns.find((run) => run.id === selectedRunId) ?? null;
+    if (!selectedRun) {
+      setSelectedArtifactContent("");
+      setArtifactLoading(false);
+      return;
+    }
+    const artifactRef = selectedRun.artifact_ref || selectedRun.log_ref;
+    if (!artifactRef) {
+      setSelectedArtifactContent("");
+      setArtifactLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setArtifactLoading(true);
+    void getArtifact(selectedSummary.repo_path, selectedSummary.ticket_number, artifactRef)
+      .then((content) => {
+        if (!cancelled) {
+          setSelectedArtifactContent(content);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "failed to load artifact");
+          setSelectedArtifactContent("");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setArtifactLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRunId, selectedSummary, stateRuns]);
+
+  useEffect(() => {
+    if (!showLogsModal || !selectedSummary) {
+      return;
+    }
+    let cancelled = false;
+    setExecutionLogsLoading(true);
+    void getExecutionLogs(selectedSummary.repo_path, selectedSummary.ticket_number)
+      .then((logs) => {
+        if (!cancelled) {
+          setExecutionLogs(logs);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "failed to load execution logs");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setExecutionLogsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showLogsModal, selectedSummary?.repo_path, selectedSummary?.ticket_number]);
 
   async function refreshTickets(showLoader = true) {
     if (showLoader) {
@@ -170,15 +216,7 @@ export function App() {
     try {
       const data = await listTickets();
       setTickets(data);
-      setSelectedKey((current) => {
-        if (data.length === 0) {
-          return "";
-        }
-        if (!current || !data.some((t) => ticketKey(t) === current)) {
-          return ticketKey(data[0]);
-        }
-        return current;
-      });
+      setSelectedKey((current) => selectTicketKey(current, data));
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load tickets");
     } finally {
@@ -203,23 +241,25 @@ export function App() {
     }
     setError("");
     try {
-      const [ticketDetails, proposalText, logs] = await Promise.all([
-        getTicket(repoPath, ticket),
-        getArtifact(repoPath, ticket, "proposal"),
-        getArtifact(repoPath, ticket, "log")
-      ]);
+      const ticketDetails = await getTicket(repoPath, ticket);
       setDetails(ticketDetails);
-      setProposal(proposalText);
-      setLogText(logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load ticket details");
       setDetails(null);
-      setProposal("");
-      setLogText("");
+      setSelectedArtifactContent("");
     } finally {
       if (showLoader) {
         setLoading(false);
       }
+    }
+  }
+
+  async function refreshExecutionLogs(repoPath: string, ticketNumber: string) {
+    try {
+      const logs = await getExecutionLogs(repoPath, ticketNumber);
+      setExecutionLogs(logs);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to refresh execution logs");
     }
   }
 
@@ -250,9 +290,15 @@ export function App() {
       }
     }
 
-    applyTicketEvent(evt);
-
-    if (evt.type === "repo_tickets_synced") {
+    let needsFullRefresh = evt.type === "repo_tickets_synced";
+    setTickets((current) => {
+      const ticketUpdate = applyTicketEvent(current, evt);
+      if (ticketUpdate.needsFullRefresh) {
+        needsFullRefresh = true;
+      }
+      return ticketUpdate.tickets;
+    });
+    if (needsFullRefresh) {
       scheduleFullRefresh();
     }
 
@@ -263,77 +309,10 @@ export function App() {
       evt.ticket_number === selected.ticket_number
     ) {
       await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
-    }
-  }
-
-  function applyTicketEvent(evt: ServerEvent) {
-    if (!evt.repo_id || !evt.ticket_number) {
-      return;
-    }
-    const key = `${evt.repo_id}::${evt.ticket_number}`;
-    if (evt.type === "ticket_deleted") {
-      setTickets((current) => current.filter((t) => ticketKey(t) !== key));
-      return;
-    }
-    setTickets((current) => {
-      let found = false;
-      const next = current.map((t) => {
-        if (ticketKey(t) !== key) {
-          return t;
-        }
-        found = true;
-        if (evt.type === "job") {
-          const nextJobs = [...(t.jobs ?? [])];
-          const jobIndex = evt.job_id ? nextJobs.findIndex((job) => job.id === evt.job_id) : -1;
-          const nextJob: Job = jobIndex >= 0
-            ? {
-                ...nextJobs[jobIndex],
-                status: evt.status === "queued" || evt.status === "running" || evt.status === "done" || evt.status === "failed"
-                  ? evt.status
-                  : nextJobs[jobIndex].status,
-                action: evt.action ?? nextJobs[jobIndex].action,
-                error: evt.error ?? nextJobs[jobIndex].error
-              }
-            : {
-                id: evt.job_id ?? "",
-                action: evt.action ?? "",
-                repo_id: evt.repo_id ?? t.repo_id,
-                repo_path: evt.repo_path ?? t.repo_path,
-                ticket_number: evt.ticket_number ?? t.ticket_number,
-                status:
-                  evt.status === "queued" || evt.status === "running" || evt.status === "done" || evt.status === "failed"
-                    ? evt.status
-                    : "queued",
-                scope: evt.scope,
-                error: evt.error,
-                created_at: new Date().toISOString()
-              };
-          if (jobIndex >= 0) {
-            nextJobs[jobIndex] = nextJob;
-          } else if (nextJob.id) {
-            nextJobs.unshift(nextJob);
-          }
-          nextJobs.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
-          const isBusy = nextJobs.some((job) => job.status === "queued" || job.status === "running");
-          return { ...t, busy: isBusy, jobs: nextJobs };
-        }
-        if (evt.type === "ticket_updated") {
-          return {
-            ...t,
-            title: evt.title ?? t.title,
-            status: evt.status ?? t.status,
-            last_error: evt.error ?? t.last_error,
-            pr_url: evt.pr_url ?? t.pr_url,
-            updated_at: new Date().toISOString()
-          };
-        }
-        return t;
-      });
-      if (!found && evt.type === "ticket_updated") {
-        scheduleFullRefresh();
+      if (showLogsModalRef.current) {
+        await refreshExecutionLogs(selected.repo_path, selected.ticket_number);
       }
-      return next;
-    });
+    }
   }
 
   function scheduleFullRefresh() {
@@ -368,14 +347,16 @@ export function App() {
       setAddTicketError("repo folder path and ticket number are required");
       return;
     }
+
     const pendingKey = pendingTicketKey(repoPath, ticketNumber);
     if (pendingAddedTickets.includes(pendingKey)) {
       setAddTicketError(`ticket ${ticketNumber} is already being added to AutoPR for this repository`);
       return;
     }
+
     try {
       const repoTickets = await listTickets(repoPath);
-      const existing = repoTickets.find((t) => t.ticket_number === ticketNumber);
+      const existing = repoTickets.find((ticket) => ticket.ticket_number === ticketNumber);
       if (existing) {
         setAddTicketError(`ticket ${ticketNumber} is already added to AutoPR for this repository`);
         return;
@@ -384,15 +365,112 @@ export function App() {
       setAddTicketError(err instanceof Error ? err.message : "failed to validate ticket");
       return;
     }
+
     setPendingAddedTickets((current) => [...current, pendingKey]);
     const ok = await queueAction(() => runTicket(repoPath, ticketNumber));
     setPendingAddedTickets((current) => current.filter((key) => key !== pendingKey));
     if (ok) {
-      setShowAddTicketDialog(false);
-      setNewTicketRepoPath("");
-      setNewTicketNumber("");
+      closeAddTicketDialog();
       scheduleFullRefresh();
     }
+  }
+
+  function openAddTicketDialog() {
+    setError("");
+    setAddTicketError("");
+    setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
+    setNewTicketNumber("");
+    setShowAddTicketDialog(true);
+    void refreshRepositories();
+  }
+
+  function closeAddTicketDialog() {
+    setAddTicketError("");
+    setShowAddTicketDialog(false);
+    setNewTicketRepoPath("");
+    setNewTicketNumber("");
+  }
+
+  function updateAddTicketRepoPath(value: string) {
+    setNewTicketRepoPath(value);
+    setAddTicketError("");
+  }
+
+  function updateAddTicketNumber(value: string) {
+    setNewTicketNumber(value);
+    setAddTicketError("");
+  }
+
+  function submitFeedback() {
+    if (!selectedSummary || !feedbackAction || !feedbackMessage.trim()) {
+      return;
+    }
+    void queueAction(() =>
+      applyAction(
+        selectedSummary.repo_path,
+        selectedSummary.ticket_number,
+        feedbackAction.label,
+        feedbackMessage
+      )
+    ).then((ok) => {
+      if (ok) {
+        setFeedbackMessage("");
+      }
+    });
+  }
+
+  function applyNamedAction(label: string) {
+    if (!selectedSummary) {
+      return;
+    }
+    void queueAction(() => applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, label));
+  }
+
+  function rerunSelectedTicket() {
+    if (!selectedSummary) {
+      return;
+    }
+    void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number));
+  }
+
+  function cleanupSelectedTicket() {
+    if (!selectedSummary) {
+      return;
+    }
+    void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number));
+  }
+
+  function moveSelectedTicket(target: string) {
+    if (!selectedSummary) {
+      return;
+    }
+    void queueAction(() => moveToState(selectedSummary.repo_path, selectedSummary.ticket_number, target));
+  }
+
+  function openDiscoverModal() {
+    if (!discoverConfigured) {
+      return;
+    }
+    const repoPath = selectedSummary?.repo_path ?? availableRepoPaths[0] ?? "";
+    setDiscoverRepoPath(repoPath);
+    setDiscoveredTickets([]);
+    setDiscoverError("");
+    setDiscoverLoading(true);
+    setShowDiscoverModal(true);
+    void discoverTickets(repoPath)
+      .then((found) => { setDiscoveredTickets(found); })
+      .catch((err) => { setDiscoverError(err instanceof Error ? err.message : "discovery failed"); })
+      .finally(() => { setDiscoverLoading(false); });
+  }
+
+  function handleDiscoverAdd(ticketNumber: string) {
+    setShowDiscoverModal(false);
+    setError("");
+    setAddTicketError("");
+    setNewTicketRepoPath(discoverRepoPath);
+    setNewTicketNumber(ticketNumber);
+    setShowAddTicketDialog(true);
+    void refreshRepositories();
   }
 
   return (
@@ -417,6 +495,11 @@ export function App() {
           >
             Cleanup All
           </button>
+          <span title={!discoverConfigured ? "not configured" : ""}>
+            <button onClick={openDiscoverModal} disabled={!discoverConfigured || availableRepoPaths.length === 0}>
+              Discover Tickets
+            </button>
+          </span>
         </div>
       </header>
 
@@ -429,292 +512,61 @@ export function App() {
       ) : null}
 
       <main className="main">
-        <TicketList
-          tickets={tickets}
-          selectedKey={selectedKey}
-          onSelectTicket={setSelectedKey}
-          onAddTicket={() => {
-            setError("");
-            setAddTicketError("");
-            setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
-            setNewTicketNumber("");
-            setShowAddTicketDialog(true);
-            void refreshRepositories();
-          }}
+        <TicketList tickets={tickets} selectedKey={selectedKey} onSelectTicket={setSelectedKey} onAddTicket={openAddTicketDialog} />
+        <TicketDetailPanel
+          selectedSummary={selectedSummary}
+          details={details}
+          stateRuns={stateRuns}
+          selectedRunId={selectedRunId}
+          selectedArtifactContent={selectedArtifactContent}
+          artifactLoading={artifactLoading}
+          feedbackAction={feedbackAction}
+          feedbackMessage={feedbackMessage}
+          isRunning={!!activeJobId}
+          onSelectRun={setSelectedRunId}
+          onFeedbackMessageChange={setFeedbackMessage}
+          onSubmitFeedback={submitFeedback}
+          onApplyAction={applyNamedAction}
+          onOpenLogs={() => setShowLogsModal(true)}
+          onRerun={rerunSelectedTicket}
+          onCleanup={cleanupSelectedTicket}
+          onMoveToState={moveSelectedTicket}
         />
-
-        <section className="panel right">
-          {selectedSummary ? (
-            <>
-              <div className="detail-top-row">
-                <h2 className="detail-main-title">
-                  {ticketURL ? (
-                    <a href={ticketURL} target="_blank" rel="noreferrer">
-                      {selectedSummary.ticket_number} - {ticketTitle} ({selectedSummary.status})
-                    </a>
-                  ) : (
-                    <>
-                      {selectedSummary.ticket_number} - {ticketTitle} ({selectedSummary.status})
-                    </>
-                  )}
-                </h2>
-                <div className="button-row detail-actions">
-                {allowedActions(selectedSummary.status).includes("run") ? (
-                  <button onClick={() => void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Run
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("resume") ? (
-                  <button onClick={() => void queueAction(() => resumeTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Resume
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("approve") ? (
-                  <button onClick={() => void queueAction(() => approveTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Approve
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("reject") ? (
-                  <button onClick={() => void queueAction(() => rejectTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Reject
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("pr") ? (
-                  <button onClick={() => void queueAction(() => createPR(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Create PR
-                  </button>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("apply_pr_comments") ? (
-                  <button
-                    onClick={() =>
-                      void queueAction(() => applyPRComments(selectedSummary.repo_path, selectedSummary.ticket_number))
-                    }
-                    disabled={!selectedSummary.pr_url}
-                  >
-                    Apply PR Comments
-                  </button>
-                ) : null}
-                {selectedSummary.pr_url ? (
-                  <a href={selectedSummary.pr_url} target="_blank" rel="noreferrer">
-                    <button>Open PR</button>
-                  </a>
-                ) : null}
-                {allowedActions(selectedSummary.status).includes("cleanup") ? (
-                  <button onClick={() => void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number))}>
-                    Cleanup
-                  </button>
-                ) : null}
-                </div>
-              </div>
-
-              <div className="tabs">
-                <button className={activeTab === "details" ? "tab active" : "tab"} onClick={() => setActiveTab("details")}>
-                  Details
-                </button>
-                <button className={activeTab === "proposal" ? "tab active" : "tab"} onClick={() => setActiveTab("proposal")}>
-                  Proposal
-                </button>
-                <button className={activeTab === "logs" ? "tab active" : "tab"} onClick={() => setActiveTab("logs")}>
-                  Logs
-                </button>
-              </div>
-
-              {activeTab === "details" ? (
-                <article className="card">
-                  <div className="ticket-fields">
-                    <section className="ticket-section">
-                      <span className="field-label">Epic</span>
-                      {epicTicket && readString(epicTicket, "url") ? (
-                        <a href={readString(epicTicket, "url")} target="_blank" rel="noreferrer">
-                          {readString(epicTicket, "title") || "(no title)"}
-                        </a>
-                      ) : (
-                        <span className="meta">No epic ticket</span>
-                      )}
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Parent Ticket</span>
-                      {parentTicket && readString(parentTicket, "url") ? (
-                        <a href={readString(parentTicket, "url")} target="_blank" rel="noreferrer">
-                          {readString(parentTicket, "title") || "(no title)"}
-                        </a>
-                      ) : (
-                        <span className="meta">No parent ticket</span>
-                      )}
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Description</span>
-                      <MarkdownView
-                        content={ticketDescription}
-                        emptyText="No description."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Acceptance Criteria</span>
-                      <MarkdownView
-                        content={acceptanceCriteria}
-                        emptyText="No acceptance criteria."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Priority</span>
-                      <span>{priority || "-"}</span>
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Last Error</span>
-                      <MarkdownView
-                        content={details?.state.last_error ?? ""}
-                        emptyText="No error recorded."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-
-                    <section className="ticket-section">
-                      <span className="field-label">Next Steps</span>
-                      <MarkdownView
-                        content={details?.next_steps ?? ""}
-                        emptyText="No next steps available."
-                        githubBlobBase={details?.github_blob_base}
-                        repoPath={details?.repo_path}
-                        worktreePath={details?.state.worktree_path}
-                      />
-                    </section>
-                  </div>
-                </article>
-              ) : null}
-
-              {activeTab === "proposal" ? (
-                <>
-                  {selectedSummary.status === "proposal_ready" || selectedSummary.status === "waiting_for_human" ? (
-                    <form
-                      className="feedback-form"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!feedbackMessage.trim()) {
-                          return;
-                        }
-                        void queueAction(() =>
-                          feedbackTicket(selectedSummary.repo_path, selectedSummary.ticket_number, feedbackMessage)
-                        ).then(() => setFeedbackMessage(""));
-                      }}
-                    >
-                      <input
-                        value={feedbackMessage}
-                        onChange={(e) => setFeedbackMessage(e.target.value)}
-                        placeholder="Send feedback on proposal"
-                      />
-                      <button type="submit">Send Feedback</button>
-                    </form>
-                  ) : (
-                    <p className="meta">Feedback is available in proposal phase only.</p>
-                  )}
-                  <article className="card">
-                    <h4>Proposal</h4>
-                    <MarkdownView
-                      content={proposal}
-                      emptyText="No proposal available."
-                      githubBlobBase={details?.github_blob_base}
-                      repoPath={details?.repo_path}
-                      worktreePath={details?.state.worktree_path}
-                    />
-                  </article>
-                </>
-              ) : null}
-
-              {activeTab === "logs" ? (
-                <article className="card">
-                  <h4>Logs</h4>
-                  <MarkdownView
-                    content={logText}
-                    emptyText="No logs available."
-                    githubBlobBase={details?.github_blob_base}
-                    repoPath={details?.repo_path}
-                    worktreePath={details?.state.worktree_path}
-                  />
-                </article>
-              ) : null}
-            </>
-          ) : (
-            <p>Select a ticket to continue.</p>
-          )}
-        </section>
       </main>
 
       {showAddTicketDialog ? (
-        <div className="modal-backdrop" onClick={() => setShowAddTicketDialog(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Add Ticket</h3>
-            <p className="meta">Schedule a ticket run for a repository.</p>
-            {addTicketError ? <div className="banner error">{addTicketError}</div> : null}
+        <AddTicketDialog
+          knownRepoPaths={availableRepoPaths}
+          repoPath={newTicketRepoPath}
+          ticketNumber={newTicketNumber}
+          error={addTicketError}
+          onRepoPathChange={updateAddTicketRepoPath}
+          onTicketNumberChange={updateAddTicketNumber}
+          onSubmit={submitAddTicket}
+          onClose={closeAddTicketDialog}
+        />
+      ) : null}
 
-            <label className="field-label" htmlFor="repo-path-input">
-              Repository Folder
-            </label>
-            <input
-              id="repo-path-input"
-              list="repo-path-options"
-              value={newTicketRepoPath}
-              onChange={(e) => {
-                setNewTicketRepoPath(e.target.value);
-                setAddTicketError("");
-              }}
-              placeholder="/absolute/path/to/repo"
-            />
-            <datalist id="repo-path-options">
-              {knownRepoPaths.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
+      {showDiscoverModal ? (
+        <DiscoverTicketsModal
+          repoPath={discoverRepoPath}
+          tickets={discoveredTickets}
+          loading={discoverLoading}
+          error={discoverError}
+          onAdd={handleDiscoverAdd}
+          onClose={() => setShowDiscoverModal(false)}
+        />
+      ) : null}
 
-            <label className="field-label" htmlFor="ticket-number-input">
-              Ticket Number
-            </label>
-            <input
-              id="ticket-number-input"
-              value={newTicketNumber}
-              onChange={(e) => {
-                setNewTicketNumber(e.target.value);
-                setAddTicketError("");
-              }}
-              placeholder="e.g. 66825"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void submitAddTicket();
-                }
-              }}
-            />
-
-            <div className="button-row modal-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setAddTicketError("");
-                  setShowAddTicketDialog(false);
-                }}
-              >
-                Cancel
-              </button>
-              <button type="button" onClick={() => void submitAddTicket()}>
-                Schedule Run
-              </button>
-            </div>
-          </div>
-        </div>
+      {showLogsModal ? (
+        <ExecutionLogsModal
+          logs={executionLogs}
+          loading={executionLogsLoading}
+          onClose={() => setShowLogsModal(false)}
+          githubBlobBase={details?.github_blob_base}
+          repoPath={details?.repo_path}
+          worktreePath={details?.state.worktree_path}
+        />
       ) : null}
     </div>
   );

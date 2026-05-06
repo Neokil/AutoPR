@@ -1,0 +1,59 @@
+# AutoPR workflow configuration example.
+#
+# This file mirrors the default workflow embedded in the binary.
+# Copy it to one of these locations to override the default:
+#
+#   <repo>/.auto-pr/workflow.yaml   — applies to that repo only
+#   ~/.auto-pr/workflow.yaml        — applies globally
+#
+# Action types:
+#   provide_feedback  — prompt the user for a message and rerun the current state with it
+#   move_to_state     — transition to another state; "done" and "cancelled" are terminal
+#   run_script        — run shell commands, then dispatch a sub-action via on_success / on_failure / always
+
+states:
+  - name: fetch-ticket-data
+    prompt: prompts/fetch-ticket.md
+    pre_prompt_commands: []
+    post_prompt_commands: []
+    actions:
+      - label: "Continue"
+        type: move_to_state
+        target: investigation
+      - label: "Cancel"
+        type: move_to_state
+        target: cancelled
+
+  - name: investigation
+    prompt: prompts/investigate.md
+    pre_prompt_commands: []
+    post_prompt_commands: []
+    actions:
+      - label: "Provide Feedback"
+        type: provide_feedback
+      - label: "Approve"
+        type: move_to_state
+        target: implementation
+      - label: "Decline"
+        type: move_to_state
+        target: cancelled
+
+  - name: implementation
+    prompt: prompts/implement.md
+    pre_prompt_commands: []
+    post_prompt_commands: []
+    actions:
+      - label: "Provide Feedback"
+        type: provide_feedback
+      - label: "Fetch PR Feedback"
+        type: run_script
+        commands:
+          - gh pr view --json reviews --jq '[.reviews[].body] | join("\n\n")'
+        always:
+          type: provide_feedback
+      - label: "Accept"
+        type: move_to_state
+        target: done
+      - label: "Cancel"
+        type: move_to_state
+        target: cancelled

@@ -1,8 +1,5 @@
 import type { Job, TicketSummary } from "./types";
-
-function ticketKey(t: TicketSummary): string {
-  return `${t.repo_id}::${t.ticket_number}`;
-}
+import { ticketKey } from "./tickets";
 
 function summarizeJobAction(action: string): string {
   switch (action) {
@@ -51,9 +48,7 @@ export function TicketList({ tickets, selectedKey, onSelectTicket, onAddTicket }
               <span>{ticket.title || "(no title)"}</span>
               <div className="ticket-status-row">
                 {ticket.busy ? <span className="spinner" title="Worker is running" aria-label="Worker running" /> : null}
-                <span className="meta">
-                  {ticket.status} {ticket.approved ? "· approved" : ""}
-                </span>
+                <span className="meta">{ticket.status}</span>
               </div>
               {ticket.jobs && ticket.jobs.length > 0 ? <div className="ticket-jobs-row">{ticket.jobs.map(renderJobChip)}</div> : null}
               <span className="meta">{ticket.repo_path}</span>

@@ -1,0 +1,7 @@
+.git
+.build
+web/node_modules
+web/dist
+e2e/node_modules
+e2e/dist
+*.log

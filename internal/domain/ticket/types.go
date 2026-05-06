@@ -1,21 +1,7 @@
+// Package ticket defines tracker-facing ticket entities.
 package ticket
 
-import "time"
-
-type WorkflowState string
-
-const (
-	StateQueued          WorkflowState = "queued"
-	StateInvestigating   WorkflowState = "investigating"
-	StateProposalReady   WorkflowState = "proposal_ready"
-	StateWaitingForHuman WorkflowState = "waiting_for_human"
-	StateImplementing    WorkflowState = "implementing"
-	StateValidating      WorkflowState = "validating"
-	StatePRReady         WorkflowState = "pr_ready"
-	StateDone            WorkflowState = "done"
-	StateFailed          WorkflowState = "failed"
-)
-
+// Ticket is a structured representation of a project ticket fetched from an external tracker.
 type Ticket struct {
 	Number             string            `json:"number"`
 	ID                 string            `json:"id"`
@@ -26,49 +12,15 @@ type Ticket struct {
 	URL                string            `json:"url"`
 	Labels             []string          `json:"labels,omitempty"`
 	WorkflowFields     map[string]string `json:"workflow_fields,omitempty"`
-	ParentTicket       *TicketContext    `json:"parent_ticket,omitempty"`
-	Epic               *TicketContext    `json:"epic,omitempty"`
+	ParentTicket       *Context          `json:"parent_ticket,omitempty"`
+	Epic               *Context          `json:"epic,omitempty"`
 }
 
-type TicketContext struct {
+// Context is a lightweight reference to a parent ticket or epic.
+type Context struct {
 	ID          string `json:"id"`
 	Number      string `json:"number,omitempty"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	URL         string `json:"url"`
-}
-
-type State struct {
-	TicketNumber    string        `json:"ticket_number"`
-	BranchName      string        `json:"branch_name"`
-	WorktreePath    string        `json:"worktree_path"`
-	Status          WorkflowState `json:"status"`
-	Approved        bool          `json:"approved"`
-	FixAttempts     int           `json:"fix_attempts"`
-	LastError       string        `json:"last_error,omitempty"`
-	LastFeedback    string        `json:"last_feedback,omitempty"`
-	CreatedAt       time.Time     `json:"created_at"`
-	UpdatedAt       time.Time     `json:"updated_at"`
-	ProposalPath    string        `json:"proposal_path"`
-	FinalPath       string        `json:"final_solution_path"`
-	LogPath         string        `json:"log_path"`
-	PRPath          string        `json:"pr_path"`
-	ChecksLogPath   string        `json:"checks_log_path"`
-	TicketJSONPath  string        `json:"ticket_json_path"`
-	ProviderDirPath string        `json:"provider_dir_path"`
-	PRURL           string        `json:"pr_url,omitempty"`
-}
-
-func NewState(ticketNumber string) State {
-	now := time.Now().UTC()
-	return State{
-		TicketNumber: ticketNumber,
-		Status:       StateQueued,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-}
-
-func (s *State) Touch() {
-	s.UpdatedAt = time.Now().UTC()
 }

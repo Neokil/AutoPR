@@ -1,0 +1,50 @@
+version: "2"
+
+linters:
+  default: all
+  disable:
+    - cyclop
+    - depguard
+    - exhaustruct
+    - funlen
+    - gocognit
+    - lll
+    - wsl
+    - wsl_v5
+  settings:
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+
+    varnamelen:
+      ignore-names:
+        - ok
+        - id
+        - i
+        - j
+
+    gosec:
+      excludes:
+        - G301
+        - G302
+        - G304
+        - G306
+
+    mnd:
+      ignored-numbers:
+        - "0o600"
+        - "0o644"
+        - "0o755"
+
+  exclusions:
+    paths:
+      - web/node_modules
+    rules:
+      - linters:
+          - goconst
+        path: internal/config/config\.go
+      - linters:
+          - goconst
+        path: _test\.go$

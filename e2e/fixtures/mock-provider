@@ -1,0 +1,4 @@
+#!/bin/sh
+# Minimal AI provider stub: discard the prompt on stdin, emit a canned response.
+cat > /dev/null
+echo "Mock provider: analysis complete."

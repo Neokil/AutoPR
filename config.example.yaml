@@ -12,21 +12,47 @@ base_branch: ""
 check_commands: []
 format_commands: []
 lint_commands: []
+discover_tickets_command: |
+  curl -fsSL \
+    -H "Content-Type: application/json" \
+    -H "Shortcut-Token: ${SHORTCUT_API_TOKEN:?SHORTCUT_API_TOKEN is required}" \
+    -d '{"label_name":"auto-pr","workflow_state_types":["backlog","unstarted"]}' \
+    https://api.app.shortcut.com/api/v3/stories/search \
+  | python3 -c 'import json, sys; stories = json.load(sys.stdin); print(json.dumps([{"ticket_number": "SC-{}".format(story["id"]), "title": story["name"]} for story in stories]))'
 
 providers:
   gemini:
     command: gemini
     args: []
+
   codex:
     command: codex
     args:
       - exec
       - "-"
-  claude:
+      - --dangerously-bypass-approvals-and-sandbox
+    session:
+      init_args: ["exec", "-", "--dangerously-bypass-approvals-and-sandbox", "--json"]
+      resume_args: ["exec", "resume", "{{.SessionID}}", "--dangerously-bypass-approvals-and-sandbox", "--json"]
+      id_source: jsonl_first
+      id_field: thread_id
+      result_source: jsonl_last
+      result_field: item.text
+      result_event_type: item.completed
+
+  claude-code:
     command: claude
     args:
       - --print
-  # example for adding another provider without code changes:
+    session:
+      init_args: ["--print", "--output-format", "json"]
+      resume_args: ["--print", "--output-format", "json", "--resume", "{{.SessionID}}"]
+      id_source: json
+      id_field: session_id
+      result_source: json
+      result_field: result
+
+  # Session disabled — each run is independent (omit the session block):
   # my-provider:
   #   command: my-provider-cli
   #   args:

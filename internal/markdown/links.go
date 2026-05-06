@@ -1,3 +1,4 @@
+// Package markdown provides helpers for reading, writing, and transforming markdown files.
 package markdown
 
 import (
@@ -8,6 +9,8 @@ import (
 
 var markdownLinkPattern = regexp.MustCompile(`\[(.*?)\]\(([^)\s]+)\)`)
 
+// NormalizeRepoLinks rewrites absolute filesystem paths inside markdown links to paths
+// relative to one of the provided repo roots, leaving non-matching links unchanged.
 func NormalizeRepoLinks(content string, roots ...string) string {
 	if strings.TrimSpace(content) == "" {
 		return content
@@ -23,12 +26,14 @@ func NormalizeRepoLinks(content string, roots ...string) string {
 	if len(cleanRoots) == 0 {
 		return content
 	}
+
 	return markdownLinkPattern.ReplaceAllStringFunc(content, func(match string) string {
 		parts := markdownLinkPattern.FindStringSubmatch(match)
-		if len(parts) != 3 {
+		if len(parts) != 3 { //nolint:mnd // full match + 2 capture groups
 			return match
 		}
 		target := normalizeMarkdownTarget(parts[2], cleanRoots)
+
 		return "[" + parts[1] + "](" + target + ")"
 	})
 }
@@ -54,7 +59,9 @@ func normalizeMarkdownTarget(target string, roots []string) string {
 		if strings.HasPrefix(rel, "..") {
 			continue
 		}
+
 		return filepath.ToSlash(rel) + anchor
 	}
+
 	return cleanTarget + anchor
 }

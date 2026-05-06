@@ -1,0 +1,545 @@
+openapi: 3.0.3
+info:
+  title: AutoPR API
+  version: 0.1.0
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Daemon health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /api/repositories:
+    get:
+      operationId: listRepositories
+      responses:
+        "200":
+          description: Known repositories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryListResponse"
+  /api/tickets:
+    get:
+      operationId: listTickets
+      parameters:
+        - in: query
+          name: repo_path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ticket list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketListResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}:
+    get:
+      operationId: getTicket
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+        - $ref: "#/components/parameters/RepoPathQuery"
+      responses:
+        "200":
+          description: Ticket details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDetailsResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}/events:
+    get:
+      operationId: getTicketEvents
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+        - $ref: "#/components/parameters/RepoPathQuery"
+      responses:
+        "200":
+          description: Parsed execution log events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketEventsResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}/artifacts/{name}:
+    get:
+      operationId: getTicketArtifact
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+        - $ref: "#/components/parameters/ArtifactName"
+        - $ref: "#/components/parameters/RepoPathQuery"
+      responses:
+        "200":
+          description: Ticket artifact content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketArtifactResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}/execution-logs:
+    get:
+      operationId: getExecutionLogs
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+        - $ref: "#/components/parameters/RepoPathQuery"
+      responses:
+        "200":
+          description: Run execution logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionLogsResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/jobs/{id}:
+    get:
+      operationId: getJob
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+        "404":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}/run:
+    post:
+      operationId: runTicket
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepoRequest"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}/action:
+    post:
+      operationId: applyAction
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionRequest"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}/move-to-state:
+    post:
+      operationId: moveTicketToState
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveToStateRequest"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/tickets/{id}/cleanup:
+    post:
+      operationId: cleanupTicket
+      parameters:
+        - $ref: "#/components/parameters/TicketID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepoRequest"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/cleanup:
+    post:
+      operationId: cleanupScope
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanupScopeRequest"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/ErrorResponse"
+  /api/discover-tickets:
+    post:
+      operationId: discoverTickets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepoRequest"
+      responses:
+        "200":
+          description: Discovered tickets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverTicketsResponse"
+        "400":
+          $ref: "#/components/responses/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ErrorResponse"
+components:
+  parameters:
+    TicketID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    ArtifactName:
+      in: path
+      name: name
+      required: true
+      schema:
+        type: string
+    RepoPathQuery:
+      in: query
+      name: repo_path
+      required: true
+      schema:
+        type: string
+  responses:
+    ErrorResponse:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    FlowStatus:
+      type: string
+      enum: [pending, running, waiting, done, failed, cancelled]
+    JobStatus:
+      type: string
+      enum: [queued, running, done, failed]
+    HealthResponse:
+      type: object
+      required: [status, server_state, queue_depth, frontend, discover_tickets_configured]
+      properties:
+        status: { type: string }
+        server_state: { type: string }
+        queue_depth: { type: integer }
+        frontend: { type: string }
+        discover_tickets_configured: { type: boolean }
+    RepoRequest:
+      type: object
+      required: [repo_path]
+      properties:
+        repo_path: { type: string }
+    CleanupScopeRequest:
+      type: object
+      required: [repo_path, scope]
+      properties:
+        repo_path: { type: string }
+        scope:
+          type: string
+          enum: [done, all]
+    ActionRequest:
+      type: object
+      required: [repo_path, label]
+      properties:
+        repo_path: { type: string }
+        label: { type: string }
+        message: { type: string }
+    MoveToStateRequest:
+      type: object
+      required: [repo_path, target]
+      properties:
+        repo_path: { type: string }
+        target: { type: string }
+    ActionAcceptedResponse:
+      type: object
+      required: [status, job_id, action, repo_id, repo_path]
+      properties:
+        status: { type: string }
+        job_id: { type: string }
+        action: { type: string }
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    JobStatusResponse:
+      type: object
+      required: [id, action, repo_id, repo_path, status, created_at]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+        status: { $ref: "#/components/schemas/JobStatus" }
+        scope: { type: string }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+    ActionInfo:
+      type: object
+      required: [label, type]
+      properties:
+        label: { type: string }
+        type: { type: string }
+    WorkflowStateInfo:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        display_name: { type: string }
+    StateRunResponse:
+      type: object
+      required: [id, state_name, started_at]
+      properties:
+        id: { type: string }
+        state_name: { type: string }
+        state_display_name: { type: string }
+        started_at: { type: string, format: date-time }
+        artifact_ref: { type: string }
+        log_ref: { type: string }
+    TicketStateResponse:
+      type: object
+      required: [ticket_number, current_state, flow_status, branch_name, worktree_path, created_at, updated_at]
+      properties:
+        ticket_number: { type: string }
+        current_state: { type: string }
+        current_run_id: { type: string }
+        flow_status: { $ref: "#/components/schemas/FlowStatus" }
+        branch_name: { type: string }
+        worktree_path: { type: string }
+        last_error: { type: string }
+        pr_url: { type: string }
+        state_history:
+          type: array
+          items: { $ref: "#/components/schemas/StateRunResponse" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TicketSummaryResponse:
+      type: object
+      required: [repo_id, repo_path, ticket_number, status, busy, approved, updated_at]
+      properties:
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+        title: { type: string }
+        status: { $ref: "#/components/schemas/FlowStatus" }
+        busy: { type: boolean }
+        approved: { type: boolean }
+        last_error: { type: string }
+        updated_at: { type: string, format: date-time }
+        pr_url: { type: string }
+        jobs:
+          type: array
+          items: { $ref: "#/components/schemas/JobStatusResponse" }
+    DiscoveredTicket:
+      type: object
+      required: [ticket_number, title]
+      properties:
+        ticket_number: { type: string }
+        title: { type: string }
+    DiscoverTicketsResponse:
+      type: object
+      required: [tickets]
+      properties:
+        tickets:
+          type: array
+          items: { $ref: "#/components/schemas/DiscoveredTicket" }
+    TicketPayload:
+      type: object
+      additionalProperties: true
+      properties:
+        title: { type: string }
+    TicketDetailsResponse:
+      type: object
+      required: [repo_id, repo_path, ticket_number, state, workflow_states, available_actions]
+      properties:
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+        github_blob_base: { type: string }
+        state: { $ref: "#/components/schemas/TicketStateResponse" }
+        ticket: { $ref: "#/components/schemas/TicketPayload" }
+        next_steps: { type: string }
+        workflow_states:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowStateInfo" }
+        available_actions:
+          type: array
+          items: { $ref: "#/components/schemas/ActionInfo" }
+    LogEventResponse:
+      type: object
+      required: [title, timestamp, body]
+      properties:
+        title: { type: string }
+        timestamp: { type: string }
+        body: { type: string }
+    ExecutionLogResponse:
+      type: object
+      required: [run_id, state, timestamp, path, content]
+      properties:
+        run_id: { type: string }
+        state: { type: string }
+        state_display_name: { type: string }
+        timestamp: { type: string }
+        path: { type: string }
+        content: { type: string }
+    ServerEvent:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string }
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+        title: { type: string }
+        status: { type: string }
+        job_id: { type: string }
+        action: { type: string }
+        scope: { type: string }
+        error: { type: string }
+        pr_url: { type: string }
+    RepositoryListResponse:
+      type: object
+      required: [repositories]
+      properties:
+        repositories:
+          type: array
+          items: { type: string }
+    TicketListResponse:
+      type: object
+      required: [tickets]
+      properties:
+        repo_id: { type: string }
+        repo_path: { type: string }
+        tickets:
+          type: array
+          items: { $ref: "#/components/schemas/TicketSummaryResponse" }
+    TicketEventsResponse:
+      type: object
+      required: [repo_id, repo_path, ticket_number, events]
+      properties:
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/LogEventResponse" }
+    TicketArtifactResponse:
+      type: object
+      required: [repo_id, repo_path, ticket_number, name, path, content]
+      properties:
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+        name: { type: string }
+        path: { type: string }
+        content: { type: string }
+    ExecutionLogsResponse:
+      type: object
+      required: [repo_id, repo_path, ticket_number, logs]
+      properties:
+        repo_id: { type: string }
+        repo_path: { type: string }
+        ticket_number: { type: string }
+        logs:
+          type: array
+          items: { $ref: "#/components/schemas/ExecutionLogResponse" }

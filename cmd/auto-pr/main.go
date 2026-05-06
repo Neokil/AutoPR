@@ -2,38 +2,49 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
-	"ai-ticket-worker/internal/application/orchestrator"
-	"ai-ticket-worker/internal/gitutil"
+	"github.com/Neokil/AutoPR/internal/application/orchestrator"
+	"github.com/Neokil/AutoPR/internal/gitutil"
 )
 
-const defaultServerURL = "http://127.0.0.1:8080"
+const (
+	defaultServerURL = "http://127.0.0.1:8080"
+	minArgs          = 2
+)
 
 func resolveServerURL() string {
 	serverURL := strings.TrimSpace(os.Getenv("AUTO_PR_SERVER_URL"))
 	if serverURL != "" {
 		return serverURL
 	}
+
 	return defaultServerURL
 }
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	ctx := context.Background()
-	if len(os.Args) < 2 {
+	if len(os.Args) < minArgs {
 		usage()
 		os.Exit(1)
 	}
 
 	cwd, err := os.Getwd()
-	fatalIf(err)
+	if err != nil {
+		slog.Error("get working directory", "err", err)
+		os.Exit(1)
+	}
 
 	repoRoot, err := gitutil.RepoRoot(ctx, cwd)
-	fatalIf(err)
+	if err != nil {
+		slog.Error("find repository root", "err", err)
+		os.Exit(1)
+	}
 	serverURL := resolveServerURL()
 	svc := orchestrator.NewRemoteService(serverURL, repoRoot)
 
@@ -44,28 +55,8 @@ func main() {
 		waitForJobCmd(ctx, svc, os.Args[2:])
 	case "status":
 		statusCmd(svc, os.Args[2:])
-	case "approve":
-		requireArgs("approve", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.Approve(ctx, ticket))
-	case "feedback":
-		feedbackCmd(svc, os.Args[2:])
-	case "reject":
-		requireArgs("reject", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.Reject(ticket))
-	case "resume":
-		requireArgs("resume", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.ResumeTicket(ctx, ticket))
-	case "pr":
-		requireArgs("pr", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.GeneratePR(ctx, ticket))
-	case "apply-pr-comments":
-		requireArgs("apply-pr-comments", os.Args[2:], 1)
-		ticket := os.Args[2]
-		fatalIf(svc.ApplyPRComments(ctx, ticket))
+	case "action":
+		actionCmd(ctx, svc, os.Args[2:])
 	case "cleanup":
 		cleanupCmd(ctx, svc, os.Args[2:])
 	default:
@@ -74,112 +65,132 @@ func main() {
 	}
 }
 
-func runCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+func runCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
 	requireArgs("run", args, 1)
-	fatalIf(svc.RunTickets(ctx, args))
+	for _, ticket := range args {
+		err := svc.StartFlow(ctx, ticket)
+		if err != nil {
+			slog.Error("start flow", "err", err)
+			os.Exit(1)
+		}
+	}
 }
 
-func statusCmd(svc orchestrator.Service, args []string) {
+func statusCmd(svc *orchestrator.RemoteService, args []string) {
 	if len(args) > 1 {
-		fatalIf(errors.New("usage: auto-pr status [ticket-number]"))
+		slog.Error("invalid usage", "err", errUsageStatus)
+		os.Exit(1)
 	}
 	ticket := ""
 	if len(args) == 1 {
 		ticket = args[0]
 	}
-	fatalIf(svc.Status(ticket))
+	err := svc.Status(ticket)
+	if err != nil {
+		slog.Error("status", "err", err)
+		os.Exit(1)
+	}
 	if ticket != "" {
 		printNextSteps(svc, ticket)
 	}
 }
 
-func feedbackCmd(svc orchestrator.Service, args []string) {
-	requireArgs("feedback", args, 1)
+func actionCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
+	requireArgs("action", args, 1)
 	ticket := args[0]
 
-	fs := flag.NewFlagSet("feedback", flag.ExitOnError)
-	message := fs.String("message", "", "feedback message")
+	fs := flag.NewFlagSet("action", flag.ExitOnError)
+	label := fs.String("label", "", "action label (required)")
+	message := fs.String("message", "", "optional message (for provide_feedback actions)")
 	_ = fs.Parse(args[1:])
 
-	if strings.TrimSpace(*message) == "" {
-		fatalIf(errors.New("feedback requires --message"))
+	if strings.TrimSpace(*label) == "" {
+		slog.Error("invalid usage", "err", errActionRequiresLabel)
+		os.Exit(1)
 	}
-	fatalIf(svc.Feedback(ticket, *message))
+	err := svc.ApplyAction(ctx, ticket, *label, *message)
+	if err != nil {
+		slog.Error("apply action", "err", err)
+		os.Exit(1)
+	}
 }
 
-func waitForJobCmd(ctx context.Context, svc orchestrator.Service, args []string) {
+func waitForJobCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
 	requireArgs("wait-for-job", args, 1)
-	remote, ok := svc.(*orchestrator.RemoteService)
-	if !ok {
-		fatalIf(errors.New("wait-for-job is only supported in server mode"))
+	job, err := svc.WaitForJob(ctx, args[0])
+	if err != nil {
+		slog.Error("wait for job", "err", err)
+		os.Exit(1)
 	}
-	job, err := remote.WaitForJob(ctx, args[0])
-	fatalIf(err)
-	fmt.Printf("job %s completed with status %s\n", job.ID, job.Status)
+	slog.Info("job completed", "job_id", job.Id, "status", job.Status)
 }
 
-func cleanupCmd(ctx context.Context, svc orchestrator.Service, args []string) {
-	fs := flag.NewFlagSet("cleanup", flag.ExitOnError)
-	doneOnly := fs.Bool("done", false, "cleanup only done tickets")
-	all := fs.Bool("all", false, "cleanup all tickets")
-	_ = fs.Parse(args)
+func cleanupCmd(ctx context.Context, svc *orchestrator.RemoteService, args []string) {
+	flags := flag.NewFlagSet("cleanup", flag.ExitOnError)
+	doneOnly := flags.Bool("done", false, "cleanup only done tickets")
+	all := flags.Bool("all", false, "cleanup all tickets")
+	_ = flags.Parse(args)
 
 	if *doneOnly && *all {
-		fatalIf(errors.New("cleanup: use either --done or --all, not both"))
+		slog.Error("invalid usage", "err", errCleanupFlags)
+		os.Exit(1)
 	}
 	if *doneOnly {
-		fatalIf(svc.CleanupDone(ctx))
+		err := svc.CleanupDone(ctx)
+		if err != nil {
+			slog.Error("cleanup done", "err", err)
+			os.Exit(1)
+		}
+
 		return
 	}
 	if *all {
-		fatalIf(svc.CleanupAll(ctx))
+		err := svc.CleanupAll(ctx)
+		if err != nil {
+			slog.Error("cleanup all", "err", err)
+			os.Exit(1)
+		}
+
 		return
 	}
 
-	rest := fs.Args()
+	rest := flags.Args()
 	if len(rest) != 1 {
-		fatalIf(errors.New("usage: auto-pr cleanup <ticket-number> | --done | --all"))
+		slog.Error("invalid usage", "err", errUsageCleanup)
+		os.Exit(1)
 	}
-	fatalIf(svc.CleanupTicket(ctx, rest[0]))
+	err := svc.CleanupTicket(ctx, rest[0])
+	if err != nil {
+		slog.Error("cleanup ticket", "err", err)
+		os.Exit(1)
+	}
 }
 
-func requireArgs(cmd string, args []string, min int) {
-	if len(args) < min {
-		fatalIf(fmt.Errorf("usage: auto-pr %s ...", cmd))
+func requireArgs(cmd string, args []string, minArgs int) {
+	if len(args) < minArgs {
+		slog.Error("invalid usage", "cmd", "auto-pr "+cmd, "err", errUsage)
+		os.Exit(1)
 	}
-}
-
-func fatalIf(err error) {
-	if err == nil {
-		return
-	}
-	fmt.Fprintln(os.Stderr, "error:", err)
-	os.Exit(1)
 }
 
 func usage() {
-	fmt.Println(`AutoPR
+	_, _ = fmt.Fprintln(os.Stdout, `AutoPR
 
 Commands:
   auto-pr run <ticket-number> [<ticket-number>...]
   auto-pr wait-for-job <job-id>
   auto-pr status [<ticket-number>]
-  auto-pr approve <ticket-number>
-  auto-pr feedback <ticket-number> --message "..."
-  auto-pr reject <ticket-number>
-  auto-pr resume <ticket-number>
-  auto-pr pr <ticket-number>
-  auto-pr apply-pr-comments <ticket-number>
+  auto-pr action <ticket-number> --label "<action-label>" [--message "..."]
   auto-pr cleanup <ticket-number>
   auto-pr cleanup --done
   auto-pr cleanup --all`)
 }
 
-func printNextSteps(svc orchestrator.Service, ticket string) {
+func printNextSteps(svc *orchestrator.RemoteService, ticket string) {
 	msg, err := svc.NextSteps(ticket)
 	if err != nil {
 		return
 	}
-	fmt.Println()
-	fmt.Println(msg)
+	_, _ = fmt.Fprintln(os.Stdout)
+	_, _ = fmt.Fprintln(os.Stdout, msg)
 }
