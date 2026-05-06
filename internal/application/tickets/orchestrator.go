@@ -300,7 +300,7 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 		"AUTOPR_REPO_ROOT":          o.RepoRoot,
 		"AUTOPR_DISCOVER_LOG_DIR":   runDir,
 		"AUTOPR_DISCOVER_REPO_PATH": o.RepoRoot,
-	}, "", "/bin/zsh", "-lc", command)
+	}, "", "/bin/sh", "-c", command)
 	_ = os.WriteFile(filepath.Join(runDir, "command-output.json"), []byte(result.Stdout), 0o644)
 	_ = os.WriteFile(filepath.Join(runDir, "command-stderr.log"), []byte(result.Stderr), 0o644)
 	if err != nil {
