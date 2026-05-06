@@ -26,6 +26,11 @@ jobs:
 
       - run: make build
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
   lint-be:
     name: Lint (Go)
     runs-on: ubuntu-latest
@@ -37,6 +42,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
 
       - uses: golangci/golangci-lint-action@v9
 
@@ -72,6 +82,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
 
       - name: Run unit tests
         run: go test ./...
