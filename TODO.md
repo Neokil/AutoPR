@@ -7,4 +7,4 @@
 - Add in "after-scripts" that receive the prompt output. That way we could do things like "generate commit message" as prompt and pipe that into a fixed "commit + push" script.
 
 # Bugs
-- 
+- When I am adding a Ticket using the "Discover Ticket" functionality the Panel closes immediately (but after adding one it should go back to the overview). Also when I reopen it then the Ticket that I just added shows up in the list with an add button. Tickets that are already added to the tool should still show up but have no "add" button, but an "added" label.
