@@ -95,7 +95,12 @@ func parseGitHubOwnerRepo(origin string) (string, error) {
 // WorktreeAdd creates a new git worktree at worktreePath on branch, forked from baseBranch.
 func WorktreeAdd(ctx context.Context, repoRoot, branch, worktreePath, baseBranch string) error {
 	if baseBranch == "" {
-		baseBranch = "HEAD"
+		def, err := DefaultBranch(ctx, repoRoot)
+		if err != nil || strings.TrimSpace(def) == "" {
+			baseBranch = "main"
+		} else {
+			baseBranch = def
+		}
 	}
 	_, err := shell.Run(ctx, repoRoot, nil, "", "git", "worktree", "add", "-B", branch, worktreePath, baseBranch)
 	if err != nil {
