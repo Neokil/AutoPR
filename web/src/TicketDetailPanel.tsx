@@ -71,7 +71,7 @@ export function TicketDetailPanel({
         <div className="detail-actions-wrap">
           <div className="button-row detail-actions">
             {actionButtons.map((action) => (
-              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={selectedSummary.status === "running"}>
+              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={selectedSummary.busy}>
                 {action.label}
               </button>
             ))}
@@ -89,9 +89,9 @@ export function TicketDetailPanel({
             workflowStates={details?.workflow_states ?? []}
             currentStateName={details?.state.current_state}
             rerunLabel={selectedSummary.status === "failed" ? "Retry" : "Rerun"}
-            rerunDisabled={selectedSummary.status === "running"}
-            cleanupDisabled={selectedSummary.status === "running"}
-            moveDisabled={selectedSummary.status === "running"}
+            rerunDisabled={selectedSummary.busy}
+            cleanupDisabled={selectedSummary.busy}
+            moveDisabled={selectedSummary.busy}
           />
         </div>
       </div>
