@@ -522,7 +522,6 @@ export function App() {
           artifactLoading={artifactLoading}
           feedbackAction={feedbackAction}
           feedbackMessage={feedbackMessage}
-          isRunning={!!activeJobId}
           onSelectRun={setSelectedRunId}
           onFeedbackMessageChange={setFeedbackMessage}
           onSubmitFeedback={submitFeedback}

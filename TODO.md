@@ -6,5 +6,5 @@
 - Allow to define the model/provider per prompt. Some models may be better in analyzing, some in coding and some might be cheap but sufficient for tasks like writing commit messages.
 - Add in "after-scripts" that receive the prompt output. That way we could do things like "generate commit message" as prompt and pipe that into a fixed "commit + push" script.
 
-# Fixes
-
+# Bugs
+- 
