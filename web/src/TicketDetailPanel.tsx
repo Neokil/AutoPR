@@ -13,6 +13,7 @@ type TicketDetailPanelProps = {
   artifactLoading: boolean;
   feedbackAction?: ActionInfo;
   feedbackMessage: string;
+  isRunning: boolean;
   onSelectRun: (runId: string) => void;
   onFeedbackMessageChange: (value: string) => void;
   onSubmitFeedback: () => void;
@@ -32,6 +33,7 @@ export function TicketDetailPanel({
   artifactLoading,
   feedbackAction,
   feedbackMessage,
+  isRunning,
   onSelectRun,
   onFeedbackMessageChange,
   onSubmitFeedback,
@@ -71,7 +73,7 @@ export function TicketDetailPanel({
         <div className="detail-actions-wrap">
           <div className="button-row detail-actions">
             {actionButtons.map((action) => (
-              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={selectedSummary.busy}>
+              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={isRunning}>
                 {action.label}
               </button>
             ))}
@@ -89,9 +91,9 @@ export function TicketDetailPanel({
             workflowStates={details?.workflow_states ?? []}
             currentStateName={details?.state.current_state}
             rerunLabel={selectedSummary.status === "failed" ? "Retry" : "Rerun"}
-            rerunDisabled={selectedSummary.busy}
-            cleanupDisabled={selectedSummary.busy}
-            moveDisabled={selectedSummary.busy}
+            rerunDisabled={isRunning}
+            cleanupDisabled={isRunning}
+            moveDisabled={isRunning}
           />
         </div>
       </div>

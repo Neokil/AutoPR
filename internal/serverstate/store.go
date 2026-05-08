@@ -86,8 +86,28 @@ func NewStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	store.resetStaleJobs()
 
 	return store, nil
+}
+
+// resetStaleJobs marks any queued or running jobs as failed, since they could not have
+// completed if the server was not running.
+func (s *Store) resetStaleJobs() {
+	now := time.Now().UTC()
+	changed := false
+	for id, job := range s.data.Jobs {
+		if job.Status == "queued" || job.Status == "running" {
+			job.Status = "failed"
+			job.Error = "interrupted: server restarted"
+			job.FinishedAt = &now
+			s.data.Jobs[id] = job
+			changed = true
+		}
+	}
+	if changed {
+		_ = s.saveLocked()
+	}
 }
 
 // UpsertRepo inserts or updates the record for repoPath and returns it.

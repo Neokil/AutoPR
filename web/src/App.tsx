@@ -40,6 +40,7 @@ export function App() {
   const [selectedArtifactContent, setSelectedArtifactContent] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [activeJobId, setActiveJobId] = useState("");
+  const [activeJobTicketKey, setActiveJobTicketKey] = useState("");
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
   const [artifactLoading, setArtifactLoading] = useState(false);
@@ -276,10 +277,12 @@ export function App() {
           setError(err instanceof Error ? err.message : "failed to refresh job");
         } finally {
           setActiveJobId("");
+          setActiveJobTicketKey("");
         }
       } else if (status === "done") {
         setActiveJob(null);
         setActiveJobId("");
+        setActiveJobTicketKey("");
       } else if (status === "queued" || status === "running") {
         setActiveJob((current) => {
           if (!current) {
@@ -326,11 +329,12 @@ export function App() {
     }, 250);
   }
 
-  async function queueAction(fn: () => Promise<{ job_id: string }>): Promise<boolean> {
+  async function queueAction(fn: () => Promise<{ job_id: string }>, forTicketKey = ""): Promise<boolean> {
     setError("");
     try {
       const accepted = await fn();
       setActiveJobId(accepted.job_id);
+      setActiveJobTicketKey(forTicketKey);
       setActiveJob(null);
       return true;
     } catch (err) {
@@ -405,13 +409,15 @@ export function App() {
     if (!selectedSummary || !feedbackAction || !feedbackMessage.trim()) {
       return;
     }
+    const key = ticketKey(selectedSummary);
     void queueAction(() =>
       applyAction(
         selectedSummary.repo_path,
         selectedSummary.ticket_number,
         feedbackAction.label,
         feedbackMessage
-      )
+      ),
+      key
     ).then((ok) => {
       if (ok) {
         setFeedbackMessage("");
@@ -423,28 +429,28 @@ export function App() {
     if (!selectedSummary) {
       return;
     }
-    void queueAction(() => applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, label));
+    void queueAction(() => applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, label), ticketKey(selectedSummary));
   }
 
   function rerunSelectedTicket() {
     if (!selectedSummary) {
       return;
     }
-    void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number));
+    void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number), ticketKey(selectedSummary));
   }
 
   function cleanupSelectedTicket() {
     if (!selectedSummary) {
       return;
     }
-    void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number));
+    void queueAction(() => cleanupTicket(selectedSummary.repo_path, selectedSummary.ticket_number), ticketKey(selectedSummary));
   }
 
   function moveSelectedTicket(target: string) {
     if (!selectedSummary) {
       return;
     }
-    void queueAction(() => moveToState(selectedSummary.repo_path, selectedSummary.ticket_number, target));
+    void queueAction(() => moveToState(selectedSummary.repo_path, selectedSummary.ticket_number, target), ticketKey(selectedSummary));
   }
 
   function openDiscoverModal() {
@@ -522,6 +528,7 @@ export function App() {
           artifactLoading={artifactLoading}
           feedbackAction={feedbackAction}
           feedbackMessage={feedbackMessage}
+          isRunning={!!activeJobId && activeJobTicketKey === (selectedSummary ? ticketKey(selectedSummary) : "")}
           onSelectRun={setSelectedRunId}
           onFeedbackMessageChange={setFeedbackMessage}
           onSubmitFeedback={submitFeedback}
