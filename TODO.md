@@ -8,3 +8,4 @@
 
 # Bugs
 - When I am adding a Ticket using the "Discover Ticket" functionality the Panel closes immediately (but after adding one it should go back to the overview). Also when I reopen it then the Ticket that I just added shows up in the list with an add button. Tickets that are already added to the tool should still show up but have no "add" button, but an "added" label.
+- There are still directories created for each ticket directly in ".autopr" folder in the project. Those are empty but they are there. Do we need those? If not we should never create them. If we need them temporarily we should remove them after we are done.
