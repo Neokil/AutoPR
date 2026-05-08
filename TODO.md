@@ -5,6 +5,7 @@
 - Add support for multiple workflows. For example one workflow that is just there to refine tickets. One workflow to actually then work on them.
 - Allow to define the model/provider per prompt. Some models may be better in analyzing, some in coding and some might be cheap but sufficient for tasks like writing commit messages.
 - Add in "after-scripts" that receive the prompt output. That way we could do things like "generate commit message" as prompt and pipe that into a fixed "commit + push" script.
+- After the Implementation Step is done we should provide a link to the PR.
 
 # Bugs
 - When I am adding a Ticket using the "Discover Ticket" functionality the Panel closes immediately (but after adding one it should go back to the overview). Also when I reopen it then the Ticket that I just added shows up in the list with an add button. Tickets that are already added to the tool should still show up but have no "add" button, but an "added" label.
