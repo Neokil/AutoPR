@@ -43,6 +43,14 @@ type Data struct {
 	Jobs    map[string]JobRecord    `json:"jobs"`
 }
 
+// Job status values used across the server and store.
+const (
+	JobStatusQueued  = "queued"
+	JobStatusRunning = "running"
+	JobStatusDone    = "done"
+	JobStatusFailed  = "failed"
+)
+
 // JobRecord represents a single background job and its lifecycle timestamps.
 type JobRecord struct {
 	ID           string     `json:"id"`
@@ -89,25 +97,6 @@ func NewStore(path string) (*Store, error) {
 	store.resetStaleJobs()
 
 	return store, nil
-}
-
-// resetStaleJobs marks any queued or running jobs as failed, since they could not have
-// completed if the server was not running.
-func (s *Store) resetStaleJobs() {
-	now := time.Now().UTC()
-	changed := false
-	for id, job := range s.data.Jobs {
-		if job.Status == "queued" || job.Status == "running" {
-			job.Status = "failed"
-			job.Error = "interrupted: server restarted"
-			job.FinishedAt = &now
-			s.data.Jobs[id] = job
-			changed = true
-		}
-	}
-	if changed {
-		_ = s.saveLocked()
-	}
 }
 
 // UpsertRepo inserts or updates the record for repoPath and returns it.
@@ -227,7 +216,7 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 		rec.Jobs = append([]JobRecord(nil), jobsByTicket[ticketKey(rec.RepoID, rec.TicketNumber)]...)
 		rec.Busy = false
 		for _, job := range rec.Jobs {
-			if job.Status == "queued" || job.Status == "running" {
+			if job.Status == JobStatusQueued || job.Status == JobStatusRunning {
 				rec.Busy = true
 
 				break
@@ -266,7 +255,7 @@ func (s *Store) NewJob(action, repoID, repoPath, ticketNumber, scope string) (Jo
 		RepoPath:     repoPath,
 		TicketNumber: ticketNumber,
 		Scope:        scope,
-		Status:       "queued",
+		Status:       JobStatusQueued,
 		CreatedAt:    now,
 	}
 	s.data.Jobs[id] = rec
@@ -288,9 +277,9 @@ func (s *Store) UpdateJobStatus(id, status, errMsg string) error {
 	}
 	now := time.Now().UTC()
 	switch status {
-	case "running":
+	case JobStatusRunning:
 		rec.StartedAt = &now
-	case "done", "failed":
+	case JobStatusDone, JobStatusFailed:
 		rec.FinishedAt = &now
 	}
 	rec.Status = status
@@ -326,6 +315,25 @@ func (s *Store) ListRepos() []RepoRecord {
 	})
 
 	return out
+}
+
+// resetStaleJobs marks any queued or running jobs as failed, since they could not have
+// completed if the server was not running.
+func (s *Store) resetStaleJobs() {
+	now := time.Now().UTC()
+	changed := false
+	for id, job := range s.data.Jobs {
+		if job.Status == JobStatusQueued || job.Status == JobStatusRunning {
+			job.Status = JobStatusFailed
+			job.Error = "interrupted: server restarted"
+			job.FinishedAt = &now
+			s.data.Jobs[id] = job
+			changed = true
+		}
+	}
+	if changed {
+		_ = s.saveLocked()
+	}
 }
 
 func (s *Store) load() error {

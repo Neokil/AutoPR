@@ -12,14 +12,14 @@ import (
 
 func (s *server) workerLoop() {
 	for job := range s.jobs {
-		s.setJobStatus(job.record, "running", "")
+		s.setJobStatus(job.record, serverstate.JobStatusRunning, "")
 		err := s.executeJob(job)
 		if err != nil {
-			s.setJobStatus(job.record, "failed", err.Error())
+			s.setJobStatus(job.record, serverstate.JobStatusFailed, err.Error())
 
 			continue
 		}
-		s.setJobStatus(job.record, "done", "")
+		s.setJobStatus(job.record, serverstate.JobStatusDone, "")
 		if job.record.Action == jobCleanup && strings.TrimSpace(job.record.TicketNumber) != "" {
 			_ = s.meta.DeleteJobs(job.record.RepoID, job.record.TicketNumber)
 		}
