@@ -528,7 +528,6 @@ export function App() {
           artifactLoading={artifactLoading}
           feedbackAction={feedbackAction}
           feedbackMessage={feedbackMessage}
-          isRunning={!!activeJobId && activeJobTicketKey === (selectedSummary ? ticketKey(selectedSummary) : "")}
           onSelectRun={setSelectedRunId}
           onFeedbackMessageChange={setFeedbackMessage}
           onSubmitFeedback={submitFeedback}
