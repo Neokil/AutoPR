@@ -22,13 +22,6 @@ import (
 )
 
 const (
-	jobRun         = "run"
-	jobAction      = "action"
-	jobMoveToState = "move_to_state"
-	jobCleanup     = "cleanup_ticket"
-	jobCleanupDone = "cleanup_done"
-	jobCleanupAll  = "cleanup_all"
-
 	jobQueueSize          = 256
 	httpReadHeaderTimeout = 30 * time.Second
 	sectionMatchLen       = 3 // full match + 2 capture groups

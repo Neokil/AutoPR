@@ -37,7 +37,7 @@ func toTicketStateResponse(state workflowstate.State) api.TicketStateResponse {
 func toJobResponse(job serverstate.JobRecord) api.JobStatusResponse {
 	return api.JobStatusResponse{
 		Id:           job.ID,
-		Action:       job.Action,
+		Action:       string(job.Action),
 		RepoId:       job.RepoID,
 		RepoPath:     job.RepoPath,
 		TicketNumber: stringPtr(job.TicketNumber),

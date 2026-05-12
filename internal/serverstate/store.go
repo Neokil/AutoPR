@@ -46,7 +46,7 @@ type Data struct {
 // JobRecord represents a single background job and its lifecycle timestamps.
 type JobRecord struct {
 	ID           string     `json:"id"`
-	Action       string     `json:"action"`
+	Action       JobAction  `json:"action"`
 	RepoID       string     `json:"repo_id"`
 	RepoPath     string     `json:"repo_path"`
 	TicketNumber string     `json:"ticket_number,omitempty"`
@@ -231,7 +231,7 @@ func (s *Store) ListTickets(repoID string) []TicketRecord {
 }
 
 // NewJob creates a new queued job record and persists it.
-func (s *Store) NewJob(action, repoID, repoPath, ticketNumber, scope string) (JobRecord, error) {
+func (s *Store) NewJob(action JobAction, repoID, repoPath, ticketNumber, scope string) (JobRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id, err := randomID()

@@ -385,7 +385,7 @@ func (s *server) RunTicket(ctx context.Context, request api.RunTicketRequestObje
 	return acceptedRunTicket(s.enqueueJob(jobRun, repoID, repoRoot, request.Id, enqueueOptions{}))
 }
 
-func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueueOptions) (api.ActionAcceptedResponse, int, error) {
+func (s *server) enqueueJob(action JobAction, repoID, repoPath, ticket string, opts enqueueOptions) (api.ActionAcceptedResponse, int, error) {
 	if action == jobRun && strings.TrimSpace(ticket) != "" {
 		queueErr := s.ensureQueuedTicket(repoID, repoPath, ticket)
 		if queueErr != nil {
@@ -408,7 +408,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 		RepoPath:     stringPtr(repoPath),
 		TicketNumber: stringPtr(ticket),
 		JobId:        stringPtr(job.ID),
-		Action:       stringPtr(action),
+		Action:       stringPtr(string(action)),
 		Scope:        stringPtr(opts.scope),
 		Status:       stringPtr("queued"),
 	})
@@ -417,7 +417,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 		return api.ActionAcceptedResponse{
 			Status:       "accepted",
 			JobId:        job.ID,
-			Action:       action,
+			Action:       string(action),
 			RepoId:       repoID,
 			RepoPath:     repoPath,
 			TicketNumber: stringPtr(ticket),
@@ -430,7 +430,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 			RepoPath:     stringPtr(repoPath),
 			TicketNumber: stringPtr(ticket),
 			JobId:        stringPtr(job.ID),
-			Action:       stringPtr(action),
+			Action:       stringPtr(string(action)),
 			Scope:        stringPtr(opts.scope),
 			Status:       stringPtr("failed"),
 			Error:        stringPtr("job queue is full"),

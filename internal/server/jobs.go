@@ -34,7 +34,7 @@ func (s *server) setJobStatus(job serverstate.JobRecord, status, errMsg string) 
 		RepoPath:     stringPtr(job.RepoPath),
 		TicketNumber: stringPtr(job.TicketNumber),
 		JobId:        stringPtr(job.ID),
-		Action:       stringPtr(job.Action),
+		Action:       stringPtr(string(job.Action)),
 		Scope:        stringPtr(job.Scope),
 		Status:       stringPtr(status),
 		Error:        stringPtr(strings.TrimSpace(errMsg)),
