@@ -12,10 +12,13 @@ type TicketDetailPanelProps = {
   selectedArtifactContent: string;
   artifactLoading: boolean;
   feedbackAction?: ActionInfo;
-  feedbackMessage: string;
+  openQuestions: string[];
+  questionAnswers: Record<string, string>;
+  generalFeedback: string;
   isRunning: boolean;
   onSelectRun: (runId: string) => void;
-  onFeedbackMessageChange: (value: string) => void;
+  onQuestionAnswerChange: (index: number, value: string) => void;
+  onGeneralFeedbackChange: (value: string) => void;
   onSubmitFeedback: () => void;
   onApplyAction: (label: string) => void;
   onOpenLogs: () => void;
@@ -32,10 +35,13 @@ export function TicketDetailPanel({
   selectedArtifactContent,
   artifactLoading,
   feedbackAction,
-  feedbackMessage,
+  openQuestions,
+  questionAnswers,
+  generalFeedback,
   isRunning,
   onSelectRun,
-  onFeedbackMessageChange,
+  onQuestionAnswerChange,
+  onGeneralFeedbackChange,
   onSubmitFeedback,
   onApplyAction,
   onOpenLogs,
@@ -113,13 +119,41 @@ export function TicketDetailPanel({
               onSubmitFeedback();
             }}
           >
-            <textarea
-              value={feedbackMessage}
-              onChange={(event) => onFeedbackMessageChange(event.target.value)}
-              placeholder={`Send feedback (${feedbackAction.label})`}
-              rows={3}
-            />
-            <button type="submit">{feedbackAction.label}</button>
+            {openQuestions.length > 0 ? (
+              <>
+                {openQuestions.map((question, index) => (
+                  <label key={`${index}-${question}`} className="feedback-field">
+                    <span className="field-label">Open Question {index + 1}</span>
+                    <p className="feedback-question">{question}</p>
+                    <textarea
+                      value={questionAnswers[String(index)] ?? ""}
+                      onChange={(event) => onQuestionAnswerChange(index, event.target.value)}
+                      placeholder={`Answer open question ${index + 1}`}
+                      rows={4}
+                    />
+                  </label>
+                ))}
+                <label className="feedback-field">
+                  <span className="field-label">Additional Feedback</span>
+                  <textarea
+                    value={generalFeedback}
+                    onChange={(event) => onGeneralFeedbackChange(event.target.value)}
+                    placeholder="Add any additional context"
+                    rows={4}
+                  />
+                </label>
+              </>
+            ) : (
+              <textarea
+                value={generalFeedback}
+                onChange={(event) => onGeneralFeedbackChange(event.target.value)}
+                placeholder={`Send feedback (${feedbackAction.label})`}
+                rows={3}
+              />
+            )}
+            <div className="feedback-submit">
+              <button type="submit">{feedbackAction.label}</button>
+            </div>
           </form>
         ) : null}
         {selectedRun ? (
