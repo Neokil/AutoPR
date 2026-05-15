@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   applyAction,
   cleanupAll,
@@ -19,6 +19,7 @@ import {
 import { AddTicketDialog } from "./AddTicketDialog";
 import { DiscoverTicketsModal } from "./DiscoverTicketsModal";
 import { ExecutionLogsModal } from "./ExecutionLogsModal";
+import { extractOpenQuestions, formatFeedbackMessage } from "./investigationFeedback";
 import { TicketDetailPanel } from "./TicketDetailPanel";
 import { TicketList } from "./TicketList";
 import {
@@ -38,7 +39,9 @@ export function App() {
   const [details, setDetails] = useState<TicketDetails | null>(null);
   const [selectedRunId, setSelectedRunId] = useState("");
   const [selectedArtifactContent, setSelectedArtifactContent] = useState("");
-  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [currentFeedbackArtifactContent, setCurrentFeedbackArtifactContent] = useState("");
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [generalFeedback, setGeneralFeedback] = useState("");
   const [activeJobId, setActiveJobId] = useState("");
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,6 +67,15 @@ export function App() {
   const availableRepoPaths = useMemo(() => knownRepoPaths(repositoryOptions, tickets), [repositoryOptions, tickets]);
   const stateRuns = useMemo(() => stateRunsFromDetails(details), [details]);
   const feedbackAction = useMemo(() => getFeedbackAction(details, selectedSummary), [details, selectedSummary]);
+  const currentRunId = details?.state.current_run_id ?? "";
+  const currentRun = useMemo(
+    () => stateRuns.find((run) => run.id === currentRunId) ?? null,
+    [currentRunId, stateRuns]
+  );
+  const openQuestions = useMemo(
+    () => extractOpenQuestions(currentFeedbackArtifactContent),
+    [currentFeedbackArtifactContent]
+  );
 
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
   const activeJobIdRef = useRef("");
@@ -71,6 +83,58 @@ export function App() {
   const fullRefreshScheduledRef = useRef(false);
   const prevLastRunIdRef = useRef("");
   const reconnectErrorMessage = "event stream connection lost; reconnecting";
+
+  const handleServerEvent = useEffectEvent(async (evt: ServerEvent) => {
+    const selected = selectedSummaryRef.current;
+    const trackedJobID = activeJobIdRef.current;
+    if (evt.type === "job" && evt.job_id && trackedJobID && evt.job_id === trackedJobID) {
+      const status = evt.status ?? "";
+      if (status === "failed") {
+        try {
+          const job = await getJob(evt.job_id);
+          setActiveJob(job);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "failed to refresh job");
+        } finally {
+          setActiveJobId("");
+        }
+      } else if (status === "done") {
+        setActiveJob(null);
+        setActiveJobId("");
+      } else if (status === "queued" || status === "running") {
+        setActiveJob((current) => {
+          if (!current) {
+            return current;
+          }
+          return { ...current, status };
+        });
+      }
+    }
+
+    let needsFullRefresh = evt.type === "repo_tickets_synced";
+    setTickets((current) => {
+      const ticketUpdate = applyTicketEvent(current, evt);
+      if (ticketUpdate.needsFullRefresh) {
+        needsFullRefresh = true;
+      }
+      return ticketUpdate.tickets;
+    });
+    if (needsFullRefresh) {
+      scheduleFullRefresh();
+    }
+
+    if (
+      selected &&
+      evt.type === "ticket_updated" &&
+      evt.repo_path === selected.repo_path &&
+      evt.ticket_number === selected.ticket_number
+    ) {
+      await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
+      if (showLogsModalRef.current) {
+        await refreshExecutionLogs(selected.repo_path, selected.ticket_number);
+      }
+    }
+  });
 
   useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
@@ -102,13 +166,16 @@ export function App() {
       }
     );
     return () => stream.close();
-  }, []);
+  }, [handleServerEvent]);
 
   useEffect(() => {
     if (!selectedSummary) {
       setDetails(null);
       setSelectedRunId("");
       setSelectedArtifactContent("");
+      setCurrentFeedbackArtifactContent("");
+      setQuestionAnswers({});
+      setGeneralFeedback("");
       setArtifactLoading(false);
       setShowLogsModal(false);
       setExecutionLogs([]);
@@ -116,7 +183,7 @@ export function App() {
       return;
     }
     void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
-  }, [selectedSummary?.repo_path, selectedSummary?.ticket_number]);
+  }, [selectedSummary]);
 
   useEffect(() => {
     if (stateRuns.length === 0) {
@@ -183,6 +250,44 @@ export function App() {
   }, [selectedRunId, selectedSummary, stateRuns]);
 
   useEffect(() => {
+    if (!selectedSummary || !currentRun) {
+      setCurrentFeedbackArtifactContent("");
+      return;
+    }
+    const artifactRef = currentRun.artifact_ref || currentRun.log_ref;
+    if (!artifactRef) {
+      setCurrentFeedbackArtifactContent("");
+      return;
+    }
+    if (selectedRunId === currentRun.id) {
+      setCurrentFeedbackArtifactContent(selectedArtifactContent);
+      return;
+    }
+
+    let cancelled = false;
+    void getArtifact(selectedSummary.repo_path, selectedSummary.ticket_number, artifactRef)
+      .then((content) => {
+        if (!cancelled) {
+          setCurrentFeedbackArtifactContent(content);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "failed to load feedback artifact");
+          setCurrentFeedbackArtifactContent("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentRun, selectedRunId, selectedArtifactContent, selectedSummary]);
+
+  useEffect(() => {
+    setQuestionAnswers({});
+    setGeneralFeedback("");
+  }, [selectedSummary?.repo_path, selectedSummary?.ticket_number, currentRunId]);
+
+  useEffect(() => {
     if (!showLogsModal || !selectedSummary) {
       return;
     }
@@ -207,7 +312,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [showLogsModal, selectedSummary?.repo_path, selectedSummary?.ticket_number]);
+  }, [showLogsModal, selectedSummary]);
 
   async function refreshTickets(showLoader = true) {
     if (showLoader) {
@@ -260,58 +365,6 @@ export function App() {
       setExecutionLogs(logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to refresh execution logs");
-    }
-  }
-
-  async function handleServerEvent(evt: ServerEvent) {
-    const selected = selectedSummaryRef.current;
-    const trackedJobID = activeJobIdRef.current;
-    if (evt.type === "job" && evt.job_id && trackedJobID && evt.job_id === trackedJobID) {
-      const status = evt.status ?? "";
-      if (status === "failed") {
-        try {
-          const job = await getJob(evt.job_id);
-          setActiveJob(job);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "failed to refresh job");
-        } finally {
-          setActiveJobId("");
-        }
-      } else if (status === "done") {
-        setActiveJob(null);
-        setActiveJobId("");
-      } else if (status === "queued" || status === "running") {
-        setActiveJob((current) => {
-          if (!current) {
-            return current;
-          }
-          return { ...current, status };
-        });
-      }
-    }
-
-    let needsFullRefresh = evt.type === "repo_tickets_synced";
-    setTickets((current) => {
-      const ticketUpdate = applyTicketEvent(current, evt);
-      if (ticketUpdate.needsFullRefresh) {
-        needsFullRefresh = true;
-      }
-      return ticketUpdate.tickets;
-    });
-    if (needsFullRefresh) {
-      scheduleFullRefresh();
-    }
-
-    if (
-      selected &&
-      evt.type === "ticket_updated" &&
-      evt.repo_path === selected.repo_path &&
-      evt.ticket_number === selected.ticket_number
-    ) {
-      await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
-      if (showLogsModalRef.current) {
-        await refreshExecutionLogs(selected.repo_path, selected.ticket_number);
-      }
     }
   }
 
@@ -402,7 +455,11 @@ export function App() {
   }
 
   function submitFeedback() {
-    if (!selectedSummary || !feedbackAction || !feedbackMessage.trim()) {
+    if (!selectedSummary || !feedbackAction) {
+      return;
+    }
+    const message = formatFeedbackMessage(openQuestions, questionAnswers, generalFeedback);
+    if (!message.trim()) {
       return;
     }
     void queueAction(() =>
@@ -410,13 +467,18 @@ export function App() {
         selectedSummary.repo_path,
         selectedSummary.ticket_number,
         feedbackAction.label,
-        feedbackMessage
+        message
       )
     ).then((ok) => {
       if (ok) {
-        setFeedbackMessage("");
+        setQuestionAnswers({});
+        setGeneralFeedback("");
       }
     });
+  }
+
+  function updateQuestionAnswer(index: number, value: string) {
+    setQuestionAnswers((current) => ({ ...current, [String(index)]: value }));
   }
 
   function applyNamedAction(label: string) {
@@ -521,10 +583,13 @@ export function App() {
           selectedArtifactContent={selectedArtifactContent}
           artifactLoading={artifactLoading}
           feedbackAction={feedbackAction}
-          feedbackMessage={feedbackMessage}
+          openQuestions={feedbackAction ? openQuestions : []}
+          questionAnswers={questionAnswers}
+          generalFeedback={generalFeedback}
           isRunning={!!activeJobId}
           onSelectRun={setSelectedRunId}
-          onFeedbackMessageChange={setFeedbackMessage}
+          onQuestionAnswerChange={updateQuestionAnswer}
+          onGeneralFeedbackChange={setGeneralFeedback}
           onSubmitFeedback={submitFeedback}
           onApplyAction={applyNamedAction}
           onOpenLogs={() => setShowLogsModal(true)}
