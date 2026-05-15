@@ -13,12 +13,48 @@ check_commands: []
 format_commands: []
 lint_commands: []
 discover_tickets_command: |
-  curl -fsSL \
-    -H "Content-Type: application/json" \
-    -H "Shortcut-Token: ${SHORTCUT_API_TOKEN:?SHORTCUT_API_TOKEN is required}" \
-    -d '{"label_name":"auto-pr","workflow_state_types":["backlog","unstarted"]}' \
-    https://api.app.shortcut.com/api/v3/stories/search \
-  | python3 -c 'import json, sys; stories = json.load(sys.stdin); print(json.dumps([{"ticket_number": "SC-{}".format(story["id"]), "title": story["name"]} for story in stories]))'
+  # GitHub repositories to include in ticket discovery (owner/repo format).
+  # Add or remove entries to match the repos you want to track.
+  GITHUB_REPOS=(
+    "Neokil/AutoPR"
+  )
+
+  _dir=$(mktemp -d)
+  trap 'rm -rf "$_dir"' EXIT
+
+  # Shortcut: fetch stories labeled "auto-pr" in backlog/unstarted state.
+  if [ -n "${SHORTCUT_API_TOKEN:-}" ]; then
+    curl -fsSL \
+      -H "Content-Type: application/json" \
+      -H "Shortcut-Token: ${SHORTCUT_API_TOKEN}" \
+      -d '{"label_name":"auto-pr","workflow_state_types":["backlog","unstarted"]}' \
+      https://api.app.shortcut.com/api/v3/stories/search 2>/dev/null \
+    | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([{"ticket_number":"SC-{}".format(x["id"]),"title":x["name"]} for x in s]))' \
+    > "$_dir/shortcut.json" 2>/dev/null || true
+  fi
+
+  # GitHub: fetch open issues for each configured repo.
+  # Silently skipped if gh is not installed or not authenticated.
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    _i=0
+    for _repo in "${GITHUB_REPOS[@]}"; do
+      gh issue list --repo "$_repo" --state open --json number,title 2>/dev/null \
+      | python3 -c 'import json,sys; issues=json.load(sys.stdin); print(json.dumps([{"ticket_number":"GH-{}".format(x["number"]),"title":x["title"]} for x in issues]))' \
+      > "$_dir/github_$_i.json" 2>/dev/null || true
+      _i=$((_i+1))
+    done
+  fi
+
+  python3 -c '
+  import json, os, sys
+  result = []
+  for f in sorted(os.listdir(sys.argv[1])):
+      try:
+          result.extend(json.load(open(os.path.join(sys.argv[1], f))))
+      except Exception:
+          pass
+  print(json.dumps(result))
+  ' "$_dir"
 
 providers:
   gemini:
