@@ -14,12 +14,12 @@ export function DiscoverTicketsModal({ repoPath, tickets, loading, error, onAdd,
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal discover-modal" onClick={(event) => event.stopPropagation()}>
         <h3>Discover Tickets</h3>
-        <p className="meta">Shortcut stories tagged "auto-pr" that are not done or in progress for {repoPath}.</p>
+        <p className="meta">Available tickets for {repoPath}.</p>
         {error ? <div className="banner error">{error}</div> : null}
         {loading ? (
-          <p className="meta">Searching Shortcut...</p>
+          <p className="meta">Fetching Tickets...</p>
         ) : tickets.length === 0 && !error ? (
-          <p className="meta">No matching tickets found.</p>
+          <p className="meta">No Tickets available.</p>
         ) : (
           <ul className="discover-list">
             {tickets.map((ticket) => (
