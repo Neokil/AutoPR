@@ -3,6 +3,7 @@ package workflow //nolint:testpackage // needs access to unexported userHomeDir 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -244,6 +245,24 @@ func TestReadPrompt_embeddedFallback(t *testing.T) { //nolint:paralleltest // mu
 	}
 	if len(data) == 0 {
 		t.Fatal("expected non-empty embedded prompt")
+	}
+}
+
+func TestReadPrompt_embeddedImplementPromptMentionsGitHubClosingReference(t *testing.T) { //nolint:paralleltest // mutates package-level userHomeDir
+	tmp := t.TempDir()
+	userHomeDir = func() (string, error) { return tmp, nil }
+	t.Cleanup(func() { userHomeDir = os.UserHomeDir })
+
+	data, err := ReadPrompt(tmp, "prompts/implement.md")
+	if err != nil {
+		t.Fatalf("expected embedded fallback, got error: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Closes #<number>") {
+		t.Fatalf("expected implement prompt to mention GitHub closing reference, got %q", content)
+	}
+	if !strings.Contains(content, "Do not use cross-repository issue references") {
+		t.Fatalf("expected implement prompt to restrict cross-repository references, got %q", content)
 	}
 }
 
