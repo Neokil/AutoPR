@@ -5,6 +5,8 @@ Read `.auto-pr/run-context.md`.
 Read the ticket details from the latest `fetch-ticket-data` artifact path listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`.
 Read the approved proposal from the latest `investigation` artifact path listed in the `Latest State Artifacts` section of `.auto-pr/run-context.md`.
 
+If the fetched ticket has a GitHub issue `URL:` for this repository, include `Closes #<number>` in the pull request body when you create the PR. Do not use cross-repository issue references for this workflow.
+
 If the `Feedback File` listed in `.auto-pr/run-context.md` exists, incorporate that feedback into your implementation.
 
 If a `Guidelines File` is listed in `.auto-pr/run-context.md`, read and follow those guidelines.
