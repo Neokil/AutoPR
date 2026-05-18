@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   applyAction,
   cleanupAll,
@@ -82,9 +82,10 @@ export function App() {
   const showLogsModalRef = useRef(false);
   const fullRefreshScheduledRef = useRef(false);
   const prevLastRunIdRef = useRef("");
+  const handleServerEventRef = useRef<(evt: ServerEvent) => Promise<void>>(async () => {});
   const reconnectErrorMessage = "event stream connection lost; reconnecting";
 
-  const handleServerEvent = useEffectEvent(async (evt: ServerEvent) => {
+  async function handleServerEvent(evt: ServerEvent) {
     const selected = selectedSummaryRef.current;
     const trackedJobID = activeJobIdRef.current;
     if (evt.type === "job" && evt.job_id && trackedJobID && evt.job_id === trackedJobID) {
@@ -134,7 +135,7 @@ export function App() {
         await refreshExecutionLogs(selected.repo_path, selected.ticket_number);
       }
     }
-  });
+  }
 
   useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
@@ -149,6 +150,10 @@ export function App() {
   }, [showLogsModal]);
 
   useEffect(() => {
+    handleServerEventRef.current = handleServerEvent;
+  });
+
+  useEffect(() => {
     void refreshTickets();
     void refreshRepositories();
     void getHealth()
@@ -156,7 +161,7 @@ export function App() {
       .catch(() => { setDiscoverConfigured(false); });
     const stream = connectEvents(
       (evt) => {
-        void handleServerEvent(evt);
+        void handleServerEventRef.current(evt);
       },
       () => {
         setError(reconnectErrorMessage);
@@ -166,7 +171,7 @@ export function App() {
       }
     );
     return () => stream.close();
-  }, [handleServerEvent]);
+  }, []);
 
   useEffect(() => {
     if (!selectedSummary) {
