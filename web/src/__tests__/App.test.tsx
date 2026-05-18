@@ -98,7 +98,8 @@ describe("App structured feedback", () => {
   it("submits structured feedback from the current run even when an older run is selected", async () => {
     render(<App />);
 
-    expect(await screen.findByText("Current question?")).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Answer open question 1")).toBeInTheDocument();
+    expect(screen.getByText("Current question?")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Investigation 1" }));
 

@@ -5,6 +5,7 @@ import * as os from 'os';
 
 const PID_FILE = '/tmp/autopr-e2e.pid';
 export const FIXTURES_FILE = '/tmp/autopr-e2e-fixtures.json';
+const AUTO_PRD_PATH = process.env.AUTO_PRD_PATH || '/usr/local/bin/auto-prd';
 
 export interface E2EFixtures {
   repoDir: string;
@@ -118,7 +119,7 @@ providers:
 }
 
 async function startDaemon(homeDir: string): Promise<void> {
-  const daemon = spawn('/usr/local/bin/auto-prd', [], {
+  const daemon = spawn(AUTO_PRD_PATH, [], {
     env: { ...process.env, HOME: homeDir },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
