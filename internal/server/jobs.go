@@ -2,19 +2,36 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Neokil/AutoPR/internal/api"
+	"github.com/Neokil/AutoPR/internal/providers"
 	"github.com/Neokil/AutoPR/internal/serverstate"
 )
 
 func (s *server) workerLoop() {
 	for job := range s.jobs {
+		s.waitIfQuotaReached()
 		s.setJobStatus(job.record, "running", "")
 		err := s.executeJob(job)
 		if err != nil {
+			if errors.Is(err, providers.ErrTokensExhausted) {
+				slog.Warn("LLM quota reached during job execution. Marking quota as reached and pausing further jobs.")
+				s.setJobStatus(job.record, "queued", "")
+
+				s.setQuotaReached(true)
+				if err := s.reQueueJob(job); err != nil {
+					slog.Error("quota re-queue failed", "job", job.record.ID, "err", err)
+				}
+				continue
+
+			}
+
 			s.setJobStatus(job.record, "failed", err.Error())
 
 			continue
@@ -108,9 +125,16 @@ func (s *server) executeJob(job queuedJob) error {
 		err = fmt.Errorf("%w: %s", errUnsupportedJobAction, job.record.Action)
 	}
 	if err != nil && ticket != "" {
-		persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, repoRt, job, err)
-		if persistErr != nil {
-			return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
+		if errors.Is(err, providers.ErrTokensExhausted) {
+			persistErr := s.persistTicketScheduled(repoID, repoRoot, ticket, repoRt, err)
+			if persistErr != nil {
+				return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
+			}
+		} else {
+			persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, repoRt, job, err)
+			if persistErr != nil {
+				return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
+			}
 		}
 	}
 
@@ -140,4 +164,21 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 	s.ticketLocks[key] = m
 
 	return m
+}
+
+func (s *server) waitIfQuotaReached() {
+	for s.isQuotaReached() {
+		slog.Info("LLM quota reached. Pausing job execution until quota is reset.")
+		time.Sleep(2 * time.Minute) // Wait before checking again
+	}
+}
+
+func (s *server) reQueueJob(job queuedJob) error {
+	// This method is intended to be used when a job fails due to quota limits. It re-queues the job to be retried later.
+	select {
+	case s.jobs <- job:
+		return nil
+	default:
+		return fmt.Errorf("re-queue failed: job queue full")
+	}
 }
