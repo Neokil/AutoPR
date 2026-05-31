@@ -70,6 +70,10 @@ type server struct {
 
 	ticketLockMu sync.Mutex
 	ticketLocks  map[string]*sync.Mutex
+
+	quotaReached bool
+	quotaMu      sync.RWMutex
+	quotaResetCh chan struct{}
 }
 
 var sectionHeaderRE = regexp.MustCompile(`^## (.+) \(([^)]+)\)$`)
@@ -96,19 +100,22 @@ func Run(portOverride int) error {
 	}
 
 	daemon := &server{
-		cfg:         cfg,
-		meta:        meta,
-		runtimes:    map[string]*repoRuntime{},
-		jobs:        make(chan queuedJob, jobQueueSize),
-		repoLocks:   map[string]*sync.RWMutex{},
-		ticketLocks: map[string]*sync.Mutex{},
-		webFS:       distFS,
-		subscribers: map[string]chan api.ServerEvent{},
+		cfg:          cfg,
+		meta:         meta,
+		runtimes:     map[string]*repoRuntime{},
+		jobs:         make(chan queuedJob, jobQueueSize),
+		repoLocks:    map[string]*sync.RWMutex{},
+		ticketLocks:  map[string]*sync.Mutex{},
+		webFS:        distFS,
+		subscribers:  map[string]chan api.ServerEvent{},
+		quotaMu:      sync.RWMutex{},
+		quotaResetCh: make(chan struct{}),
 	}
 	for range cfg.ServerWorkers {
 		go daemon.workerLoop()
 	}
 	go daemon.prMonitorLoop()
+	go daemon.quotaMonitorLoop()
 
 	port := cfg.ServerPort
 	if portOverride > 0 {

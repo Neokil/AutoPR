@@ -18,6 +18,7 @@ const (
 	FlowStatusDone      FlowStatus = "done"
 	FlowStatusFailed    FlowStatus = "failed"
 	FlowStatusCancelled FlowStatus = "cancelled"
+	FlowStatusRescheduled FlowStatus = "rescheduled"
 )
 
 // StateRun records a single execution of a workflow state for a ticket.

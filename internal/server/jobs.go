@@ -2,19 +2,35 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
 	"github.com/Neokil/AutoPR/internal/api"
+	"github.com/Neokil/AutoPR/internal/providers"
 	"github.com/Neokil/AutoPR/internal/serverstate"
 )
 
 func (s *server) workerLoop() {
 	for job := range s.jobs {
+		s.waitIfQuotaReached()
 		s.setJobStatus(job.record, "running", "")
 		err := s.executeJob(job)
 		if err != nil {
+			if errors.Is(err, providers.ErrTokensExhausted) {
+				slog.Warn("LLM quota reached during job execution. Marking quota as reached and pausing further jobs.")
+				s.setJobStatus(job.record, "queued", "")
+
+				s.setQuotaReached(true)
+				if err := s.reQueueJob(job); err != nil {
+					slog.Error("quota re-queue failed", "job", job.record.ID, "err", err)
+				}
+				continue
+
+			}
+
 			s.setJobStatus(job.record, "failed", err.Error())
 
 			continue
@@ -108,9 +124,16 @@ func (s *server) executeJob(job queuedJob) error {
 		err = fmt.Errorf("%w: %s", errUnsupportedJobAction, job.record.Action)
 	}
 	if err != nil && ticket != "" {
-		persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, repoRt, job, err)
-		if persistErr != nil {
-			return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
+		if errors.Is(err, providers.ErrTokensExhausted) {
+			persistErr := s.persistTicketScheduled(repoID, repoRoot, ticket, repoRt, err)
+			if persistErr != nil {
+				return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
+			}
+		} else {
+			persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, repoRt, job, err)
+			if persistErr != nil {
+				return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
+			}
 		}
 	}
 
@@ -140,4 +163,31 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 	s.ticketLocks[key] = m
 
 	return m
+}
+
+func (s *server) waitIfQuotaReached() {
+	s.quotaMu.RLock()
+	quotaReached := s.quotaReached
+	resetCh := s.quotaResetCh
+	s.quotaMu.RUnlock()
+
+	if !quotaReached {
+		return
+	}
+
+	<-resetCh
+	slog.Info("LLM quota reset detected. Resuming job execution.")
+
+}
+
+func (s *server) reQueueJob(job queuedJob) error {
+	select {
+	case s.jobs <- job:
+		return nil
+	// here we could also listen for a shutdown signal if we had one, to avoid trying to re-queue when the server is shutting down. For now, we'll just return an error if the job queue is full.
+	// case <-context.Background().Done():
+	// 	return fmt.Errorf("re-queue aborted: server shutting down")
+	default:
+		return fmt.Errorf("re-queue failed: job queue full")
+	}
 }
