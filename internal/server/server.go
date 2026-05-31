@@ -73,6 +73,7 @@ type server struct {
 
 	quotaReached bool
 	quotaMu      sync.RWMutex
+	quotaResetCh chan struct{}
 }
 
 var sectionHeaderRE = regexp.MustCompile(`^## (.+) \(([^)]+)\)$`)
@@ -107,8 +108,8 @@ func Run(portOverride int) error {
 		ticketLocks:  map[string]*sync.Mutex{},
 		webFS:        distFS,
 		subscribers:  map[string]chan api.ServerEvent{},
-		quotaReached: false,
 		quotaMu:      sync.RWMutex{},
+		quotaResetCh: make(chan struct{}),
 	}
 	for range cfg.ServerWorkers {
 		go daemon.workerLoop()

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Neokil/AutoPR/internal/api"
 	"github.com/Neokil/AutoPR/internal/providers"
@@ -167,17 +166,27 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 }
 
 func (s *server) waitIfQuotaReached() {
-	for s.isQuotaReached() {
-		slog.Info("LLM quota reached. Pausing job execution until quota is reset.")
-		time.Sleep(2 * time.Minute) // Wait before checking again
+	s.quotaMu.RLock()
+	quotaReached := s.quotaReached
+	resetCh := s.quotaResetCh
+	s.quotaMu.RUnlock()
+
+	if !quotaReached {
+		return
 	}
+
+	<-resetCh
+	slog.Info("LLM quota reset detected. Resuming job execution.")
+
 }
 
 func (s *server) reQueueJob(job queuedJob) error {
-	// This method is intended to be used when a job fails due to quota limits. It re-queues the job to be retried later.
 	select {
 	case s.jobs <- job:
 		return nil
+	// here we could also listen for a shutdown signal if we had one, to avoid trying to re-queue when the server is shutting down. For now, we'll just return an error if the job queue is full.
+	// case <-context.Background().Done():
+	// 	return fmt.Errorf("re-queue aborted: server shutting down")
 	default:
 		return fmt.Errorf("re-queue failed: job queue full")
 	}

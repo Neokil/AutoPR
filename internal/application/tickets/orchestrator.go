@@ -68,7 +68,6 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	}
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
-	fmt.Println("-- StartFlow: load state of ticket", ticketNumber, state, loadErr)
 	if os.IsNotExist(loadErr) {
 		state = workflowstate.New(ticketNumber)
 		saveErr := o.Store.SaveState(ticketNumber, state)

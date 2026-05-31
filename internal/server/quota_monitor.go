@@ -11,14 +11,12 @@ import (
 
 const (
 	quotaMonitorInterval    = 20 * time.Minute
-	quotaMonitorInitialWait = 20 * time.Second
 )
 
 func (s *server) quotaMonitorLoop() {
 	ticker := time.NewTicker(quotaMonitorInterval)
 
 	defer ticker.Stop()
-	time.Sleep(quotaMonitorInitialWait)
 	for range ticker.C {
 		s.checkQuotaStatus()
 	}
@@ -33,7 +31,16 @@ func (s *server) isQuotaReached() bool {
 func (s *server) setQuotaReached(reached bool) {
 	s.quotaMu.Lock()
 	defer s.quotaMu.Unlock()
+	if reached && !s.quotaReached {
+		// Create a fresh channel that workers will block on
+		s.quotaResetCh = make(chan struct{})
+	}
+	if !reached && s.quotaReached {
+		// Signal all waiting workers to wake up
+		close(s.quotaResetCh)
+	}
 	s.quotaReached = reached
+
 }
 
 func (s *server) checkQuotaStatus() {
