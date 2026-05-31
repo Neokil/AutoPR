@@ -305,7 +305,7 @@ components:
   schemas:
     FlowStatus:
       type: string
-      enum: [pending, running, waiting, done, failed, cancelled]
+      enum: [pending, running, waiting, done, failed, cancelled, rescheduled]
     JobStatus:
       type: string
       enum: [queued, running, done, failed]

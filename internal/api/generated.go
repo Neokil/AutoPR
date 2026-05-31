@@ -36,12 +36,13 @@ func (e CleanupScopeRequestScope) Valid() bool {
 
 // Defines values for FlowStatus.
 const (
-	FlowStatusCancelled FlowStatus = "cancelled"
-	FlowStatusDone      FlowStatus = "done"
-	FlowStatusFailed    FlowStatus = "failed"
-	FlowStatusPending   FlowStatus = "pending"
-	FlowStatusRunning   FlowStatus = "running"
-	FlowStatusWaiting   FlowStatus = "waiting"
+	FlowStatusCancelled   FlowStatus = "cancelled"
+	FlowStatusDone        FlowStatus = "done"
+	FlowStatusFailed      FlowStatus = "failed"
+	FlowStatusPending     FlowStatus = "pending"
+	FlowStatusRescheduled FlowStatus = "rescheduled"
+	FlowStatusRunning     FlowStatus = "running"
+	FlowStatusWaiting     FlowStatus = "waiting"
 )
 
 // Valid indicates whether the value is a known member of the FlowStatus enum.
@@ -54,6 +55,8 @@ func (e FlowStatus) Valid() bool {
 	case FlowStatusFailed:
 		return true
 	case FlowStatusPending:
+		return true
+	case FlowStatusRescheduled:
 		return true
 	case FlowStatusRunning:
 		return true
