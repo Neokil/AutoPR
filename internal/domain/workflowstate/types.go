@@ -37,6 +37,7 @@ type State struct {
 	CurrentRunID        string     `json:"current_run_id,omitempty"`
 	FlowStatus          FlowStatus `json:"flow_status"`
 	BranchName          string     `json:"branch_name"`
+	BaseBranch          string     `json:"base_branch,omitempty"`
 	WorktreePath        string     `json:"worktree_path"`
 	LastError           string     `json:"last_error,omitempty"`
 	PRURL               string     `json:"pr_url,omitempty"`

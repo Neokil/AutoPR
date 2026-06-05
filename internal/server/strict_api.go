@@ -166,7 +166,7 @@ func (s *server) GetTicket(ctx context.Context, request api.GetTicketRequestObje
 		return api.GetTicket404JSONResponse{Error: errMsgTicketNotFound}, nil
 	}
 	nextSteps, _ := repoRt.svc.NextSteps(request.Id)
-	githubBlobBase, _ := gitutil.GitHubBlobBase(ctx, repoRoot, s.cfg.BaseBranch)
+	githubBlobBase, _ := gitutil.GitHubBlobBase(ctx, repoRoot, effectiveBaseBranch(ticketState.BaseBranch, s.cfg.BaseBranch))
 
 	var availableActions []actionInfo
 	var workflowStates []workflowStateInfo
@@ -377,9 +377,23 @@ func (s *server) RunTicket(ctx context.Context, request api.RunTicketRequestObje
 	if strings.TrimSpace(req.RepoPath) == "" {
 		return badRunTicket("repo_path is required"), nil
 	}
-	repoRoot, repoID, _, err := s.runtimeForRepoPath(ctx, req.RepoPath)
+	repoRoot, repoID, repoRt, err := s.runtimeForRepoPath(ctx, req.RepoPath)
 	if err != nil {
 		return badRunTicket(err.Error()), nil
+	}
+	baseBranch := strings.TrimSpace(derefString(req.BaseBranch))
+	if baseBranch != "" {
+		ticketState, loadErr := repoRt.store.LoadState(request.Id)
+		if errors.Is(loadErr, os.ErrNotExist) {
+			ticketState = workflowstate.New(request.Id)
+		} else if loadErr != nil {
+			return api.RunTicket500JSONResponse{Error: fmt.Errorf("load ticket state: %w", loadErr).Error()}, nil
+		}
+		ticketState.BaseBranch = baseBranch
+		saveErr := repoRt.store.SaveState(request.Id, ticketState)
+		if saveErr != nil {
+			return api.RunTicket500JSONResponse{Error: fmt.Errorf("save ticket state: %w", saveErr).Error()}, nil
+		}
 	}
 
 	return acceptedRunTicket(s.enqueueJob(jobRun, repoID, repoRoot, request.Id, enqueueOptions{}))

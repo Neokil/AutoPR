@@ -25,6 +25,7 @@ func toTicketStateResponse(state workflowstate.State) api.TicketStateResponse {
 		CurrentRunId: stringPtr(state.CurrentRunID),
 		FlowStatus:   api.FlowStatus(state.FlowStatus),
 		BranchName:   state.BranchName,
+		BaseBranch:   stringPtr(state.BaseBranch),
 		WorktreePath: state.WorktreePath,
 		LastError:    stringPtr(state.LastError),
 		PrUrl:        stringPtr(state.PRURL),

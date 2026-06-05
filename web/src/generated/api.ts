@@ -246,6 +246,10 @@ export interface components {
         RepoRequest: {
             repo_path: string;
         };
+        RunTicketRequest: {
+            repo_path: string;
+            base_branch?: string;
+        };
         CleanupScopeRequest: {
             repo_path: string;
             /** @enum {string} */
@@ -310,6 +314,7 @@ export interface components {
             current_run_id?: string;
             flow_status: components["schemas"]["FlowStatus"];
             branch_name: string;
+            base_branch?: string;
             worktree_path: string;
             last_error?: string;
             pr_url?: string;
@@ -639,7 +644,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RepoRequest"];
+                "application/json": components["schemas"]["RunTicketRequest"];
             };
         };
         responses: {

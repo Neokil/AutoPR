@@ -147,7 +147,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RepoRequest"
+              $ref: "#/components/schemas/RunTicketRequest"
       responses:
         "202":
           description: Job accepted
@@ -323,6 +323,12 @@ components:
       required: [repo_path]
       properties:
         repo_path: { type: string }
+    RunTicketRequest:
+      type: object
+      required: [repo_path]
+      properties:
+        repo_path: { type: string }
+        base_branch: { type: string }
     CleanupScopeRequest:
       type: object
       required: [repo_path, scope]
@@ -405,6 +411,7 @@ components:
         current_run_id: { type: string }
         flow_status: { $ref: "#/components/schemas/FlowStatus" }
         branch_name: { type: string }
+        base_branch: { type: string }
         worktree_path: { type: string }
         last_error: { type: string }
         pr_url: { type: string }
