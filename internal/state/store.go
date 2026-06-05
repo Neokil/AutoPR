@@ -3,9 +3,11 @@ package state
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/Neokil/AutoPR/internal/domain/workflowstate"
 	"github.com/Neokil/AutoPR/internal/gitutil"
@@ -72,7 +74,10 @@ func (s *Store) SaveState(ticketNumber string, state workflowstate.State) error 
 			return fmt.Errorf("write worktree state: %w", err)
 		}
 		// Remove the pre-worktree copy so there is only one source of truth.
-		_ = os.Remove(filepath.Join(s.TicketDir(ticketNumber), StateFileName))
+		err = s.cleanupLegacyTicketDir(ticketNumber)
+		if err != nil {
+			return err
+		}
 
 		return nil
 	}
@@ -158,6 +163,24 @@ func (s *Store) ensureTicketDir(ticketNumber string) (string, error) {
 	}
 
 	return dir, nil
+}
+
+func (s *Store) cleanupLegacyTicketDir(ticketNumber string) error {
+	statePath := filepath.Join(s.TicketDir(ticketNumber), StateFileName)
+	err := os.Remove(statePath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove legacy state file: %w", err)
+	}
+
+	err = os.Remove(s.TicketDir(ticketNumber))
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	if errors.Is(err, syscall.ENOTEMPTY) {
+		return nil
+	}
+
+	return fmt.Errorf("remove legacy ticket dir: %w", err)
 }
 
 func parseStateJSON(_ string, data []byte) (workflowstate.State, error) {

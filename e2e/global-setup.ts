@@ -93,7 +93,7 @@ function writeMockProvider(mockProviderPath: string): void {
     mockProviderPath,
     `#!/bin/sh
 # Discard stdin (the prompt content) and return a canned response.
-# Sleep briefly so the job doesn't complete before the frontend registers activeJobId.
+# Sleep 100ms to simulate realistic AI provider response latency.
 cat > /dev/null
 sleep 0.1
 echo "Mock provider: analysis complete."

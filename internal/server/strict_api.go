@@ -15,6 +15,7 @@ import (
 	"github.com/Neokil/AutoPR/internal/api"
 	workflowstate "github.com/Neokil/AutoPR/internal/domain/workflowstate"
 	"github.com/Neokil/AutoPR/internal/gitutil"
+	"github.com/Neokil/AutoPR/internal/serverstate"
 	"github.com/Neokil/AutoPR/internal/state"
 	"github.com/Neokil/AutoPR/internal/workflow"
 )
@@ -410,7 +411,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 		JobId:        stringPtr(job.ID),
 		Action:       stringPtr(action),
 		Scope:        stringPtr(opts.scope),
-		Status:       stringPtr("queued"),
+		Status:       stringPtr(serverstate.JobStatusQueued),
 	})
 	select {
 	case s.jobs <- queued:
@@ -423,7 +424,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 			TicketNumber: stringPtr(ticket),
 		}, http.StatusAccepted, nil
 	default:
-		_ = s.meta.UpdateJobStatus(job.ID, "failed", "job queue is full")
+		_ = s.meta.UpdateJobStatus(job.ID, serverstate.JobStatusFailed, "job queue is full")
 		s.broadcast(api.ServerEvent{
 			Type:         eventTypeJob,
 			RepoId:       stringPtr(repoID),
@@ -432,7 +433,7 @@ func (s *server) enqueueJob(action, repoID, repoPath, ticket string, opts enqueu
 			JobId:        stringPtr(job.ID),
 			Action:       stringPtr(action),
 			Scope:        stringPtr(opts.scope),
-			Status:       stringPtr("failed"),
+			Status:       stringPtr(serverstate.JobStatusFailed),
 			Error:        stringPtr("job queue is full"),
 		})
 
