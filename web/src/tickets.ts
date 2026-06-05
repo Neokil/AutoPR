@@ -131,10 +131,12 @@ export function applyTicketEvent(current: TicketSummary[], evt: ServerEvent): {
       return { ...ticket, busy: isBusy, jobs: nextJobs };
     }
     if (evt.type === "ticket_updated") {
+      const nextStatus = (evt.status as TicketSummary["status"]) ?? ticket.status;
       return {
         ...ticket,
         title: evt.title ?? ticket.title,
-        status: (evt.status as TicketSummary["status"]) ?? ticket.status,
+        status: nextStatus,
+        busy: nextStatus === "running" ? ticket.busy : false,
         last_error: evt.error ?? ticket.last_error,
         pr_url: evt.pr_url ?? ticket.pr_url,
         updated_at: new Date().toISOString()

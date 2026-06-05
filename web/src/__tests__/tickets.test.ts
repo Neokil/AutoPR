@@ -139,6 +139,13 @@ describe("applyTicketEvent", () => {
     expect(tickets[0].status).toBe("done");
   });
 
+  it("clears busy when ticket_updated moves the ticket out of running", () => {
+    const runningTicket = makeSummary({ repo_id: "r1", ticket_number: "42", status: "running", busy: true });
+    const evt: ServerEvent = { type: "ticket_updated", repo_id: "r1", ticket_number: "42", status: "done" };
+    const { tickets } = applyTicketEvent([runningTicket], evt);
+    expect(tickets[0].busy).toBe(false);
+  });
+
   it("signals needsFullRefresh when an update arrives for an unknown ticket", () => {
     const evt: ServerEvent = { type: "ticket_updated", repo_id: "r1", ticket_number: "unknown" };
     expect(applyTicketEvent([ticket], evt).needsFullRefresh).toBe(true);
