@@ -149,10 +149,7 @@ func (s *server) recoverStuckTickets() {
 	for _, repo := range repos {
 		tickets := s.meta.ListTickets(repo.ID)
 		for _, ticket := range tickets {
-			if ticket.Status == string(workflowstate.FlowStatusDone) ||
-				ticket.Status == string(workflowstate.FlowStatusFailed) ||
-				ticket.Status == string(workflowstate.FlowStatusCancelled) ||
-				ticket.Status == "" {
+			if ticket.Status != string(workflowstate.FlowStatusRunning) {
 				continue
 			}
 
