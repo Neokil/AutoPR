@@ -384,6 +384,7 @@ export function App() {
     setError("");
     try {
       const accepted = await fn();
+      activeJobIdRef.current = accepted.job_id;
       setActiveJobId(accepted.job_id);
       setActiveJob(null);
       return true;
