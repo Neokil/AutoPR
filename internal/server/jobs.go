@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
 	"github.com/Neokil/AutoPR/internal/api"
+	workflowstate "github.com/Neokil/AutoPR/internal/domain/workflowstate"
 	"github.com/Neokil/AutoPR/internal/serverstate"
 )
 
@@ -140,4 +142,43 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 	s.ticketLocks[key] = m
 
 	return m
+}
+
+func (s *server) recoverStuckTickets() {
+
+	repos := s.meta.ListRepos()
+	for _, repo := range repos {
+		tickets := s.meta.ListTickets(repo.ID)
+		for _, ticket := range tickets {
+
+			if ticket.Status == string(workflowstate.FlowStatusDone) ||
+				ticket.Status == string(workflowstate.FlowStatusFailed) ||
+				ticket.Status == string(workflowstate.FlowStatusCancelled) ||
+				ticket.Status == "" {
+				continue
+			}
+			slog.Info("recoverStuckTickets: found stuck ticket, marking as failed", "repo", repo.Path, "ticket", ticket.TicketNumber, "status", ticket.Status)
+			rt, err := s.runtimeForRepo(repo.Path)
+			if err != nil {
+				slog.Warn("recoverStuckTickets: no runtime", "repo", repo.Path, "err", err)
+				continue
+			}
+			st, err := rt.store.LoadState(ticket.TicketNumber)
+			if err != nil {
+				slog.Warn("recoverStuckTickets: load state failed", "ticket", ticket.TicketNumber, "err", err)
+				continue
+			}
+			st.FlowStatus = workflowstate.FlowStatusFailed
+			st.LastError = "daemon restarted while ticket was running — rerun to continue"
+			if saveErr := rt.store.SaveState(ticket.TicketNumber, st); saveErr != nil {
+				slog.Warn("recoverStuckTickets: save failed", "ticket", ticket.TicketNumber, "err", saveErr)
+			}
+
+			for _, job := range ticket.Jobs {
+				if job.Status == "running" || job.Status == "queued" {
+					_ = s.meta.UpdateJobStatus(job.ID, "failed", "daemon restarted")
+				}
+			}
+		}
+	}
 }

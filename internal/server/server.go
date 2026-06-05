@@ -105,6 +105,7 @@ func Run(portOverride int) error {
 		webFS:       distFS,
 		subscribers: map[string]chan api.ServerEvent{},
 	}
+	daemon.recoverStuckTickets()
 	for range cfg.ServerWorkers {
 		go daemon.workerLoop()
 	}
