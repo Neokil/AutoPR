@@ -264,10 +264,6 @@ export function App() {
       setCurrentFeedbackArtifactContent("");
       return;
     }
-    if (selectedRunId === currentRun.id) {
-      setCurrentFeedbackArtifactContent(selectedArtifactContent);
-      return;
-    }
 
     let cancelled = false;
     void getArtifact(selectedSummary.repo_path, selectedSummary.ticket_number, artifactRef)
@@ -285,7 +281,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentRun, selectedRunId, selectedArtifactContent, selectedSummary]);
+  }, [currentRun, selectedSummary]);
 
   useEffect(() => {
     setQuestionAnswers({});
@@ -588,7 +584,6 @@ export function App() {
           selectedArtifactContent={selectedArtifactContent}
           artifactLoading={artifactLoading}
           feedbackAction={feedbackAction}
-          feedbackMessage={feedbackMessage}
           openQuestions={feedbackAction ? openQuestions : []}
           questionAnswers={questionAnswers}
           generalFeedback={generalFeedback}

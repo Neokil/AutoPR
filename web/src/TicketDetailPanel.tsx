@@ -12,7 +12,6 @@ type TicketDetailPanelProps = {
   selectedArtifactContent: string;
   artifactLoading: boolean;
   feedbackAction?: ActionInfo;
-  feedbackMessage: string;
   openQuestions: string[];
   questionAnswers: Record<string, string>;
   generalFeedback: string;
@@ -36,7 +35,6 @@ export function TicketDetailPanel({
   selectedArtifactContent,
   artifactLoading,
   feedbackAction,
-  feedbackMessage,
   openQuestions,
   questionAnswers,
   generalFeedback,
@@ -81,7 +79,7 @@ export function TicketDetailPanel({
         <div className="detail-actions-wrap">
           <div className="button-row detail-actions">
             {actionButtons.map((action) => (
-              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={selectedSummary.busy}>
+              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={isRunning || selectedSummary.busy}>
                 {action.label}
               </button>
             ))}
@@ -99,9 +97,9 @@ export function TicketDetailPanel({
             workflowStates={details?.workflow_states ?? []}
             currentStateName={details?.state.current_state}
             rerunLabel={selectedSummary.status === "failed" ? "Retry" : "Rerun"}
-            rerunDisabled={selectedSummary.busy}
-            cleanupDisabled={selectedSummary.busy}
-            moveDisabled={selectedSummary.busy}
+            rerunDisabled={isRunning || selectedSummary.busy}
+            cleanupDisabled={isRunning || selectedSummary.busy}
+            moveDisabled={isRunning || selectedSummary.busy}
           />
         </div>
       </div>
@@ -154,7 +152,7 @@ export function TicketDetailPanel({
               />
             )}
             <div className="feedback-submit">
-              <button type="submit">{feedbackAction.label}</button>
+              <button type="submit" disabled={isRunning || selectedSummary.busy}>{feedbackAction.label}</button>
             </div>
           </form>
         ) : null}
