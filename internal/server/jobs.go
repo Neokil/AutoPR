@@ -145,32 +145,36 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 }
 
 func (s *server) recoverStuckTickets() {
-
 	repos := s.meta.ListRepos()
 	for _, repo := range repos {
 		tickets := s.meta.ListTickets(repo.ID)
 		for _, ticket := range tickets {
-
 			if ticket.Status == string(workflowstate.FlowStatusDone) ||
 				ticket.Status == string(workflowstate.FlowStatusFailed) ||
 				ticket.Status == string(workflowstate.FlowStatusCancelled) ||
 				ticket.Status == "" {
 				continue
 			}
+
 			slog.Info("recoverStuckTickets: found stuck ticket, marking as failed", "repo", repo.Path, "ticket", ticket.TicketNumber, "status", ticket.Status)
-			rt, err := s.runtimeForRepo(repo.Path)
+			runtime, err := s.runtimeForRepo(repo.Path)
 			if err != nil {
 				slog.Warn("recoverStuckTickets: no runtime", "repo", repo.Path, "err", err)
+
 				continue
 			}
-			st, err := rt.store.LoadState(ticket.TicketNumber)
+
+			state, err := runtime.store.LoadState(ticket.TicketNumber)
 			if err != nil {
 				slog.Warn("recoverStuckTickets: load state failed", "ticket", ticket.TicketNumber, "err", err)
+
 				continue
 			}
-			st.FlowStatus = workflowstate.FlowStatusFailed
-			st.LastError = "daemon restarted while ticket was running — rerun to continue"
-			if saveErr := rt.store.SaveState(ticket.TicketNumber, st); saveErr != nil {
+
+			state.FlowStatus = workflowstate.FlowStatusFailed
+			state.LastError = "daemon restarted while ticket was running — rerun to continue"
+			saveErr := runtime.store.SaveState(ticket.TicketNumber, state)
+			if saveErr != nil {
 				slog.Warn("recoverStuckTickets: save failed", "ticket", ticket.TicketNumber, "err", saveErr)
 			}
 
