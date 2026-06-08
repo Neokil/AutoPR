@@ -130,6 +130,10 @@ export function App() {
       evt.repo_path === selected.repo_path &&
       evt.ticket_number === selected.ticket_number
     ) {
+      if ((evt.status ?? "") !== "running" && activeJobIdRef.current) {
+        activeJobIdRef.current = "";
+        setActiveJobId("");
+      }
       await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
       if (showLogsModalRef.current) {
         await refreshExecutionLogs(selected.repo_path, selected.ticket_number);

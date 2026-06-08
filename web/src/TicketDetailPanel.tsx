@@ -98,7 +98,7 @@ export function TicketDetailPanel({
             currentStateName={details?.state.current_state}
             rerunLabel={selectedSummary.status === "failed" ? "Retry" : "Rerun"}
             rerunDisabled={isRunning || selectedSummary.busy}
-            cleanupDisabled={isRunning || selectedSummary.busy}
+            cleanupDisabled={selectedSummary.busy}
             moveDisabled={isRunning || selectedSummary.busy}
           />
         </div>
