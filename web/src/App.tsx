@@ -141,21 +141,25 @@ export function App() {
       if (ticketKey(ticket) !== key) {
         return ticket;
       }
+      // SSE events may arrive before the 202 response — don't downgrade an already-progressed job back to "queued".
+      const existingJob = (ticket.jobs ?? []).find((job) => job.id === accepted.job_id);
+      const optimisticJob = existingJob ?? {
+        id: accepted.job_id,
+        action: accepted.action,
+        repo_id: accepted.repo_id,
+        repo_path: accepted.repo_path,
+        ticket_number: accepted.ticket_number,
+        status: "queued" as Job["status"],
+        created_at: createdAt
+      };
       const nextJobs = [
-        {
-          id: accepted.job_id,
-          action: accepted.action,
-          repo_id: accepted.repo_id,
-          repo_path: accepted.repo_path,
-          ticket_number: accepted.ticket_number,
-          status: "queued" as Job["status"],
-          created_at: createdAt
-        },
+        optimisticJob,
         ...(ticket.jobs ?? []).filter((job) => job.id !== accepted.job_id)
       ];
+      const isBusy = nextJobs.some((job) => job.status === "queued" || job.status === "running");
       return {
         ...ticket,
-        busy: true,
+        busy: isBusy,
         jobs: nextJobs
       };
     }));
