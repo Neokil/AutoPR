@@ -33,7 +33,16 @@ import {
   stateRunsFromDetails,
   ticketKey
 } from "./tickets";
-import type { AcceptedJob, DiscoveredTicket, ExecutionLog, Job, OptimisticTransition, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type {
+  AcceptedJob,
+  DiscoveredTicket,
+  ExecutionLog,
+  Job,
+  OptimisticTransition,
+  ServerEvent,
+  TicketDetails,
+  TicketSummary
+} from "./types";
 
 export function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
@@ -45,8 +54,8 @@ export function App() {
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [generalFeedback, setGeneralFeedback] = useState("");
   const [optimisticTransition, setOptimisticTransition] = useState<OptimisticTransition | null>(null);
-  const [activeJobId, setActiveJobId] = useState("");
-  const [activeJob, setActiveJob] = useState<Job | null>(null);
+  const [pendingTicketKeys, setPendingTicketKeys] = useState<string[]>([]);
+  const [jobFailuresByTicket, setJobFailuresByTicket] = useState<Record<string, Job>>({});
   const [loading, setLoading] = useState(false);
   const [artifactLoading, setArtifactLoading] = useState(false);
   const [error, setError] = useState("");
@@ -84,41 +93,205 @@ export function App() {
     () => (selectedSummary ? projectedTicketStatusLabel(selectedSummary, optimisticTransition) : ""),
     [optimisticTransition, selectedSummary]
   );
+  const selectedTicketPending = selectedSummary ? pendingTicketKeys.includes(ticketKey(selectedSummary)) : false;
+  const selectedTicketDisabled = Boolean(selectedSummary && (selectedSummary.busy || selectedTicketPending));
+  const selectedTicketFailure = selectedSummary ? jobFailuresByTicket[ticketKey(selectedSummary)] ?? null : null;
 
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
   const selectedRunIdRef = useRef("");
-  const activeJobIdRef = useRef("");
   const showLogsModalRef = useRef(false);
   const fullRefreshScheduledRef = useRef(false);
   const prevLastRunIdRef = useRef("");
   const handleServerEventRef = useRef<(evt: ServerEvent) => Promise<void>>(async () => {});
   const reconnectErrorMessage = "event stream connection lost; reconnecting";
 
+  function setTicketPending(key: string, pending: boolean) {
+    setPendingTicketKeys((current) => {
+      if (pending) {
+        return current.includes(key) ? current : [...current, key];
+      }
+      return current.filter((candidate) => candidate !== key);
+    });
+  }
+
+  function clearTicketFailure(key: string) {
+    setJobFailuresByTicket((current) => {
+      if (!(key in current)) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function setTicketFailure(key: string, job: Job) {
+    setJobFailuresByTicket((current) => ({ ...current, [key]: job }));
+  }
+
+  function optimisticTicketJob(accepted: AcceptedJob) {
+    if (!accepted.ticket_number) {
+      return;
+    }
+    const key = `${accepted.repo_id}::${accepted.ticket_number}`;
+    const createdAt = new Date().toISOString();
+    setTicketPending(key, true);
+    clearTicketFailure(key);
+    setTickets((current) => current.map((ticket) => {
+      if (ticketKey(ticket) !== key) {
+        return ticket;
+      }
+      // SSE events may arrive before the 202 response — don't downgrade an already-progressed job back to "queued".
+      const existingJob = (ticket.jobs ?? []).find((job) => job.id === accepted.job_id);
+      const optimisticJob = existingJob ?? {
+        id: accepted.job_id,
+        action: accepted.action,
+        repo_id: accepted.repo_id,
+        repo_path: accepted.repo_path,
+        ticket_number: accepted.ticket_number,
+        status: "queued" as Job["status"],
+        created_at: createdAt
+      };
+      const nextJobs = [
+        optimisticJob,
+        ...(ticket.jobs ?? []).filter((job) => job.id !== accepted.job_id)
+      ];
+      const isBusy = nextJobs.some((job) => job.status === "queued" || job.status === "running");
+      return {
+        ...ticket,
+        busy: isBusy,
+        jobs: nextJobs
+      };
+    }));
+  }
+
+  async function fetchTicketFailure(key: string, evt: ServerEvent) {
+    if (!evt.job_id || !evt.repo_id || !evt.repo_path || !evt.ticket_number) {
+      return;
+    }
+    try {
+      const job = await getJob(evt.job_id);
+      setTicketFailure(key, job);
+    } catch {
+      setTicketFailure(key, {
+        id: evt.job_id,
+        action: evt.action ?? "",
+        repo_id: evt.repo_id,
+        repo_path: evt.repo_path,
+        ticket_number: evt.ticket_number,
+        status: "failed",
+        error: evt.error,
+        created_at: new Date().toISOString()
+      });
+    }
+  }
+
+  function makeSyntheticRunId(): string {
+    return `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function applyOptimisticTransition(next: Omit<OptimisticTransition, "synthetic_run_id">) {
+    const transition = {
+      ...next,
+      synthetic_run_id: makeSyntheticRunId()
+    };
+    setOptimisticTransition(transition);
+    setSelectedRunId(transition.synthetic_run_id);
+  }
+
+  function createMoveTransition(accepted: AcceptedJob, targetStateName: string): OptimisticTransition | null {
+    if (!selectedSummary || !details) {
+      return null;
+    }
+    return {
+      ticket_key: ticketKey(selectedSummary),
+      repo_path: selectedSummary.repo_path,
+      ticket_number: selectedSummary.ticket_number,
+      job_id: accepted.job_id,
+      target_state_name: targetStateName,
+      target_state_display_name: resolveStateDisplayName(details.workflow_states ?? [], targetStateName),
+      previous_selected_run_id: selectedRunIdRef.current,
+      previous_current_run_id: details.state.current_run_id ?? "",
+      kind: "move_to_state",
+      synthetic_run_id: ""
+    };
+  }
+
+  function createRerunTransition(accepted: AcceptedJob): OptimisticTransition | null {
+    if (!selectedSummary || !details) {
+      return null;
+    }
+    const currentStateName = details.state.current_state;
+    const fallbackDisplayName = currentRun?.state_display_name || currentStateName;
+    return {
+      ticket_key: ticketKey(selectedSummary),
+      repo_path: selectedSummary.repo_path,
+      ticket_number: selectedSummary.ticket_number,
+      job_id: accepted.job_id,
+      target_state_name: currentStateName,
+      target_state_display_name: resolveStateDisplayName(details.workflow_states ?? [], currentStateName, fallbackDisplayName),
+      previous_selected_run_id: selectedRunIdRef.current,
+      previous_current_run_id: details.state.current_run_id ?? "",
+      kind: "rerun",
+      synthetic_run_id: ""
+    };
+  }
+
+  function rollbackOptimisticTransition(jobId?: string) {
+    setOptimisticTransition((current) => {
+      if (!current || (jobId && current.job_id !== jobId)) {
+        return current;
+      }
+      if (selectedRunIdRef.current === current.synthetic_run_id) {
+        setSelectedRunId(current.previous_selected_run_id);
+      }
+      return null;
+    });
+  }
+
+  function clearOptimisticTransitionIfConfirmed(ticketDetails: TicketDetails) {
+    setOptimisticTransition((current) => {
+      if (!current) {
+        return current;
+      }
+      if (current.repo_path !== ticketDetails.repo_path || current.ticket_number !== ticketDetails.ticket_number) {
+        return current;
+      }
+
+      const currentRunId = ticketDetails.state.current_run_id ?? "";
+      const rerunConfirmed = current.kind === "rerun" && currentRunId !== "" && currentRunId !== current.previous_current_run_id;
+      const moveConfirmed =
+        current.kind === "move_to_state" &&
+        ticketDetails.state.current_state === current.target_state_name &&
+        currentRunId !== "" &&
+        currentRunId !== current.previous_current_run_id;
+      const terminalConfirmed =
+        current.kind === "move_to_state" &&
+        (ticketDetails.state.flow_status ?? "") === current.target_state_name;
+
+      if (!rerunConfirmed && !moveConfirmed && !terminalConfirmed) {
+        return current;
+      }
+
+      if (selectedRunIdRef.current === current.synthetic_run_id && moveConfirmed) {
+        setSelectedRunId(currentRunId);
+      }
+
+      return null;
+    });
+  }
+
   async function handleServerEvent(evt: ServerEvent) {
     const selected = selectedSummaryRef.current;
-    const trackedJobID = activeJobIdRef.current;
-    if (evt.type === "job" && evt.job_id && trackedJobID && evt.job_id === trackedJobID) {
+    const evtTicketKey = evt.repo_id && evt.ticket_number ? `${evt.repo_id}::${evt.ticket_number}` : "";
+    if (evt.type === "job" && evtTicketKey) {
       const status = evt.status ?? "";
+      setTicketPending(evtTicketKey, false);
       if (status === "failed") {
         rollbackOptimisticTransition(evt.job_id);
-        try {
-          const job = await getJob(evt.job_id);
-          setActiveJob(job);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "failed to refresh job");
-        } finally {
-          setActiveJobId("");
-        }
-      } else if (status === "done") {
-        setActiveJob(null);
-        setActiveJobId("");
-      } else if (status === "queued" || status === "running") {
-        setActiveJob((current) => {
-          if (!current) {
-            return current;
-          }
-          return { ...current, status };
-        });
+        await fetchTicketFailure(evtTicketKey, evt);
+      } else if (status === "queued" || status === "running" || status === "done") {
+        clearTicketFailure(evtTicketKey);
       }
     }
 
@@ -134,16 +307,16 @@ export function App() {
       scheduleFullRefresh();
     }
 
+    if (evt.type === "ticket_updated" && evtTicketKey && (evt.status ?? "") !== "running") {
+      setTicketPending(evtTicketKey, false);
+    }
+
     if (
       selected &&
       evt.type === "ticket_updated" &&
       evt.repo_path === selected.repo_path &&
       evt.ticket_number === selected.ticket_number
     ) {
-      if ((evt.status ?? "") !== "running" && activeJobIdRef.current) {
-        activeJobIdRef.current = "";
-        setActiveJobId("");
-      }
       await refreshTicketDetails(selected.repo_path, selected.ticket_number, false);
       if (showLogsModalRef.current) {
         await refreshExecutionLogs(selected.repo_path, selected.ticket_number);
@@ -154,10 +327,6 @@ export function App() {
   useEffect(() => {
     selectedSummaryRef.current = selectedSummary;
   }, [selectedSummary]);
-
-  useEffect(() => {
-    activeJobIdRef.current = activeJobId;
-  }, [activeJobId]);
 
   useEffect(() => {
     selectedRunIdRef.current = selectedRunId;
@@ -198,16 +367,16 @@ export function App() {
       return;
     }
     const lastRunId = stateRuns[stateRuns.length - 1].id;
-    const currentRunId = details?.state.current_run_id;
+    const nextCurrentRunId = details?.state.current_run_id;
     const prevLastRunId = prevLastRunIdRef.current;
     prevLastRunIdRef.current = lastRunId;
 
     setSelectedRunId((current) => {
       if (!current || !stateRuns.some((run) => run.id === current)) {
-        return (currentRunId && stateRuns.some((run) => run.id === currentRunId)) ? currentRunId : lastRunId;
+        return (nextCurrentRunId && stateRuns.some((run) => run.id === nextCurrentRunId)) ? nextCurrentRunId : lastRunId;
       }
       if (current === prevLastRunId) {
-        return (currentRunId && stateRuns.some((run) => run.id === currentRunId)) ? currentRunId : lastRunId;
+        return (nextCurrentRunId && stateRuns.some((run) => run.id === nextCurrentRunId)) ? nextCurrentRunId : lastRunId;
       }
       return current;
     });
@@ -293,6 +462,13 @@ export function App() {
     setQuestionAnswers({});
     setGeneralFeedback("");
   }, [selectedSummary?.repo_path, selectedSummary?.ticket_number, currentRunId]);
+
+  useEffect(() => {
+    setPendingTicketKeys((current) => current.filter((key) => {
+      const ticket = tickets.find((candidate) => ticketKey(candidate) === key);
+      return ticket ? ticket.busy : false;
+    }));
+  }, [tickets]);
 
   useEffect(() => {
     if (!showLogsModal || !selectedSummary) {
@@ -391,8 +567,7 @@ export function App() {
       return;
     }
     void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
-    // `refreshTicketDetails` is a stable effect event; this effect should only
-    // react to selection changes.
+    // `refreshTicketDetails` is a stable effect event; this effect should only react to selection changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSummary]);
 
@@ -411,9 +586,7 @@ export function App() {
     setError("");
     try {
       const accepted = await fn();
-      activeJobIdRef.current = accepted.job_id;
-      setActiveJobId(accepted.job_id);
-      setActiveJob(null);
+      optimisticTicketJob(accepted);
       return accepted;
     } catch (err) {
       setError(err instanceof Error ? err.message : "action failed");
@@ -489,101 +662,6 @@ export function App() {
   function updateAddTicketBaseBranch(value: string) {
     setNewTicketBaseBranch(value);
     setAddTicketError("");
-  }
-
-  function makeSyntheticRunId(): string {
-    return `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  function applyOptimisticTransition(next: Omit<OptimisticTransition, "synthetic_run_id">) {
-    const transition = {
-      ...next,
-      synthetic_run_id: makeSyntheticRunId()
-    };
-    setOptimisticTransition(transition);
-    setSelectedRunId(transition.synthetic_run_id);
-  }
-
-  function createMoveTransition(accepted: AcceptedJob, targetStateName: string): OptimisticTransition | null {
-    if (!selectedSummary || !details) {
-      return null;
-    }
-    return {
-      ticket_key: ticketKey(selectedSummary),
-      repo_path: selectedSummary.repo_path,
-      ticket_number: selectedSummary.ticket_number,
-      job_id: accepted.job_id,
-      target_state_name: targetStateName,
-      target_state_display_name: resolveStateDisplayName(details.workflow_states ?? [], targetStateName),
-      previous_selected_run_id: selectedRunIdRef.current,
-      previous_current_run_id: details.state.current_run_id ?? "",
-      kind: "move_to_state",
-      synthetic_run_id: ""
-    };
-  }
-
-  function createRerunTransition(accepted: AcceptedJob): OptimisticTransition | null {
-    if (!selectedSummary || !details) {
-      return null;
-    }
-    const currentStateName = details.state.current_state;
-    const fallbackDisplayName = currentRun?.state_display_name || currentStateName;
-    return {
-      ticket_key: ticketKey(selectedSummary),
-      repo_path: selectedSummary.repo_path,
-      ticket_number: selectedSummary.ticket_number,
-      job_id: accepted.job_id,
-      target_state_name: currentStateName,
-      target_state_display_name: resolveStateDisplayName(details.workflow_states ?? [], currentStateName, fallbackDisplayName),
-      previous_selected_run_id: selectedRunIdRef.current,
-      previous_current_run_id: details.state.current_run_id ?? "",
-      kind: "rerun",
-      synthetic_run_id: ""
-    };
-  }
-
-  function rollbackOptimisticTransition(jobId?: string) {
-    setOptimisticTransition((current) => {
-      if (!current || (jobId && current.job_id !== jobId)) {
-        return current;
-      }
-      if (selectedRunIdRef.current === current.synthetic_run_id) {
-        setSelectedRunId(current.previous_selected_run_id);
-      }
-      return null;
-    });
-  }
-
-  function clearOptimisticTransitionIfConfirmed(ticketDetails: TicketDetails) {
-    setOptimisticTransition((current) => {
-      if (!current) {
-        return current;
-      }
-      if (current.repo_path !== ticketDetails.repo_path || current.ticket_number !== ticketDetails.ticket_number) {
-        return current;
-      }
-
-      const currentRunId = ticketDetails.state.current_run_id ?? "";
-      const rerunConfirmed = current.kind === "rerun" && currentRunId !== "" && currentRunId !== current.previous_current_run_id;
-      const moveConfirmed =
-        current.kind === "move_to_state" &&
-        ticketDetails.state.current_state === current.target_state_name &&
-        currentRunId !== "" &&
-        currentRunId !== current.previous_current_run_id;
-      const terminalConfirmed =
-        current.kind === "move_to_state" &&
-        (ticketDetails.state.flow_status ?? "") === current.target_state_name;
-
-      if (!rerunConfirmed && !moveConfirmed && !terminalConfirmed) {
-        return current;
-      }
-
-      if (selectedRunIdRef.current === current.synthetic_run_id && moveConfirmed) {
-        setSelectedRunId(currentRunId);
-      }
-
-      return null;
-    });
   }
 
   function submitFeedback() {
@@ -727,12 +805,6 @@ export function App() {
       </header>
 
       {error ? <div className="banner error">{error}</div> : null}
-      {activeJob ? (
-        <div className={`banner ${activeJob.status === "failed" ? "error" : "info"}`}>
-          Job `{activeJob.id}`: {activeJob.action} ({activeJob.status})
-          {activeJob.error ? ` - ${activeJob.error}` : ""}
-        </div>
-      ) : null}
 
       <main className="main">
         <TicketList
@@ -754,7 +826,12 @@ export function App() {
           openQuestions={feedbackAction ? openQuestions : []}
           questionAnswers={questionAnswers}
           generalFeedback={generalFeedback}
-          isRunning={!!activeJobId}
+          actionsDisabled={selectedTicketDisabled}
+          feedbackDisabled={selectedTicketDisabled}
+          cleanupDisabled={selectedTicketDisabled}
+          moveDisabled={selectedTicketDisabled}
+          rerunDisabled={selectedTicketDisabled}
+          jobFailure={selectedTicketFailure}
           onSelectRun={setSelectedRunId}
           onQuestionAnswerChange={updateQuestionAnswer}
           onGeneralFeedbackChange={setGeneralFeedback}

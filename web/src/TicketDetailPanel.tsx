@@ -2,7 +2,7 @@ import { MarkdownView } from "./MarkdownView";
 import { StateTimeline } from "./StateTimeline";
 import { TicketMenu } from "./TicketMenu";
 import { getNonFeedbackActions, runDisplayLabel, ticketTitle, ticketURL } from "./tickets";
-import type { ActionInfo, DisplayStateRun, TicketDetails, TicketSummary } from "./types";
+import type { ActionInfo, DisplayStateRun, Job, TicketDetails, TicketSummary } from "./types";
 
 type TicketDetailPanelProps = {
   selectedSummary: TicketSummary | null;
@@ -16,7 +16,12 @@ type TicketDetailPanelProps = {
   openQuestions: string[];
   questionAnswers: Record<string, string>;
   generalFeedback: string;
-  isRunning: boolean;
+  actionsDisabled: boolean;
+  feedbackDisabled: boolean;
+  cleanupDisabled: boolean;
+  moveDisabled: boolean;
+  rerunDisabled: boolean;
+  jobFailure: Job | null;
   onSelectRun: (runId: string) => void;
   onQuestionAnswerChange: (index: number, value: string) => void;
   onGeneralFeedbackChange: (value: string) => void;
@@ -40,7 +45,12 @@ export function TicketDetailPanel({
   openQuestions,
   questionAnswers,
   generalFeedback,
-  isRunning,
+  actionsDisabled,
+  feedbackDisabled,
+  cleanupDisabled,
+  moveDisabled,
+  rerunDisabled,
+  jobFailure,
   onSelectRun,
   onQuestionAnswerChange,
   onGeneralFeedbackChange,
@@ -82,7 +92,7 @@ export function TicketDetailPanel({
         <div className="detail-actions-wrap">
           <div className="button-row detail-actions">
             {actionButtons.map((action) => (
-              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={isRunning || selectedSummary.busy}>
+              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={actionsDisabled}>
                 {action.label}
               </button>
             ))}
@@ -100,13 +110,18 @@ export function TicketDetailPanel({
             workflowStates={details?.workflow_states ?? []}
             currentStateName={details?.state.current_state}
             rerunLabel={selectedSummary.status === "failed" ? "Retry" : "Rerun"}
-            rerunDisabled={isRunning || selectedSummary.busy}
-            cleanupDisabled={selectedSummary.busy}
-            moveDisabled={isRunning || selectedSummary.busy}
+            rerunDisabled={rerunDisabled}
+            cleanupDisabled={cleanupDisabled}
+            moveDisabled={moveDisabled}
           />
         </div>
       </div>
 
+      {jobFailure?.error ? (
+        <div className="banner error">
+          Job `{jobFailure.id}`: {jobFailure.action} ({jobFailure.status}) - {jobFailure.error}
+        </div>
+      ) : null}
       {details?.state.last_error ? (
         <div className="banner error">{details.state.last_error}</div>
       ) : null}
@@ -186,7 +201,7 @@ export function TicketDetailPanel({
               />
             )}
             <div className="feedback-submit">
-              <button type="submit" disabled={isRunning || selectedSummary.busy}>{feedbackAction.label}</button>
+              <button type="submit" disabled={feedbackDisabled}>{feedbackAction.label}</button>
             </div>
           </form>
         ) : null}
