@@ -100,8 +100,9 @@ type ActionAcceptedResponse struct {
 
 // ActionInfo defines model for ActionInfo.
 type ActionInfo struct {
-	Label string `json:"label"`
-	Type  string `json:"type"`
+	Label  string  `json:"label"`
+	Target *string `json:"target,omitempty"`
+	Type   string  `json:"type"`
 }
 
 // ActionRequest defines model for ActionRequest.

@@ -51,6 +51,7 @@ describe("TicketDetailPanel", () => {
         selectedRunId="run-2"
         selectedArtifactContent="artifact"
         artifactLoading={false}
+        statusLabel="waiting"
         feedbackAction={{ label: "Provide Feedback", type: "provide_feedback" }}
         openQuestions={["What should happen first?", "What should happen second?"]}
         questionAnswers={{ "0": "First answer" }}
@@ -86,6 +87,7 @@ describe("TicketDetailPanel", () => {
         selectedRunId="run-2"
         selectedArtifactContent="artifact"
         artifactLoading={false}
+        statusLabel="waiting"
         feedbackAction={{ label: "Provide Feedback", type: "provide_feedback" }}
         openQuestions={[]}
         questionAnswers={{}}
@@ -107,5 +109,46 @@ describe("TicketDetailPanel", () => {
     fireEvent.change(textarea, { target: { value: "General note" } });
     expect(onGeneralFeedbackChange).toHaveBeenCalledWith("General note");
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
+  });
+
+  it("renders a running placeholder for a synthetic optimistic run", () => {
+    render(
+      <TicketDetailPanel
+        selectedSummary={makeSummary()}
+        details={makeDetails()}
+        stateRuns={[
+          ...(makeDetails().state.state_history ?? []),
+          {
+            id: "optimistic-run",
+            state_name: "implementation",
+            state_display_name: "Implementation",
+            started_at: "2024-01-03T00:00:00Z",
+            synthetic: true
+          }
+        ]}
+        selectedRunId="optimistic-run"
+        selectedArtifactContent=""
+        artifactLoading={false}
+        statusLabel="Implementation"
+        feedbackAction={undefined}
+        openQuestions={[]}
+        questionAnswers={{}}
+        generalFeedback=""
+        isRunning={true}
+        onSelectRun={vi.fn()}
+        onQuestionAnswerChange={vi.fn()}
+        onGeneralFeedbackChange={vi.fn()}
+        onSubmitFeedback={vi.fn()}
+        onApplyAction={vi.fn()}
+        onOpenLogs={vi.fn()}
+        onRerun={vi.fn()}
+        onCleanup={vi.fn()}
+        onMoveToState={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Running Implementation")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for server confirmation.")).toBeInTheDocument();
+    expect(screen.queryByText("No artifact path available.")).not.toBeInTheDocument();
   });
 });

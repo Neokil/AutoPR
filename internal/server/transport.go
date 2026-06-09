@@ -121,8 +121,9 @@ func toActionResponses(actions []actionInfo) []api.ActionInfo {
 	out := make([]api.ActionInfo, 0, len(actions))
 	for _, action := range actions {
 		out = append(out, api.ActionInfo{
-			Label: action.Label,
-			Type:  action.Type,
+			Label:  action.Label,
+			Type:   action.Type,
+			Target: stringPtr(action.Target),
 		})
 	}
 

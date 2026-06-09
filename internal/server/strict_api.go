@@ -183,8 +183,9 @@ func (s *server) GetTicket(ctx context.Context, request api.GetTicketRequestObje
 			if stateCfg, ok := wflow.StateByName(ticketState.CurrentState); ok {
 				for _, a := range stateCfg.Actions {
 					availableActions = append(availableActions, actionInfo{
-						Label: a.Label,
-						Type:  string(a.Type),
+						Label:  a.Label,
+						Type:   string(a.Type),
+						Target: a.Target,
 					})
 				}
 			}

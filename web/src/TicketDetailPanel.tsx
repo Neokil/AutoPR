@@ -2,15 +2,16 @@ import { MarkdownView } from "./MarkdownView";
 import { StateTimeline } from "./StateTimeline";
 import { TicketMenu } from "./TicketMenu";
 import { getNonFeedbackActions, runDisplayLabel, ticketTitle, ticketURL } from "./tickets";
-import type { ActionInfo, StateRun, TicketDetails, TicketSummary } from "./types";
+import type { ActionInfo, DisplayStateRun, TicketDetails, TicketSummary } from "./types";
 
 type TicketDetailPanelProps = {
   selectedSummary: TicketSummary | null;
   details: TicketDetails | null;
-  stateRuns: StateRun[];
+  stateRuns: DisplayStateRun[];
   selectedRunId: string;
   selectedArtifactContent: string;
   artifactLoading: boolean;
+  statusLabel: string;
   feedbackAction?: ActionInfo;
   openQuestions: string[];
   questionAnswers: Record<string, string>;
@@ -34,6 +35,7 @@ export function TicketDetailPanel({
   selectedRunId,
   selectedArtifactContent,
   artifactLoading,
+  statusLabel,
   feedbackAction,
   openQuestions,
   questionAnswers,
@@ -61,6 +63,7 @@ export function TicketDetailPanel({
   const actionButtons = getNonFeedbackActions(details, selectedSummary);
   const url = ticketURL(details);
   const title = ticketTitle(details, selectedSummary);
+  const selectedRunLabel = selectedRun ? runDisplayLabel(selectedRun, stateRuns) : "";
 
   return (
     <section className="panel right">
@@ -68,11 +71,11 @@ export function TicketDetailPanel({
         <h2 className="detail-main-title">
           {url ? (
             <a href={url} target="_blank" rel="noreferrer">
-              {selectedSummary.ticket_number} - {title} ({selectedSummary.status})
+              {selectedSummary.ticket_number} - {title} ({statusLabel})
             </a>
           ) : (
             <>
-              {selectedSummary.ticket_number} - {title} ({selectedSummary.status})
+              {selectedSummary.ticket_number} - {title} ({statusLabel})
             </>
           )}
         </h2>
@@ -114,18 +117,30 @@ export function TicketDetailPanel({
         {selectedRun ? (
           <div className="timeline-content">
             <div className="timeline-content-header">
-              <h4>{runDisplayLabel(selectedRun, stateRuns)}</h4>
+              <h4>{selectedRunLabel}</h4>
               <span className="meta">{new Date(selectedRun.started_at).toLocaleString()}</span>
             </div>
-            <p className="meta artifact-path">{selectedRun.artifact_ref || selectedRun.log_ref || "No artifact path available."}</p>
-            {artifactLoading ? <p className="meta">Loading artifact...</p> : null}
-            <MarkdownView
-              content={selectedArtifactContent}
-              emptyText="No run artifact available."
-              githubBlobBase={details?.github_blob_base}
-              repoPath={details?.repo_path}
-              worktreePath={details?.state.worktree_path}
-            />
+            {selectedRun.synthetic ? (
+              <div className="timeline-running-placeholder">
+                <div className="timeline-running-header">
+                  <span className="spinner" aria-hidden="true" />
+                  <strong>Running {selectedRunLabel}</strong>
+                </div>
+                <p className="meta">Waiting for server confirmation.</p>
+              </div>
+            ) : (
+              <>
+                <p className="meta artifact-path">{selectedRun.artifact_ref || selectedRun.log_ref || "No artifact path available."}</p>
+                {artifactLoading ? <p className="meta">Loading artifact...</p> : null}
+                <MarkdownView
+                  content={selectedArtifactContent}
+                  emptyText="No run artifact available."
+                  githubBlobBase={details?.github_blob_base}
+                  repoPath={details?.repo_path}
+                  worktreePath={details?.state.worktree_path}
+                />
+              </>
+            )}
           </div>
         ) : (
           <p className="meta">No workflow runs available yet.</p>

@@ -15,8 +15,9 @@ import (
 )
 
 type actionInfo struct {
-	Label string `json:"label"`
-	Type  string `json:"type"`
+	Label  string `json:"label"`
+	Type   string `json:"type"`
+	Target string `json:"target,omitempty"`
 }
 
 type workflowStateInfo struct {

@@ -346,6 +346,17 @@ button:disabled {
   padding: 12px;
 }
 
+.timeline-running-placeholder {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-running-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .timeline-content-header {
   display: flex;
   justify-content: space-between;
