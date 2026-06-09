@@ -294,6 +294,7 @@ export interface components {
         ActionInfo: {
             label: string;
             type: string;
+            target?: string;
         };
         WorkflowStateInfo: {
             name: string;

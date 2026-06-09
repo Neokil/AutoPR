@@ -15,3 +15,21 @@ export type ServerEvent = components["schemas"]["ServerEvent"];
 export type RepositoryListResponse = components["schemas"]["RepositoryListResponse"];
 export type DiscoveredTicket = components["schemas"]["DiscoveredTicket"];
 export type HealthResponse = components["schemas"]["HealthResponse"];
+
+export type DisplayStateRun = StateRun & {
+  synthetic?: boolean;
+  synthetic_status?: "queued" | "running";
+};
+
+export type OptimisticTransition = {
+  ticket_key: string;
+  repo_path: string;
+  ticket_number: string;
+  job_id: string;
+  synthetic_run_id: string;
+  target_state_name: string;
+  target_state_display_name: string;
+  previous_selected_run_id: string;
+  previous_current_run_id: string;
+  kind: "move_to_state" | "rerun";
+};

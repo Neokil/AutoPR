@@ -22,30 +22,19 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../api", () => apiMocks);
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  apiMocks.connectEvents.mockReturnValue({ close: vi.fn() });
-  apiMocks.listTickets.mockResolvedValue([
-    {
-      repo_id: "repo1",
-      repo_path: "/repo1",
-      ticket_number: "GH-5",
-      title: "Structured feedback",
-      status: "waiting",
-      busy: false,
-      approved: false,
-      updated_at: "2024-01-01T00:00:00Z"
-    }
-  ]);
-  apiMocks.listRepositories.mockResolvedValue(["/repo1"]);
-  apiMocks.getHealth.mockResolvedValue({ discover_tickets_configured: false });
-  apiMocks.getExecutionLogs.mockResolvedValue([]);
-  apiMocks.getTicket.mockResolvedValue({
+let eventHandler: ((evt: Record<string, unknown>) => void) | null = null;
+
+function makeDetails(overrides: Record<string, unknown> = {}) {
+  return {
     repo_id: "repo1",
     repo_path: "/repo1",
     ticket_number: "GH-5",
-    workflow_states: [],
-    available_actions: [{ label: "Provide Feedback", type: "provide_feedback" }],
+    workflow_states: [{ name: "implementation", display_name: "Implementation" }],
+    available_actions: [
+      { label: "Provide Feedback", type: "provide_feedback" },
+      { label: "Approve", type: "move_to_state", target: "implementation" },
+      { label: "Cancel", type: "move_to_state", target: "cancelled" }
+    ],
     state: {
       ticket_number: "GH-5",
       current_state: "investigation",
@@ -71,8 +60,34 @@ beforeEach(() => {
           started_at: "2024-01-02T00:00:00Z"
         }
       ]
-    }
+    },
+    ...overrides
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  eventHandler = null;
+  apiMocks.connectEvents.mockImplementation((onEvent: (evt: Record<string, unknown>) => void) => {
+    eventHandler = onEvent;
+    return { close: vi.fn() };
   });
+  apiMocks.listTickets.mockResolvedValue([
+    {
+      repo_id: "repo1",
+      repo_path: "/repo1",
+      ticket_number: "GH-5",
+      title: "Structured feedback",
+      status: "waiting",
+      busy: false,
+      approved: false,
+      updated_at: "2024-01-01T00:00:00Z"
+    }
+  ]);
+  apiMocks.listRepositories.mockResolvedValue(["/repo1"]);
+  apiMocks.getHealth.mockResolvedValue({ discover_tickets_configured: false });
+  apiMocks.getExecutionLogs.mockResolvedValue([]);
+  apiMocks.getTicket.mockResolvedValue(makeDetails());
   apiMocks.getArtifact.mockImplementation(async (_repoPath: string, _ticket: string, artifactRef: string) => {
     if (artifactRef.includes("run-1")) {
       return `## Open Questions
@@ -92,19 +107,36 @@ beforeEach(() => {
     repo_id: "repo1",
     repo_path: "/repo1"
   });
+  apiMocks.moveToState.mockResolvedValue({
+    status: "accepted",
+    job_id: "job-2",
+    action: "move_to_state",
+    repo_id: "repo1",
+    repo_path: "/repo1"
+  });
+  apiMocks.getJob.mockResolvedValue({
+    id: "job-1",
+    action: "apply_action",
+    repo_id: "repo1",
+    repo_path: "/repo1",
+    ticket_number: "GH-5",
+    status: "failed",
+    error: "job failed",
+    created_at: "2024-01-01T00:00:00Z"
+  });
 });
 
-describe("App structured feedback", () => {
+describe("App", () => {
   it("submits structured feedback from the current run even when an older run is selected", async () => {
     render(<App />);
 
     expect(await screen.findByPlaceholderText("Answer open question 1")).toBeInTheDocument();
-    expect(screen.getByText("Current question?")).toBeInTheDocument();
+    expect(screen.getAllByText("Current question?").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Investigation 1" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Current question?")).toBeInTheDocument();
+      expect(screen.getAllByText("Current question?").length).toBeGreaterThan(0);
     });
 
     const answerField = screen.getByPlaceholderText("Answer open question 1");
@@ -134,5 +166,71 @@ describe("App structured feedback", () => {
       "Provide Feedback",
       expect.stringContaining("## Additional Feedback")
     );
+  });
+
+  it("shows an optimistic upcoming state immediately after approve", async () => {
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Approve" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Running Implementation")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Implementation" })).toBeInTheDocument();
+    expect(screen.getByText("GH-5 - Structured feedback (Implementation)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /GH-5 Structured feedback .*Implementation .*\/repo1/ })).toBeInTheDocument();
+  });
+
+  it("shows an optimistic rerun immediately after structured feedback submit", async () => {
+    render(<App />);
+
+    expect(await screen.findByPlaceholderText("Answer open question 1")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Answer open question 1"), { target: { value: "Answer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Provide Feedback" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Running Investigation 3")).toBeInTheDocument();
+    });
+  });
+
+  it("applies the same optimistic behavior to overflow move-to-state", async () => {
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "☰" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "☰" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Implementation" }));
+
+    await waitFor(() => {
+      expect(apiMocks.moveToState).toHaveBeenCalledWith("/repo1", "GH-5", "implementation");
+    });
+    expect(screen.getByText("Running Implementation")).toBeInTheDocument();
+  });
+
+  it("rolls back the optimistic run when the tracked job fails", async () => {
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Approve" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Running Implementation")).toBeInTheDocument();
+    });
+
+    eventHandler?.({
+      type: "job",
+      repo_id: "repo1",
+      repo_path: "/repo1",
+      ticket_number: "GH-5",
+      job_id: "job-1",
+      status: "failed",
+      action: "apply_action"
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Running Implementation")).not.toBeInTheDocument();
+    });
+    expect(screen.getAllByText("Current question?").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Job `job-1`: apply_action \(failed\)/)).toBeInTheDocument();
   });
 });

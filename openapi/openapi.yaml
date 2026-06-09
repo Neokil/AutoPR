@@ -386,6 +386,7 @@ components:
       properties:
         label: { type: string }
         type: { type: string }
+        target: { type: string }
     WorkflowStateInfo:
       type: object
       required: [name]

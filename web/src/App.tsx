@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   applyAction,
   cleanupAll,
@@ -27,11 +27,13 @@ import {
   getFeedbackAction,
   knownRepoPaths,
   pendingTicketKey,
+  projectedTicketStatusLabel,
+  resolveStateDisplayName,
   selectTicketKey,
   stateRunsFromDetails,
   ticketKey
 } from "./tickets";
-import type { DiscoveredTicket, ExecutionLog, Job, ServerEvent, TicketDetails, TicketSummary } from "./types";
+import type { AcceptedJob, DiscoveredTicket, ExecutionLog, Job, OptimisticTransition, ServerEvent, TicketDetails, TicketSummary } from "./types";
 
 export function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
@@ -42,6 +44,7 @@ export function App() {
   const [currentFeedbackArtifactContent, setCurrentFeedbackArtifactContent] = useState("");
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [generalFeedback, setGeneralFeedback] = useState("");
+  const [optimisticTransition, setOptimisticTransition] = useState<OptimisticTransition | null>(null);
   const [activeJobId, setActiveJobId] = useState("");
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,7 +69,7 @@ export function App() {
 
   const selectedSummary = useMemo(() => tickets.find((ticket) => ticketKey(ticket) === selectedKey) ?? null, [tickets, selectedKey]);
   const availableRepoPaths = useMemo(() => knownRepoPaths(repositoryOptions, tickets), [repositoryOptions, tickets]);
-  const stateRuns = useMemo(() => stateRunsFromDetails(details), [details]);
+  const stateRuns = useMemo(() => stateRunsFromDetails(details, optimisticTransition), [details, optimisticTransition]);
   const feedbackAction = useMemo(() => getFeedbackAction(details, selectedSummary), [details, selectedSummary]);
   const currentRunId = details?.state.current_run_id ?? "";
   const currentRun = useMemo(
@@ -77,8 +80,13 @@ export function App() {
     () => extractOpenQuestions(currentFeedbackArtifactContent),
     [currentFeedbackArtifactContent]
   );
+  const selectedStatusLabel = useMemo(
+    () => (selectedSummary ? projectedTicketStatusLabel(selectedSummary, optimisticTransition) : ""),
+    [optimisticTransition, selectedSummary]
+  );
 
   const selectedSummaryRef = useRef<TicketSummary | null>(null);
+  const selectedRunIdRef = useRef("");
   const activeJobIdRef = useRef("");
   const showLogsModalRef = useRef(false);
   const fullRefreshScheduledRef = useRef(false);
@@ -92,6 +100,7 @@ export function App() {
     if (evt.type === "job" && evt.job_id && trackedJobID && evt.job_id === trackedJobID) {
       const status = evt.status ?? "";
       if (status === "failed") {
+        rollbackOptimisticTransition(evt.job_id);
         try {
           const job = await getJob(evt.job_id);
           setActiveJob(job);
@@ -151,6 +160,10 @@ export function App() {
   }, [activeJobId]);
 
   useEffect(() => {
+    selectedRunIdRef.current = selectedRunId;
+  }, [selectedRunId]);
+
+  useEffect(() => {
     showLogsModalRef.current = showLogsModal;
   }, [showLogsModal]);
 
@@ -177,23 +190,6 @@ export function App() {
     );
     return () => stream.close();
   }, []);
-
-  useEffect(() => {
-    if (!selectedSummary) {
-      setDetails(null);
-      setSelectedRunId("");
-      setSelectedArtifactContent("");
-      setCurrentFeedbackArtifactContent("");
-      setQuestionAnswers({});
-      setGeneralFeedback("");
-      setArtifactLoading(false);
-      setShowLogsModal(false);
-      setExecutionLogs([]);
-      setExecutionLogsLoading(false);
-      return;
-    }
-    void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
-  }, [selectedSummary]);
 
   useEffect(() => {
     if (stateRuns.length === 0) {
@@ -224,6 +220,11 @@ export function App() {
     }
     const selectedRun = stateRuns.find((run) => run.id === selectedRunId) ?? null;
     if (!selectedRun) {
+      setSelectedArtifactContent("");
+      setArtifactLoading(false);
+      return;
+    }
+    if (selectedRun.synthetic) {
       setSelectedArtifactContent("");
       setArtifactLoading(false);
       return;
@@ -346,7 +347,7 @@ export function App() {
     }
   }
 
-  async function refreshTicketDetails(repoPath: string, ticket: string, showLoader = true) {
+  const refreshTicketDetails = useEffectEvent(async (repoPath: string, ticket: string, showLoader = true) => {
     if (showLoader) {
       setLoading(true);
     }
@@ -354,6 +355,7 @@ export function App() {
     try {
       const ticketDetails = await getTicket(repoPath, ticket);
       setDetails(ticketDetails);
+      clearOptimisticTransitionIfConfirmed(ticketDetails);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load ticket details");
       setDetails(null);
@@ -363,16 +365,36 @@ export function App() {
         setLoading(false);
       }
     }
-  }
+  });
 
-  async function refreshExecutionLogs(repoPath: string, ticketNumber: string) {
+  const refreshExecutionLogs = useEffectEvent(async (repoPath: string, ticketNumber: string) => {
     try {
       const logs = await getExecutionLogs(repoPath, ticketNumber);
       setExecutionLogs(logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to refresh execution logs");
     }
-  }
+  });
+
+  useEffect(() => {
+    if (!selectedSummary) {
+      setDetails(null);
+      setSelectedRunId("");
+      setSelectedArtifactContent("");
+      setCurrentFeedbackArtifactContent("");
+      setQuestionAnswers({});
+      setGeneralFeedback("");
+      setArtifactLoading(false);
+      setShowLogsModal(false);
+      setExecutionLogs([]);
+      setExecutionLogsLoading(false);
+      return;
+    }
+    void refreshTicketDetails(selectedSummary.repo_path, selectedSummary.ticket_number);
+    // `refreshTicketDetails` is a stable effect event; this effect should only
+    // react to selection changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSummary]);
 
   function scheduleFullRefresh() {
     if (fullRefreshScheduledRef.current) {
@@ -385,17 +407,17 @@ export function App() {
     }, 250);
   }
 
-  async function queueAction(fn: () => Promise<{ job_id: string }>): Promise<boolean> {
+  async function queueAction(fn: () => Promise<AcceptedJob>): Promise<AcceptedJob | null> {
     setError("");
     try {
       const accepted = await fn();
       activeJobIdRef.current = accepted.job_id;
       setActiveJobId(accepted.job_id);
       setActiveJob(null);
-      return true;
+      return accepted;
     } catch (err) {
       setError(err instanceof Error ? err.message : "action failed");
-      return false;
+      return null;
     }
   }
 
@@ -428,9 +450,9 @@ export function App() {
     }
 
     setPendingAddedTickets((current) => [...current, pendingKey]);
-    const ok = await queueAction(() => runTicket(repoPath, ticketNumber, baseBranch));
+    const accepted = await queueAction(() => runTicket(repoPath, ticketNumber, baseBranch));
     setPendingAddedTickets((current) => current.filter((key) => key !== pendingKey));
-    if (ok) {
+    if (accepted) {
       closeAddTicketDialog();
       scheduleFullRefresh();
     }
@@ -469,6 +491,101 @@ export function App() {
     setAddTicketError("");
   }
 
+  function makeSyntheticRunId(): string {
+    return `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function applyOptimisticTransition(next: Omit<OptimisticTransition, "synthetic_run_id">) {
+    const transition = {
+      ...next,
+      synthetic_run_id: makeSyntheticRunId()
+    };
+    setOptimisticTransition(transition);
+    setSelectedRunId(transition.synthetic_run_id);
+  }
+
+  function createMoveTransition(accepted: AcceptedJob, targetStateName: string): OptimisticTransition | null {
+    if (!selectedSummary || !details) {
+      return null;
+    }
+    return {
+      ticket_key: ticketKey(selectedSummary),
+      repo_path: selectedSummary.repo_path,
+      ticket_number: selectedSummary.ticket_number,
+      job_id: accepted.job_id,
+      target_state_name: targetStateName,
+      target_state_display_name: resolveStateDisplayName(details.workflow_states ?? [], targetStateName),
+      previous_selected_run_id: selectedRunIdRef.current,
+      previous_current_run_id: details.state.current_run_id ?? "",
+      kind: "move_to_state",
+      synthetic_run_id: ""
+    };
+  }
+
+  function createRerunTransition(accepted: AcceptedJob): OptimisticTransition | null {
+    if (!selectedSummary || !details) {
+      return null;
+    }
+    const currentStateName = details.state.current_state;
+    const fallbackDisplayName = currentRun?.state_display_name || currentStateName;
+    return {
+      ticket_key: ticketKey(selectedSummary),
+      repo_path: selectedSummary.repo_path,
+      ticket_number: selectedSummary.ticket_number,
+      job_id: accepted.job_id,
+      target_state_name: currentStateName,
+      target_state_display_name: resolveStateDisplayName(details.workflow_states ?? [], currentStateName, fallbackDisplayName),
+      previous_selected_run_id: selectedRunIdRef.current,
+      previous_current_run_id: details.state.current_run_id ?? "",
+      kind: "rerun",
+      synthetic_run_id: ""
+    };
+  }
+
+  function rollbackOptimisticTransition(jobId?: string) {
+    setOptimisticTransition((current) => {
+      if (!current || (jobId && current.job_id !== jobId)) {
+        return current;
+      }
+      if (selectedRunIdRef.current === current.synthetic_run_id) {
+        setSelectedRunId(current.previous_selected_run_id);
+      }
+      return null;
+    });
+  }
+
+  function clearOptimisticTransitionIfConfirmed(ticketDetails: TicketDetails) {
+    setOptimisticTransition((current) => {
+      if (!current) {
+        return current;
+      }
+      if (current.repo_path !== ticketDetails.repo_path || current.ticket_number !== ticketDetails.ticket_number) {
+        return current;
+      }
+
+      const currentRunId = ticketDetails.state.current_run_id ?? "";
+      const rerunConfirmed = current.kind === "rerun" && currentRunId !== "" && currentRunId !== current.previous_current_run_id;
+      const moveConfirmed =
+        current.kind === "move_to_state" &&
+        ticketDetails.state.current_state === current.target_state_name &&
+        currentRunId !== "" &&
+        currentRunId !== current.previous_current_run_id;
+      const terminalConfirmed =
+        current.kind === "move_to_state" &&
+        (ticketDetails.state.flow_status ?? "") === current.target_state_name;
+
+      if (!rerunConfirmed && !moveConfirmed && !terminalConfirmed) {
+        return current;
+      }
+
+      if (selectedRunIdRef.current === current.synthetic_run_id && moveConfirmed) {
+        setSelectedRunId(currentRunId);
+      }
+
+      return null;
+    });
+  }
+
   function submitFeedback() {
     if (!selectedSummary || !feedbackAction) {
       return;
@@ -484,8 +601,12 @@ export function App() {
         feedbackAction.label,
         message
       )
-    ).then((ok) => {
-      if (ok) {
+    ).then((accepted) => {
+      if (accepted) {
+        const transition = createRerunTransition(accepted);
+        if (transition) {
+          applyOptimisticTransition(transition);
+        }
         setQuestionAnswers({});
         setGeneralFeedback("");
       }
@@ -497,17 +618,34 @@ export function App() {
   }
 
   function applyNamedAction(label: string) {
-    if (!selectedSummary) {
+    if (!selectedSummary || !details) {
       return;
     }
-    void queueAction(() => applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, label));
+    const action = details.available_actions.find((candidate) => candidate.label === label);
+    void queueAction(() => applyAction(selectedSummary.repo_path, selectedSummary.ticket_number, label)).then((accepted) => {
+      if (!accepted || !action?.target) {
+        return;
+      }
+      const transition = createMoveTransition(accepted, action.target);
+      if (transition) {
+        applyOptimisticTransition(transition);
+      }
+    });
   }
 
   function rerunSelectedTicket() {
     if (!selectedSummary) {
       return;
     }
-    void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number));
+    void queueAction(() => runTicket(selectedSummary.repo_path, selectedSummary.ticket_number)).then((accepted) => {
+      if (!accepted) {
+        return;
+      }
+      const transition = createRerunTransition(accepted);
+      if (transition) {
+        applyOptimisticTransition(transition);
+      }
+    });
   }
 
   function cleanupSelectedTicket() {
@@ -521,7 +659,15 @@ export function App() {
     if (!selectedSummary) {
       return;
     }
-    void queueAction(() => moveToState(selectedSummary.repo_path, selectedSummary.ticket_number, target));
+    void queueAction(() => moveToState(selectedSummary.repo_path, selectedSummary.ticket_number, target)).then((accepted) => {
+      if (!accepted) {
+        return;
+      }
+      const transition = createMoveTransition(accepted, target);
+      if (transition) {
+        applyOptimisticTransition(transition);
+      }
+    });
   }
 
   function openDiscoverModal() {
@@ -589,7 +735,13 @@ export function App() {
       ) : null}
 
       <main className="main">
-        <TicketList tickets={tickets} selectedKey={selectedKey} onSelectTicket={setSelectedKey} onAddTicket={openAddTicketDialog} />
+        <TicketList
+          tickets={tickets}
+          optimisticTransition={optimisticTransition}
+          selectedKey={selectedKey}
+          onSelectTicket={setSelectedKey}
+          onAddTicket={openAddTicketDialog}
+        />
         <TicketDetailPanel
           selectedSummary={selectedSummary}
           details={details}
@@ -597,6 +749,7 @@ export function App() {
           selectedRunId={selectedRunId}
           selectedArtifactContent={selectedArtifactContent}
           artifactLoading={artifactLoading}
+          statusLabel={selectedStatusLabel}
           feedbackAction={feedbackAction}
           openQuestions={feedbackAction ? openQuestions : []}
           questionAnswers={questionAnswers}
