@@ -255,9 +255,24 @@ button:disabled {
 
 .feedback-form {
   display: grid;
-  grid-template-columns: 1fr auto;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.feedback-field {
+  display: grid;
+  gap: 6px;
+}
+
+.feedback-question {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.feedback-submit {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .tabs {

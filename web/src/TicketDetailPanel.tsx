@@ -12,9 +12,13 @@ type TicketDetailPanelProps = {
   selectedArtifactContent: string;
   artifactLoading: boolean;
   feedbackAction?: ActionInfo;
-  feedbackMessage: string;
+  openQuestions: string[];
+  questionAnswers: Record<string, string>;
+  generalFeedback: string;
+  isRunning: boolean;
   onSelectRun: (runId: string) => void;
-  onFeedbackMessageChange: (value: string) => void;
+  onQuestionAnswerChange: (index: number, value: string) => void;
+  onGeneralFeedbackChange: (value: string) => void;
   onSubmitFeedback: () => void;
   onApplyAction: (label: string) => void;
   onOpenLogs: () => void;
@@ -31,9 +35,13 @@ export function TicketDetailPanel({
   selectedArtifactContent,
   artifactLoading,
   feedbackAction,
-  feedbackMessage,
+  openQuestions,
+  questionAnswers,
+  generalFeedback,
+  isRunning,
   onSelectRun,
-  onFeedbackMessageChange,
+  onQuestionAnswerChange,
+  onGeneralFeedbackChange,
   onSubmitFeedback,
   onApplyAction,
   onOpenLogs,
@@ -71,7 +79,7 @@ export function TicketDetailPanel({
         <div className="detail-actions-wrap">
           <div className="button-row detail-actions">
             {actionButtons.map((action) => (
-              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={selectedSummary.busy}>
+              <button key={action.label} onClick={() => onApplyAction(action.label)} disabled={isRunning || selectedSummary.busy}>
                 {action.label}
               </button>
             ))}
@@ -89,9 +97,9 @@ export function TicketDetailPanel({
             workflowStates={details?.workflow_states ?? []}
             currentStateName={details?.state.current_state}
             rerunLabel={selectedSummary.status === "failed" ? "Retry" : "Rerun"}
-            rerunDisabled={selectedSummary.busy}
+            rerunDisabled={isRunning || selectedSummary.busy}
             cleanupDisabled={selectedSummary.busy}
-            moveDisabled={selectedSummary.busy}
+            moveDisabled={isRunning || selectedSummary.busy}
           />
         </div>
       </div>
@@ -103,23 +111,6 @@ export function TicketDetailPanel({
       <article className="card">
         <span className="field-label">Timeline</span>
         <StateTimeline runs={stateRuns} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
-        {feedbackAction ? (
-          <form
-            className="feedback-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              onSubmitFeedback();
-            }}
-          >
-            <textarea
-              value={feedbackMessage}
-              onChange={(event) => onFeedbackMessageChange(event.target.value)}
-              placeholder={`Send feedback (${feedbackAction.label})`}
-              rows={3}
-            />
-            <button type="submit">{feedbackAction.label}</button>
-          </form>
-        ) : null}
         {selectedRun ? (
           <div className="timeline-content">
             <div className="timeline-content-header">
@@ -139,6 +130,51 @@ export function TicketDetailPanel({
         ) : (
           <p className="meta">No workflow runs available yet.</p>
         )}
+        {feedbackAction ? (
+          <form
+            className="feedback-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSubmitFeedback();
+            }}
+          >
+            {openQuestions.length > 0 ? (
+              <>
+                {openQuestions.map((question, index) => (
+                  <label key={`${index}-${question}`} className="feedback-field">
+                    <span className="field-label">Open Question {index + 1}</span>
+                    <p className="feedback-question">{question}</p>
+                    <textarea
+                      value={questionAnswers[String(index)] ?? ""}
+                      onChange={(event) => onQuestionAnswerChange(index, event.target.value)}
+                      placeholder={`Answer open question ${index + 1}`}
+                      rows={4}
+                    />
+                  </label>
+                ))}
+                <label className="feedback-field">
+                  <span className="field-label">Additional Feedback</span>
+                  <textarea
+                    value={generalFeedback}
+                    onChange={(event) => onGeneralFeedbackChange(event.target.value)}
+                    placeholder="Add any additional context"
+                    rows={4}
+                  />
+                </label>
+              </>
+            ) : (
+              <textarea
+                value={generalFeedback}
+                onChange={(event) => onGeneralFeedbackChange(event.target.value)}
+                placeholder={`Send feedback (${feedbackAction.label})`}
+                rows={3}
+              />
+            )}
+            <div className="feedback-submit">
+              <button type="submit" disabled={isRunning || selectedSummary.busy}>{feedbackAction.label}</button>
+            </div>
+          </form>
+        ) : null}
       </article>
     </section>
   );
