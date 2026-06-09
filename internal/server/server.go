@@ -219,3 +219,11 @@ func resolveArtifactRef(ticketState workflowstate.State, name string) (string, b
 
 	return ticketState.ResolveRef(filepath.ToSlash(clean)), true
 }
+
+func effectiveBaseBranch(ticketBaseBranch, configBaseBranch string) string {
+	if branch := strings.TrimSpace(ticketBaseBranch); branch != "" {
+		return branch
+	}
+
+	return strings.TrimSpace(configBaseBranch)
+}

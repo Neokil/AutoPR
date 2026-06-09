@@ -90,8 +90,13 @@ function postAccepted<TBody>(path: string, body: TBody): Promise<AcceptedJob> {
   });
 }
 
-export function runTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {
-  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/run`, { repo_path: repoPath });
+export function runTicket(repoPath: string, ticket: string, baseBranch?: string): Promise<AcceptedJob> {
+  const body: { repo_path: string; base_branch?: string } = { repo_path: repoPath };
+  if (baseBranch && baseBranch.trim()) {
+    body.base_branch = baseBranch.trim();
+  }
+
+  return postAccepted(`/api/tickets/${encodeURIComponent(ticket)}/run`, body);
 }
 
 export function cleanupTicket(repoPath: string, ticket: string): Promise<AcceptedJob> {

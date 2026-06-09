@@ -54,6 +54,7 @@ export function App() {
   const [executionLogsLoading, setExecutionLogsLoading] = useState(false);
   const [newTicketRepoPath, setNewTicketRepoPath] = useState("");
   const [newTicketNumber, setNewTicketNumber] = useState("");
+  const [newTicketBaseBranch, setNewTicketBaseBranch] = useState("");
   const [pendingAddedTickets, setPendingAddedTickets] = useState<string[]>([]);
   const [addTicketError, setAddTicketError] = useState("");
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
@@ -401,6 +402,7 @@ export function App() {
   async function submitAddTicket() {
     const repoPath = newTicketRepoPath.trim();
     const ticketNumber = newTicketNumber.trim();
+    const baseBranch = newTicketBaseBranch.trim();
     setAddTicketError("");
     if (!repoPath || !ticketNumber) {
       setAddTicketError("repo folder path and ticket number are required");
@@ -426,7 +428,7 @@ export function App() {
     }
 
     setPendingAddedTickets((current) => [...current, pendingKey]);
-    const ok = await queueAction(() => runTicket(repoPath, ticketNumber));
+    const ok = await queueAction(() => runTicket(repoPath, ticketNumber, baseBranch));
     setPendingAddedTickets((current) => current.filter((key) => key !== pendingKey));
     if (ok) {
       closeAddTicketDialog();
@@ -439,6 +441,7 @@ export function App() {
     setAddTicketError("");
     setNewTicketRepoPath(selectedSummary?.repo_path ?? "");
     setNewTicketNumber("");
+    setNewTicketBaseBranch("");
     setShowAddTicketDialog(true);
     void refreshRepositories();
   }
@@ -448,6 +451,7 @@ export function App() {
     setShowAddTicketDialog(false);
     setNewTicketRepoPath("");
     setNewTicketNumber("");
+    setNewTicketBaseBranch("");
   }
 
   function updateAddTicketRepoPath(value: string) {
@@ -457,6 +461,11 @@ export function App() {
 
   function updateAddTicketNumber(value: string) {
     setNewTicketNumber(value);
+    setAddTicketError("");
+  }
+
+  function updateAddTicketBaseBranch(value: string) {
+    setNewTicketBaseBranch(value);
     setAddTicketError("");
   }
 
@@ -610,9 +619,11 @@ export function App() {
           knownRepoPaths={availableRepoPaths}
           repoPath={newTicketRepoPath}
           ticketNumber={newTicketNumber}
+          baseBranch={newTicketBaseBranch}
           error={addTicketError}
           onRepoPathChange={updateAddTicketRepoPath}
           onTicketNumberChange={updateAddTicketNumber}
+          onBaseBranchChange={updateAddTicketBaseBranch}
           onSubmit={submitAddTicket}
           onClose={closeAddTicketDialog}
         />
