@@ -384,8 +384,14 @@ export function App() {
     }, 250);
   }
 
-  async function queueAction(fn: () => Promise<{ job_id: string }>): Promise<boolean> {
+  async function queueAction(
+    fn: () => Promise<{ job_id: string }>,
+    onError?: (message: string) => void
+  ): Promise<boolean> {
     setError("");
+    if (onError) {
+      onError("");
+    }
     try {
       const accepted = await fn();
       activeJobIdRef.current = accepted.job_id;
@@ -393,9 +399,30 @@ export function App() {
       setActiveJob(null);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "action failed");
+      const message = err instanceof Error ? err.message : "action failed";
+      if (onError) {
+        onError(message);
+      } else {
+        setError(message);
+      }
       return false;
     }
+  }
+
+  function isPendingAdd(repoPath: string, ticketNumber: string): boolean {
+    return pendingAddedTickets.includes(pendingTicketKey(repoPath, ticketNumber));
+  }
+
+  async function enqueueTicketRun(
+    repoPath: string,
+    ticketNumber: string,
+    onError?: (message: string) => void
+  ): Promise<boolean> {
+    const pendingKey = pendingTicketKey(repoPath, ticketNumber);
+    setPendingAddedTickets((current) => [...current, pendingKey]);
+    const ok = await queueAction(() => runTicket(repoPath, ticketNumber), onError);
+    setPendingAddedTickets((current) => current.filter((key) => key !== pendingKey));
+    return ok;
   }
 
   async function submitAddTicket() {
@@ -407,8 +434,7 @@ export function App() {
       return;
     }
 
-    const pendingKey = pendingTicketKey(repoPath, ticketNumber);
-    if (pendingAddedTickets.includes(pendingKey)) {
+    if (isPendingAdd(repoPath, ticketNumber)) {
       setAddTicketError(`ticket ${ticketNumber} is already being added to AutoPR for this repository`);
       return;
     }
@@ -425,9 +451,7 @@ export function App() {
       return;
     }
 
-    setPendingAddedTickets((current) => [...current, pendingKey]);
-    const ok = await queueAction(() => runTicket(repoPath, ticketNumber));
-    setPendingAddedTickets((current) => current.filter((key) => key !== pendingKey));
+    const ok = await enqueueTicketRun(repoPath, ticketNumber);
     if (ok) {
       closeAddTicketDialog();
       scheduleFullRefresh();
@@ -525,20 +549,30 @@ export function App() {
     setDiscoverError("");
     setDiscoverLoading(true);
     setShowDiscoverModal(true);
-    void discoverTickets(repoPath)
-      .then((found) => { setDiscoveredTickets(found); })
+    void Promise.all([discoverTickets(repoPath), listTickets(repoPath)])
+      .then(([found, tracked]) => {
+        const trackedNumbers = new Set(tracked.map((ticket) => ticket.ticket_number));
+        setDiscoveredTickets(
+          found.filter((ticket) => !trackedNumbers.has(ticket.ticket_number) && !isPendingAdd(repoPath, ticket.ticket_number))
+        );
+      })
       .catch((err) => { setDiscoverError(err instanceof Error ? err.message : "discovery failed"); })
       .finally(() => { setDiscoverLoading(false); });
   }
 
-  function handleDiscoverAdd(ticketNumber: string) {
-    setShowDiscoverModal(false);
-    setError("");
-    setAddTicketError("");
-    setNewTicketRepoPath(discoverRepoPath);
-    setNewTicketNumber(ticketNumber);
-    setShowAddTicketDialog(true);
-    void refreshRepositories();
+  async function handleDiscoverAdd(ticketNumber: string) {
+    if (!discoverRepoPath) {
+      return;
+    }
+    if (isPendingAdd(discoverRepoPath, ticketNumber)) {
+      setDiscoverError(`ticket ${ticketNumber} is already being added to AutoPR for this repository`);
+      return;
+    }
+    const ok = await enqueueTicketRun(discoverRepoPath, ticketNumber, setDiscoverError);
+    if (ok) {
+      setDiscoveredTickets((current) => current.filter((ticket) => ticket.ticket_number !== ticketNumber));
+      scheduleFullRefresh();
+    }
   }
 
   return (
@@ -624,7 +658,10 @@ export function App() {
           tickets={discoveredTickets}
           loading={discoverLoading}
           error={discoverError}
-          onAdd={handleDiscoverAdd}
+          pendingTicketNumbers={discoveredTickets
+            .filter((ticket) => isPendingAdd(discoverRepoPath, ticket.ticket_number))
+            .map((ticket) => ticket.ticket_number)}
+          onAdd={(ticketNumber) => { void handleDiscoverAdd(ticketNumber); }}
           onClose={() => setShowDiscoverModal(false)}
         />
       ) : null}

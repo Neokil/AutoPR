@@ -5,11 +5,20 @@ type DiscoverTicketsModalProps = {
   tickets: DiscoveredTicket[];
   loading: boolean;
   error: string;
+  pendingTicketNumbers: string[];
   onAdd: (ticketNumber: string) => void;
   onClose: () => void;
 };
 
-export function DiscoverTicketsModal({ repoPath, tickets, loading, error, onAdd, onClose }: DiscoverTicketsModalProps) {
+export function DiscoverTicketsModal({
+  repoPath,
+  tickets,
+  loading,
+  error,
+  pendingTicketNumbers,
+  onAdd,
+  onClose
+}: DiscoverTicketsModalProps) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal discover-modal" onClick={(event) => event.stopPropagation()}>
@@ -26,8 +35,12 @@ export function DiscoverTicketsModal({ repoPath, tickets, loading, error, onAdd,
               <li key={ticket.ticket_number} className="discover-item">
                 <span className="discover-ticket-id">{ticket.ticket_number}</span>
                 <span className="discover-ticket-title">{ticket.title}</span>
-                <button type="button" onClick={() => onAdd(ticket.ticket_number)}>
-                  Add
+                <button
+                  type="button"
+                  disabled={pendingTicketNumbers.includes(ticket.ticket_number)}
+                  onClick={() => onAdd(ticket.ticket_number)}
+                >
+                  {pendingTicketNumbers.includes(ticket.ticket_number) ? "Adding..." : "Add"}
                 </button>
               </li>
             ))}
