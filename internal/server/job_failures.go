@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -16,10 +17,11 @@ func (s *server) persistTicketFailure(repoID, repoRoot, ticket string, repoRt *r
 
 	ticketState, err := repoRt.store.LoadState(ticket)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("load ticket state: %w", err)
 		}
-		ticketState = workflowstate.New(ticket)
+
+		return s.meta.DeleteTicket(repoID, ticket)
 	}
 
 	msg := strings.TrimSpace(cause.Error())

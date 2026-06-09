@@ -24,13 +24,7 @@ func (s *server) ensureQueuedTicket(repoID, repoRoot, ticket string) error {
 		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
 
-	st := workflowstate.New(ticket)
-	err = repoRt.store.SaveState(ticket, st)
-	if err != nil {
-		return fmt.Errorf("save initial ticket state: %w", err)
-	}
-
-	return s.syncTicketFromRepo(repoID, repoRoot, ticket, repoRt, true)
+	return nil
 }
 
 func (s *server) syncTicketFromRepo(repoID, repoRoot, ticket string, rt *repoRuntime, emitEvent bool) error {

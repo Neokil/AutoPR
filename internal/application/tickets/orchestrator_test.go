@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/Neokil/AutoPR/internal/config"
 	workflowstate "github.com/Neokil/AutoPR/internal/domain/workflowstate"
 	"github.com/Neokil/AutoPR/internal/providers"
+	statepkg "github.com/Neokil/AutoPR/internal/state"
 )
 
 // ── in-memory mocks ────────────────────────────────────────────────────────
@@ -133,6 +135,31 @@ func newOrchestrator(repoRoot string, store *memStore, prov *mockProvider) *tick
 	)
 }
 
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test User",
+		"GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Test User",
+		"GIT_COMMITTER_EMAIL=test@example.com",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(output))
+	}
+}
+
+func setupGitRepo(t *testing.T, root string) {
+	t.Helper()
+	runGit(t, root, "init", "-b", "main")
+	runGit(t, root, "config", "user.name", "Test User")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "initial commit")
+}
+
 // ── StartFlow ─────────────────────────────────────────────────────────────
 
 func TestStartFlow_newTicket_endsWaiting(t *testing.T) {
@@ -210,6 +237,41 @@ func TestStartFlow_providerError_setsFailedStatus(t *testing.T) {
 	}
 	if st.LastError == "" {
 		t.Error("expected LastError to be set")
+	}
+}
+
+func TestStartFlow_newTicketPersistsStateInWorktreeOnly(t *testing.T) {
+	t.Parallel()
+
+	root := setupRepo(t, minimalWorkflow, "Investigate this ticket.")
+	setupGitRepo(t, root)
+	store := statepkg.NewStore(root, ".auto-pr-state")
+	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "analysis done"}}
+	orch := tickets.NewWithStore(
+		config.Config{StateDirName: ".auto-pr-state", BaseBranch: "main"},
+		root,
+		store,
+		prov,
+	)
+
+	err := orch.StartFlow(context.Background(), "42")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	worktreeStatePath := filepath.Join(root, ".auto-pr-state", "worktrees", "42", ".auto-pr", statepkg.StateFileName)
+	if _, statErr := os.Stat(worktreeStatePath); statErr != nil {
+		t.Fatalf("expected worktree-backed state file at %s: %v", worktreeStatePath, statErr)
+	}
+
+	legacyStatePath := filepath.Join(root, ".auto-pr-state", "42", statepkg.StateFileName)
+	if _, statErr := os.Stat(legacyStatePath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no legacy state file at %s, got err=%v", legacyStatePath, statErr)
+	}
+
+	legacyDirPath := filepath.Join(root, ".auto-pr-state", "42")
+	if _, statErr := os.Stat(legacyDirPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no legacy ticket dir at %s, got err=%v", legacyDirPath, statErr)
 	}
 }
 
