@@ -356,3 +356,69 @@ describe("App", () => {
     });
   });
 });
+
+describe("App discover tickets", () => {
+  it("filters tracked tickets and keeps the discover modal open after adding", async () => {
+    apiMocks.getHealth.mockResolvedValue({ discover_tickets_configured: true });
+    apiMocks.listTickets.mockImplementation(async (repoPath?: string) => {
+      if (repoPath === "/repo1") {
+        return [
+          {
+            repo_id: "repo1",
+            repo_path: "/repo1",
+            ticket_number: "GH-4",
+            title: "Already tracked",
+            status: "waiting",
+            busy: false,
+            approved: false,
+            updated_at: "2024-01-01T00:00:00Z"
+          }
+        ];
+      }
+      return [
+        {
+          repo_id: "repo1",
+          repo_path: "/repo1",
+          ticket_number: "GH-5",
+          title: "Structured feedback",
+          status: "waiting",
+          busy: false,
+          approved: false,
+          updated_at: "2024-01-01T00:00:00Z"
+        }
+      ];
+    });
+    apiMocks.discoverTickets.mockResolvedValue([
+      { ticket_number: "GH-4", title: "Already tracked" },
+      { ticket_number: "GH-11", title: "Fresh discover ticket" }
+    ]);
+    apiMocks.runTicket.mockResolvedValue({
+      status: "accepted",
+      job_id: "job-2",
+      action: "run_ticket",
+      repo_id: "repo1",
+      repo_path: "/repo1"
+    });
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Discover Tickets" }));
+
+    expect(await screen.findByText("Fresh discover ticket")).toBeInTheDocument();
+    expect(apiMocks.discoverTickets).toHaveBeenCalledWith("/repo1");
+    expect(apiMocks.listTickets).toHaveBeenCalledWith("/repo1");
+    expect(screen.queryByText("Already tracked")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => {
+      expect(apiMocks.runTicket).toHaveBeenCalledWith("/repo1", "GH-11", undefined);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Fresh discover ticket")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(screen.queryByText("Schedule a ticket run for a repository.")).not.toBeInTheDocument();
+  });
+});
