@@ -111,6 +111,25 @@ export function TicketDetailPanel({
       <article className="card">
         <span className="field-label">Timeline</span>
         <StateTimeline runs={stateRuns} selectedRunId={selectedRunId} onSelectRun={onSelectRun} />
+        {selectedRun ? (
+          <div className="timeline-content">
+            <div className="timeline-content-header">
+              <h4>{runDisplayLabel(selectedRun, stateRuns)}</h4>
+              <span className="meta">{new Date(selectedRun.started_at).toLocaleString()}</span>
+            </div>
+            <p className="meta artifact-path">{selectedRun.artifact_ref || selectedRun.log_ref || "No artifact path available."}</p>
+            {artifactLoading ? <p className="meta">Loading artifact...</p> : null}
+            <MarkdownView
+              content={selectedArtifactContent}
+              emptyText="No run artifact available."
+              githubBlobBase={details?.github_blob_base}
+              repoPath={details?.repo_path}
+              worktreePath={details?.state.worktree_path}
+            />
+          </div>
+        ) : (
+          <p className="meta">No workflow runs available yet.</p>
+        )}
         {feedbackAction ? (
           <form
             className="feedback-form"
@@ -156,25 +175,6 @@ export function TicketDetailPanel({
             </div>
           </form>
         ) : null}
-        {selectedRun ? (
-          <div className="timeline-content">
-            <div className="timeline-content-header">
-              <h4>{runDisplayLabel(selectedRun, stateRuns)}</h4>
-              <span className="meta">{new Date(selectedRun.started_at).toLocaleString()}</span>
-            </div>
-            <p className="meta artifact-path">{selectedRun.artifact_ref || selectedRun.log_ref || "No artifact path available."}</p>
-            {artifactLoading ? <p className="meta">Loading artifact...</p> : null}
-            <MarkdownView
-              content={selectedArtifactContent}
-              emptyText="No run artifact available."
-              githubBlobBase={details?.github_blob_base}
-              repoPath={details?.repo_path}
-              worktreePath={details?.state.worktree_path}
-            />
-          </div>
-        ) : (
-          <p className="meta">No workflow runs available yet.</p>
-        )}
       </article>
     </section>
   );
