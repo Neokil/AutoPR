@@ -28,9 +28,7 @@ func (s *server) workerLoop() {
 					slog.Error("quota re-queue failed", "job", job.record.ID, "err", err)
 				}
 				continue
-
 			}
-
 			s.setJobStatus(job.record, "failed", err.Error())
 
 			continue
@@ -124,12 +122,7 @@ func (s *server) executeJob(job queuedJob) error {
 		err = fmt.Errorf("%w: %s", errUnsupportedJobAction, job.record.Action)
 	}
 	if err != nil && ticket != "" {
-		if errors.Is(err, providers.ErrTokensExhausted) {
-			persistErr := s.persistTicketScheduled(repoID, repoRoot, ticket, repoRt, err)
-			if persistErr != nil {
-				return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
-			}
-		} else {
+		if !errors.Is(err, providers.ErrTokensExhausted) {
 			persistErr := s.persistTicketFailure(repoID, repoRoot, ticket, repoRt, job, err)
 			if persistErr != nil {
 				return fmt.Errorf("%w (also failed to persist ticket failure: %w)", err, persistErr)
@@ -177,7 +170,6 @@ func (s *server) waitIfQuotaReached() {
 
 	<-resetCh
 	slog.Info("LLM quota reset detected. Resuming job execution.")
-
 }
 
 func (s *server) reQueueJob(job queuedJob) error {
@@ -188,6 +180,6 @@ func (s *server) reQueueJob(job queuedJob) error {
 	// case <-context.Background().Done():
 	// 	return fmt.Errorf("re-queue aborted: server shutting down")
 	default:
-		return fmt.Errorf("re-queue failed: job queue full")
+		return errJobQueueFull
 	}
 }
