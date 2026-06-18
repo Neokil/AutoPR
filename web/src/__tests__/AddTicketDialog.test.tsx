@@ -6,9 +6,11 @@ const defaultProps = {
   knownRepoPaths: [],
   repoPath: "",
   ticketNumber: "",
+  baseBranch: "",
   error: "",
   onRepoPathChange: vi.fn(),
   onTicketNumberChange: vi.fn(),
+  onBaseBranchChange: vi.fn(),
   onSubmit: vi.fn(),
   onClose: vi.fn(),
 };
@@ -35,5 +37,16 @@ describe("AddTicketDialog", () => {
     const { container } = render(<AddTicketDialog {...defaultProps} onClose={onClose} />);
     fireEvent.click(container.querySelector(".modal")!);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("renders the base branch input and forwards changes", () => {
+    const onBaseBranchChange = vi.fn();
+    render(<AddTicketDialog {...defaultProps} onBaseBranchChange={onBaseBranchChange} baseBranch="main" />);
+
+    const input = screen.getByLabelText("Base Branch");
+    expect(input).toHaveValue("main");
+
+    fireEvent.change(input, { target: { value: "release/1.2" } });
+    expect(onBaseBranchChange).toHaveBeenCalledWith("release/1.2");
   });
 });

@@ -25,6 +25,7 @@ func toTicketStateResponse(state workflowstate.State) api.TicketStateResponse {
 		CurrentRunId: stringPtr(state.CurrentRunID),
 		FlowStatus:   api.FlowStatus(state.FlowStatus),
 		BranchName:   state.BranchName,
+		BaseBranch:   stringPtr(state.BaseBranch),
 		WorktreePath: state.WorktreePath,
 		LastError:    stringPtr(state.LastError),
 		PrUrl:        stringPtr(state.PRURL),
@@ -120,8 +121,9 @@ func toActionResponses(actions []actionInfo) []api.ActionInfo {
 	out := make([]api.ActionInfo, 0, len(actions))
 	for _, action := range actions {
 		out = append(out, api.ActionInfo{
-			Label: action.Label,
-			Type:  action.Type,
+			Label:  action.Label,
+			Type:   action.Type,
+			Target: stringPtr(action.Target),
 		})
 	}
 

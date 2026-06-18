@@ -1,8 +1,8 @@
 import { runDisplayLabel } from "./tickets";
-import type { StateRun } from "./types";
+import type { DisplayStateRun } from "./types";
 
 type Props = {
-  runs: StateRun[];
+  runs: DisplayStateRun[];
   selectedRunId: string;
   onSelectRun: (runId: string) => void;
 };

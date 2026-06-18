@@ -1,4 +1,4 @@
-import type { ActionInfo, Job, ServerEvent, StateRun, TicketDetails, TicketSummary } from "./types";
+import type { ActionInfo, DisplayStateRun, Job, OptimisticTransition, ServerEvent, StateRun, TicketDetails, TicketSummary, WorkflowStateInfo } from "./types";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -35,8 +35,54 @@ export function knownRepoPaths(repositoryOptions: string[], tickets: TicketSumma
   return paths;
 }
 
-export function stateRunsFromDetails(details: TicketDetails | null): StateRun[] {
-  return details?.state.state_history ?? [];
+const terminalStateLabels: Record<string, string> = {
+  done: "Done",
+  cancelled: "Cancelled",
+  failed: "Failed"
+};
+
+export function resolveStateDisplayName(workflowStates: WorkflowStateInfo[], stateName: string, fallback = ""): string {
+  const workflowState = workflowStates.find((state) => state.name === stateName);
+  if (workflowState?.display_name) {
+    return workflowState.display_name;
+  }
+  if (terminalStateLabels[stateName]) {
+    return terminalStateLabels[stateName];
+  }
+  return fallback || stateName;
+}
+
+export function stateRunsFromDetails(details: TicketDetails | null, optimistic: OptimisticTransition | null = null): DisplayStateRun[] {
+  const runs = details?.state.state_history ?? [];
+  if (!details || !optimistic) {
+    return runs;
+  }
+  if (details.repo_path !== optimistic.repo_path || details.ticket_number !== optimistic.ticket_number) {
+    return runs;
+  }
+  if (optimistic.kind === "rerun" && details.state.current_run_id && details.state.current_run_id !== optimistic.previous_current_run_id) {
+    return runs;
+  }
+  if (
+    optimistic.kind === "move_to_state" &&
+    details.state.current_run_id &&
+    details.state.current_run_id !== optimistic.previous_current_run_id &&
+    details.state.current_state === optimistic.target_state_name
+  ) {
+    return runs;
+  }
+
+  return [
+    ...runs,
+    {
+      id: optimistic.synthetic_run_id,
+      state_name: optimistic.target_state_name,
+      state_display_name: optimistic.target_state_display_name,
+      started_at: new Date().toISOString(),
+      synthetic: true,
+      synthetic_status: "running"
+    }
+  ];
 }
 
 export function getFeedbackAction(details: TicketDetails | null, selectedSummary: TicketSummary | null): ActionInfo | undefined {
@@ -70,6 +116,20 @@ export function runDisplayLabel(run: StateRun, runs: StateRun[]): string {
   }
   const index = matching.findIndex((candidate) => candidate.id === run.id);
   return `${base} ${index + 1}`;
+}
+
+export function projectedTicketStatusLabel(ticket: TicketSummary, optimistic: OptimisticTransition | null): string {
+  if (optimistic && optimistic.ticket_key === ticketKey(ticket)) {
+    return optimistic.target_state_display_name;
+  }
+  return ticket.status;
+}
+
+export function projectedTicketBusy(ticket: TicketSummary, optimistic: OptimisticTransition | null): boolean {
+  if (optimistic && optimistic.ticket_key === ticketKey(ticket)) {
+    return true;
+  }
+  return ticket.busy;
 }
 
 export function selectTicketKey(current: string, tickets: TicketSummary[]): string {
@@ -131,10 +191,12 @@ export function applyTicketEvent(current: TicketSummary[], evt: ServerEvent): {
       return { ...ticket, busy: isBusy, jobs: nextJobs };
     }
     if (evt.type === "ticket_updated") {
+      const nextStatus = (evt.status as TicketSummary["status"]) ?? ticket.status;
       return {
         ...ticket,
         title: evt.title ?? ticket.title,
-        status: (evt.status as TicketSummary["status"]) ?? ticket.status,
+        status: nextStatus,
+        busy: nextStatus === "running" ? ticket.busy : false,
         last_error: evt.error ?? ticket.last_error,
         pr_url: evt.pr_url ?? ticket.pr_url,
         updated_at: new Date().toISOString()

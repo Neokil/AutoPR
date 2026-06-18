@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/Neokil/AutoPR/internal/api"
+	workflowstate "github.com/Neokil/AutoPR/internal/domain/workflowstate"
 	"github.com/Neokil/AutoPR/internal/providers"
 	"github.com/Neokil/AutoPR/internal/serverstate"
 )
@@ -16,7 +17,7 @@ import (
 func (s *server) workerLoop() {
 	for job := range s.jobs {
 		s.waitIfQuotaReached()
-		s.setJobStatus(job.record, "running", "")
+		s.setJobStatus(job.record, serverstate.JobStatusRunning, "")
 		err := s.executeJob(job)
 		if err != nil {
 			if errors.Is(err, providers.ErrTokensExhausted) {
@@ -29,11 +30,11 @@ func (s *server) workerLoop() {
 				}
 				continue
 			}
-			s.setJobStatus(job.record, "failed", err.Error())
+			s.setJobStatus(job.record, serverstate.JobStatusFailed, err.Error())
 
 			continue
 		}
-		s.setJobStatus(job.record, "done", "")
+		s.setJobStatus(job.record, serverstate.JobStatusDone, "")
 		if job.record.Action == jobCleanup && strings.TrimSpace(job.record.TicketNumber) != "" {
 			_ = s.meta.DeleteJobs(job.record.RepoID, job.record.TicketNumber)
 		}
@@ -156,6 +157,46 @@ func (s *server) getTicketLock(repoID, ticket string) *sync.Mutex {
 	s.ticketLocks[key] = m
 
 	return m
+}
+
+func (s *server) recoverStuckTickets() {
+	repos := s.meta.ListRepos()
+	for _, repo := range repos {
+		tickets := s.meta.ListTickets(repo.ID)
+		for _, ticket := range tickets {
+			if ticket.Status != string(workflowstate.FlowStatusRunning) {
+				continue
+			}
+
+			slog.Info("recoverStuckTickets: found stuck ticket, marking as failed", "repo", repo.Path, "ticket", ticket.TicketNumber, "status", ticket.Status)
+			runtime, err := s.runtimeForRepo(repo.Path)
+			if err != nil {
+				slog.Warn("recoverStuckTickets: no runtime", "repo", repo.Path, "err", err)
+
+				continue
+			}
+
+			state, err := runtime.store.LoadState(ticket.TicketNumber)
+			if err != nil {
+				slog.Warn("recoverStuckTickets: load state failed", "ticket", ticket.TicketNumber, "err", err)
+
+				continue
+			}
+
+			state.FlowStatus = workflowstate.FlowStatusFailed
+			state.LastError = "daemon restarted while ticket was running — rerun to continue"
+			saveErr := runtime.store.SaveState(ticket.TicketNumber, state)
+			if saveErr != nil {
+				slog.Warn("recoverStuckTickets: save failed", "ticket", ticket.TicketNumber, "err", saveErr)
+			}
+
+			for _, job := range ticket.Jobs {
+				if job.Status == "running" || job.Status == "queued" {
+					_ = s.meta.UpdateJobStatus(job.ID, "failed", "daemon restarted")
+				}
+			}
+		}
+	}
 }
 
 func (s *server) waitIfQuotaReached() {

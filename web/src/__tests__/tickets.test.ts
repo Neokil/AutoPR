@@ -1,11 +1,15 @@
 import { describe, it, expect } from "vitest";
-import type { TicketDetails, TicketSummary, StateRun, ServerEvent } from "../types";
+import type { OptimisticTransition, TicketDetails, TicketSummary, StateRun, ServerEvent } from "../types";
 import {
   runDisplayLabel,
   selectTicketKey,
   applyTicketEvent,
   getFeedbackAction,
   getNonFeedbackActions,
+  projectedTicketBusy,
+  projectedTicketStatusLabel,
+  resolveStateDisplayName,
+  stateRunsFromDetails,
 } from "../tickets";
 
 function makeSummary(partial: Partial<TicketSummary> = {}): TicketSummary {
@@ -35,7 +39,7 @@ function makeDetails(actions: TicketDetails["available_actions"]): TicketDetails
     repo_id: "repo1",
     repo_path: "/repo1",
     ticket_number: "1",
-    workflow_states: [],
+    workflow_states: [{ name: "implementation", display_name: "Implementation" }],
     available_actions: actions,
     state: {
       ticket_number: "1",
@@ -46,6 +50,22 @@ function makeDetails(actions: TicketDetails["available_actions"]): TicketDetails
       created_at: "2024-01-01T00:00:00Z",
       updated_at: "2024-01-01T00:00:00Z",
     },
+  };
+}
+
+function makeOptimistic(partial: Partial<OptimisticTransition> = {}): OptimisticTransition {
+  return {
+    ticket_key: "repo1::1",
+    repo_path: "/repo1",
+    ticket_number: "1",
+    job_id: "job-1",
+    synthetic_run_id: "optimistic-run",
+    target_state_name: "implementation",
+    target_state_display_name: "Implementation",
+    previous_selected_run_id: "run-1",
+    previous_current_run_id: "run-1",
+    kind: "move_to_state",
+    ...partial
   };
 }
 
@@ -119,6 +139,53 @@ describe("getNonFeedbackActions", () => {
   });
 });
 
+describe("stateRunsFromDetails", () => {
+  it("appends an optimistic move-to-state run", () => {
+    const details = makeDetails([{ label: "Approve", type: "move_to_state", target: "implementation" }]);
+    details.state.state_history = [makeRun({ id: "run-1", state_display_name: "Investigation" })];
+
+    const runs = stateRunsFromDetails(details, makeOptimistic());
+
+    expect(runs).toHaveLength(2);
+    expect(runs[1]).toMatchObject({
+      id: "optimistic-run",
+      state_name: "implementation",
+      state_display_name: "Implementation",
+      synthetic: true
+    });
+  });
+
+  it("does not append an optimistic rerun once the server confirms a new current run", () => {
+    const details = makeDetails([{ label: "Provide Feedback", type: "provide_feedback" }]);
+    details.state.current_run_id = "run-2";
+    details.state.state_history = [
+      makeRun({ id: "run-1", state_display_name: "Investigation" }),
+      makeRun({ id: "run-2", state_display_name: "Investigation" })
+    ];
+
+    const runs = stateRunsFromDetails(details, makeOptimistic({
+      kind: "rerun",
+      target_state_name: "investigate",
+      target_state_display_name: "Investigation"
+    }));
+
+    expect(runs).toHaveLength(2);
+    expect(runs.some((run) => run.id === "optimistic-run")).toBe(false);
+  });
+});
+
+describe("projected ticket helpers", () => {
+  it("replaces the displayed status label for the optimistic ticket and marks it busy", () => {
+    const ticket = makeSummary();
+    expect(projectedTicketStatusLabel(ticket, makeOptimistic())).toBe("Implementation");
+    expect(projectedTicketBusy(ticket, makeOptimistic())).toBe(true);
+  });
+
+  it("falls back to terminal display labels", () => {
+    expect(resolveStateDisplayName([], "done")).toBe("Done");
+  });
+});
+
 // ── applyTicketEvent ───────────────────────────────────────────────────────
 // This is the heart of the real-time UI: SSE events mutate the ticket list
 // without a full server round-trip.
@@ -137,6 +204,13 @@ describe("applyTicketEvent", () => {
     const { tickets } = applyTicketEvent([ticket], evt);
     expect(tickets[0].title).toBe("New Title");
     expect(tickets[0].status).toBe("done");
+  });
+
+  it("clears busy when ticket_updated moves the ticket out of running", () => {
+    const runningTicket = makeSummary({ repo_id: "r1", ticket_number: "42", status: "running", busy: true });
+    const evt: ServerEvent = { type: "ticket_updated", repo_id: "r1", ticket_number: "42", status: "done" };
+    const { tickets } = applyTicketEvent([runningTicket], evt);
+    expect(tickets[0].busy).toBe(false);
   });
 
   it("signals needsFullRefresh when an update arrives for an unknown ticket", () => {

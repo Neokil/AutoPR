@@ -5,6 +5,7 @@ import * as os from 'os';
 
 const PID_FILE = '/tmp/autopr-e2e.pid';
 export const FIXTURES_FILE = '/tmp/autopr-e2e-fixtures.json';
+const AUTO_PRD_PATH = process.env.AUTO_PRD_PATH || '/usr/local/bin/auto-prd';
 
 export interface E2EFixtures {
   repoDir: string;
@@ -93,7 +94,7 @@ function writeMockProvider(mockProviderPath: string): void {
     mockProviderPath,
     `#!/bin/sh
 # Discard stdin (the prompt content) and return a canned response.
-# Sleep briefly so the job doesn't complete before the frontend registers activeJobId.
+# Sleep 100ms to simulate realistic AI provider response latency.
 cat > /dev/null
 sleep 0.1
 echo "Mock provider: analysis complete."
@@ -118,7 +119,7 @@ providers:
 }
 
 async function startDaemon(homeDir: string): Promise<void> {
-  const daemon = spawn('/usr/local/bin/auto-prd', [], {
+  const daemon = spawn(AUTO_PRD_PATH, [], {
     env: { ...process.env, HOME: homeDir },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,

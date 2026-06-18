@@ -103,8 +103,9 @@ type ActionAcceptedResponse struct {
 
 // ActionInfo defines model for ActionInfo.
 type ActionInfo struct {
-	Label string `json:"label"`
-	Type  string `json:"type"`
+	Label  string  `json:"label"`
+	Target *string `json:"target,omitempty"`
+	Type   string  `json:"type"`
 }
 
 // ActionRequest defines model for ActionRequest.
@@ -210,6 +211,12 @@ type RepositoryListResponse struct {
 	Repositories []string `json:"repositories"`
 }
 
+// RunTicketRequest defines model for RunTicketRequest.
+type RunTicketRequest struct {
+	BaseBranch *string `json:"base_branch,omitempty"`
+	RepoPath   string  `json:"repo_path"`
+}
+
 // ServerEvent defines model for ServerEvent.
 type ServerEvent struct {
 	Action       *string `json:"action,omitempty"`
@@ -281,6 +288,7 @@ type TicketPayload struct {
 
 // TicketStateResponse defines model for TicketStateResponse.
 type TicketStateResponse struct {
+	BaseBranch   *string             `json:"base_branch,omitempty"`
 	BranchName   string              `json:"branch_name"`
 	CreatedAt    time.Time           `json:"created_at"`
 	CurrentRunId *string             `json:"current_run_id,omitempty"`
@@ -365,7 +373,7 @@ type CleanupTicketJSONRequestBody = RepoRequest
 type MoveTicketToStateJSONRequestBody = MoveToStateRequest
 
 // RunTicketJSONRequestBody defines body for RunTicket for application/json ContentType.
-type RunTicketJSONRequestBody = RepoRequest
+type RunTicketJSONRequestBody = RunTicketRequest
 
 // Getter for additional properties for TicketPayload. Returns the specified
 // element and whether it was found

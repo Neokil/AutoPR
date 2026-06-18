@@ -255,9 +255,24 @@ button:disabled {
 
 .feedback-form {
   display: grid;
-  grid-template-columns: 1fr auto;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.feedback-field {
+  display: grid;
+  gap: 6px;
+}
+
+.feedback-question {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.feedback-submit {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .tabs {
@@ -329,6 +344,17 @@ button:disabled {
   border-radius: 8px;
   background: var(--soft-bg);
   padding: 12px;
+}
+
+.timeline-running-placeholder {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-running-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .timeline-content-header {

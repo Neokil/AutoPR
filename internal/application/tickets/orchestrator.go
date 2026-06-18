@@ -300,7 +300,7 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 		"AUTOPR_REPO_ROOT":          o.RepoRoot,
 		"AUTOPR_DISCOVER_LOG_DIR":   runDir,
 		"AUTOPR_DISCOVER_REPO_PATH": o.RepoRoot,
-	}, "", "/bin/sh", "-c", command)
+	}, "", "/bin/bash", "-c", command)
 	_ = os.WriteFile(filepath.Join(runDir, "command-output.json"), []byte(result.Stdout), 0o644)
 	_ = os.WriteFile(filepath.Join(runDir, "command-stderr.log"), []byte(result.Stderr), 0o644)
 	if err != nil {
@@ -327,8 +327,9 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *workflowstate.State) error {
 	if state.WorktreePath == "" {
 		branchName := "auto-pr/" + state.TicketNumber
+		baseBranch := effectiveBaseBranch(state.BaseBranch, o.Cfg.BaseBranch)
 		slog.Info("creating worktree", "ticket", state.TicketNumber, "branch", branchName)
-		wtPath, err := gitutil.EnsureWorktree(ctx, o.RepoRoot, o.Cfg.StateDirName, state.TicketNumber, branchName, o.Cfg.BaseBranch)
+		wtPath, err := gitutil.EnsureWorktree(ctx, o.RepoRoot, o.Cfg.StateDirName, state.TicketNumber, branchName, baseBranch)
 		if err != nil {
 			return fmt.Errorf("create worktree: %w", err)
 		}
@@ -350,7 +351,14 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *work
 	_, statErr := os.Stat(contextPath)
 	if os.IsNotExist(statErr) {
 		guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
-		content := fmt.Sprintf("Ticket: %s\nWorktree: %s\nRepo: %s\nGuidelines: %s\n", state.TicketNumber, state.WorktreePath, o.RepoRoot, guidelinesPath)
+		content := fmt.Sprintf(
+			"Ticket: %s\nWorktree: %s\nRepo: %s\nBase Branch: %s\nGuidelines: %s\n",
+			state.TicketNumber,
+			state.WorktreePath,
+			o.RepoRoot,
+			effectiveBaseBranch(state.BaseBranch, o.Cfg.BaseBranch),
+			guidelinesPath,
+		)
 		err = os.WriteFile(contextPath, []byte(content), 0o644)
 		if err != nil {
 			return fmt.Errorf("write context file: %w", err)
@@ -731,6 +739,10 @@ func (o *Orchestrator) prepareRunContext(
 	rawProviderLog := filepath.ToSlash(filepath.Join(".auto-pr", "runs", run.ID, "raw-provider.log"))
 	fmt.Fprintf(&buf, "Current Raw Provider Log: %s\n", rawProviderLog)
 	fmt.Fprintf(&buf, "Shared Context File: %s\n", filepath.ToSlash(filepath.Join(".auto-pr", "context.md")))
+	baseBranch := effectiveBaseBranch(state.BaseBranch, o.Cfg.BaseBranch)
+	if baseBranch != "" {
+		fmt.Fprintf(&buf, "Base Branch: %s\n", baseBranch)
+	}
 	guidelinesPath := config.ResolveGuidelinesPath(o.RepoRoot, o.Cfg)
 	if guidelinesPath != "" {
 		fmt.Fprintf(&buf, "Guidelines File: %s\n", guidelinesPath)
@@ -761,6 +773,14 @@ func (o *Orchestrator) prepareRunContext(
 	}
 
 	return nil
+}
+
+func effectiveBaseBranch(ticketBaseBranch, configBaseBranch string) string {
+	if branch := strings.TrimSpace(ticketBaseBranch); branch != "" {
+		return branch
+	}
+
+	return strings.TrimSpace(configBaseBranch)
 }
 
 // extractArtifactField reads field from the metadata section of a markdown artifact.

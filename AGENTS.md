@@ -46,11 +46,15 @@ Useful direct commands:
 
 After implementing any feature or fix, verify correctness by running all of:
 
+- `make build` — compile frontend and both Go binaries
 - `go test ./...` — backend unit tests
 - `golangci-lint run` — backend linting
 - `cd web && npm test` — frontend tests
+- `cd web && npm run lint` — frontend linting
+- `cd web && npm run typecheck` — frontend type checking
+- `make test-e2e` — end-to-end tests (Dockerized Playwright; also recompiles inside Docker)
 
-All three must pass before considering the work done.
+All must pass before considering the work done.
 
 ## Agent Working Rules
 

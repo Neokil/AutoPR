@@ -111,6 +111,7 @@ func Run(portOverride int) error {
 		quotaMu:      sync.RWMutex{},
 		quotaResetCh: make(chan struct{}),
 	}
+	daemon.recoverStuckTickets()
 	for range cfg.ServerWorkers {
 		go daemon.workerLoop()
 	}
@@ -224,4 +225,12 @@ func resolveArtifactRef(ticketState workflowstate.State, name string) (string, b
 	}
 
 	return ticketState.ResolveRef(filepath.ToSlash(clean)), true
+}
+
+func effectiveBaseBranch(ticketBaseBranch, configBaseBranch string) string {
+	if branch := strings.TrimSpace(ticketBaseBranch); branch != "" {
+		return branch
+	}
+
+	return strings.TrimSpace(configBaseBranch)
 }

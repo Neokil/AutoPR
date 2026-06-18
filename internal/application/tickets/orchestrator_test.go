@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -133,6 +134,41 @@ func newOrchestrator(repoRoot string, store *memStore, prov *mockProvider) *tick
 	)
 }
 
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	// Test helper runs trusted local git commands against temp repositories.
+	//nolint:gosec
+	cmd := exec.CommandContext(context.Background(), "git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(out))
+	}
+}
+
+func setupGitRepoWithBaseBranch(t *testing.T) string {
+	t.Helper()
+	root := setupRepo(t, minimalWorkflow, "Investigate this ticket.")
+	runGit(t, root, "init", "-b", "main")
+	runGit(t, root, "config", "user.name", "Test User")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	writeErr := os.WriteFile(filepath.Join(root, "base.txt"), []byte("main\n"), 0o644)
+	if writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "initial main")
+	runGit(t, root, "checkout", "-b", "release/1.2")
+	writeErr = os.WriteFile(filepath.Join(root, "base.txt"), []byte("release\n"), 0o644)
+	if writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	runGit(t, root, "commit", "-am", "release base")
+	runGit(t, root, "checkout", "main")
+
+	return root
+}
+
 // ── StartFlow ─────────────────────────────────────────────────────────────
 
 func TestStartFlow_newTicket_endsWaiting(t *testing.T) {
@@ -210,6 +246,84 @@ func TestStartFlow_providerError_setsFailedStatus(t *testing.T) {
 	}
 	if st.LastError == "" {
 		t.Error("expected LastError to be set")
+	}
+}
+
+func TestStartFlow_createsWorktreeFromTicketBaseBranch(t *testing.T) {
+	t.Parallel()
+	root := setupGitRepoWithBaseBranch(t)
+	store := newMemStore()
+	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "analysis done"}}
+	orch := tickets.NewWithStore(
+		config.Config{StateDirName: ".auto-pr-state", BaseBranch: "main"},
+		root,
+		store,
+		prov,
+	)
+
+	st := workflowstate.New("42")
+	st.BaseBranch = "release/1.2"
+	err := store.SaveState("42", st)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = orch.StartFlow(context.Background(), "42")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	result, _ := store.LoadState("42")
+	data, err := os.ReadFile(filepath.Join(result.WorktreePath, "base.txt"))
+	if err != nil {
+		t.Fatalf("read base.txt from worktree: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "release" {
+		t.Fatalf("expected worktree to use release base branch, got %q", string(data))
+	}
+}
+
+func TestStartFlow_writesBaseBranchIntoContextFiles(t *testing.T) {
+	t.Parallel()
+	root := setupRepo(t, minimalWorkflow, "Investigate this ticket.")
+	store := newMemStore()
+	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "analysis done"}}
+	worktreeDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(worktreeDir, ".auto-pr"), 0o755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := workflowstate.New("77")
+	st.WorktreePath = worktreeDir
+	st.BranchName = "auto-pr/77"
+	st.BaseBranch = "release/1.2"
+	err = store.SaveState("77", st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orch := tickets.NewWithStore(
+		config.Config{StateDirName: ".auto-pr-state", BaseBranch: "main"},
+		root,
+		store,
+		prov,
+	)
+
+	err = orch.StartFlow(context.Background(), "77")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	contextData, err := os.ReadFile(filepath.Join(worktreeDir, ".auto-pr", "context.md"))
+	if err != nil {
+		t.Fatalf("read context.md: %v", err)
+	}
+	if !strings.Contains(string(contextData), "Base Branch: release/1.2") {
+		t.Fatalf("expected context.md to contain base branch, got:\n%s", string(contextData))
+	}
+	runContextData, err := os.ReadFile(filepath.Join(worktreeDir, ".auto-pr", "run-context.md"))
+	if err != nil {
+		t.Fatalf("read run-context.md: %v", err)
+	}
+	if !strings.Contains(string(runContextData), "Base Branch: release/1.2") {
+		t.Fatalf("expected run-context.md to contain base branch, got:\n%s", string(runContextData))
 	}
 }
 

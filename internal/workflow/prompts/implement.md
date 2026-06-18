@@ -17,6 +17,7 @@ Implement all changes described in the proposal. Then:
 3. If a command fails, fix the code and re-run until it passes or clearly report blockers.
 
 Create a pull request for the changes using `gh pr create`.
+If `.auto-pr/run-context.md` or `.auto-pr/context.md` includes a `Base Branch:` value, pass it with `gh pr create --base <branch>`.
 
 Write a summary to the `Current Primary Artifact` path listed in `.auto-pr/run-context.md` with the following sections:
 - Changes Made

@@ -11,7 +11,7 @@ function ticketStatus(ticketItem: Locator): Locator {
 }
 
 async function waitForStatus(ticketItem: Locator, status: string): Promise<void> {
-  await expect(ticketStatus(ticketItem)).toContainText(status, { timeout: 30_000 });
+  await expect(ticketStatus(ticketItem)).toContainText(status, { timeout: 10_000 });
 }
 
 test('full ticket lifecycle: add → investigate → implement → done → cleanup', async ({ page }) => {
@@ -46,7 +46,7 @@ test('full ticket lifecycle: add → investigate → implement → done → clea
   await page.getByRole('button', { name: 'Approve' }).click();
 
   // ── 5. Wait for implementation state (Accept button enabled) ────────────
-  await expect(page.getByRole('button', { name: 'Accept' })).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Accept' })).toBeEnabled({ timeout: 10_000 });
 
   // ── 6. Accept → transition to done ──────────────────────────────────────
   await page.getByRole('button', { name: 'Accept' }).click();

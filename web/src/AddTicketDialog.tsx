@@ -2,9 +2,11 @@ type AddTicketDialogProps = {
   knownRepoPaths: string[];
   repoPath: string;
   ticketNumber: string;
+  baseBranch: string;
   error: string;
   onRepoPathChange: (value: string) => void;
   onTicketNumberChange: (value: string) => void;
+  onBaseBranchChange: (value: string) => void;
   onSubmit: () => void;
   onClose: () => void;
 };
@@ -13,9 +15,11 @@ export function AddTicketDialog({
   knownRepoPaths,
   repoPath,
   ticketNumber,
+  baseBranch,
   error,
   onRepoPathChange,
   onTicketNumberChange,
+  onBaseBranchChange,
   onSubmit,
   onClose
 }: AddTicketDialogProps) {
@@ -56,6 +60,16 @@ export function AddTicketDialog({
               onSubmit();
             }
           }}
+        />
+
+        <label className="field-label" htmlFor="base-branch-input">
+          Base Branch
+        </label>
+        <input
+          id="base-branch-input"
+          value={baseBranch}
+          onChange={(event) => onBaseBranchChange(event.target.value)}
+          placeholder="Optional, e.g. release/1.2"
         />
 
         <div className="button-row modal-actions">
