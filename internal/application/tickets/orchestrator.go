@@ -324,6 +324,41 @@ func (o *Orchestrator) DiscoverTickets(ctx context.Context) ([]DiscoveredTicket,
 	return tickets, nil
 }
 
+// ProbeProvider checks whether the AI provider is reachable and the usage quota has reset.
+func (o *Orchestrator) ProbeProvider(ctx context.Context) error {
+	// create temp work dir (WorkDir must be a real existing path)
+	workDir, err := os.MkdirTemp("", "autopr-probe-work-*")
+	if err != nil {
+		return fmt.Errorf("probe: create work dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(workDir) }()
+	// create temp runtime dir (RuntimeDir must be a real existing path)
+	runtimeDir, err := os.MkdirTemp("", "autopr-probe-runtime-*")
+	if err != nil {
+		return fmt.Errorf("probe: create runtime dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(runtimeDir) }()
+
+	// write minimal prompt file (PromptPath must exist on disk — CLIProvider reads it)
+	promptPath := filepath.Join(workDir, "probe.md")
+	err = os.WriteFile(promptPath, []byte("ping"), 0o644)
+	if err != nil {
+		return fmt.Errorf("probe: write prompt: %w", err)
+	}
+	// call provider — discard output, only care about ErrTokensExhausted
+	_, err = o.Provider.Execute(ctx, providers.ExecuteRequest{
+		PromptPath:  promptPath,
+		WorkDir:     workDir,
+		RuntimeDir:  runtimeDir,
+		SessionData: "", // fresh call, no session
+	})
+	if errors.Is(err, providers.ErrTokensExhausted) {
+		return providers.ErrTokensExhausted // quota still hit
+	}
+
+	return nil // any other result = quota not the issue
+}
+
 func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *workflowstate.State) error {
 	if state.WorktreePath == "" {
 		branchName := "auto-pr/" + state.TicketNumber
@@ -425,8 +460,9 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 		if errors.Is(err, providers.ErrTokensExhausted) {
 			// Mark the ticket as rescheduled to indicate that it should be automatically re-run when the quota resets.
 			err = fmt.Errorf("token usage limit reached — wait for your quota to reset, then rerun this ticket to continue: %w", err)
-			state.FlowStatus = workflowstate.FlowStatusRescheduled 
+			state.FlowStatus = workflowstate.FlowStatusRescheduled
 			_ = o.Store.SaveState(state.TicketNumber, *state)
+
 			return err
 		}
 
@@ -674,6 +710,8 @@ func buildNextSteps(state workflowstate.State, wflow workflow.Config) string {
 		return fmt.Sprintf("Ticket failed: %s\n\nRetry: auto-pr run %s", state.LastError, state.TicketNumber)
 	case workflowstate.FlowStatusCancelled:
 		return "Ticket was cancelled."
+	case workflowstate.FlowStatusRescheduled:
+		return "Ticket was rescheduled."
 	}
 
 	return ""
@@ -849,36 +887,4 @@ func EnsureStateIgnored(repoRoot, stateDirName string) error {
 	}
 
 	return nil
-}
-
-func (o *Orchestrator) ProbeProvider(ctx context.Context) error {
-	// create temp work dir (WorkDir must be a real existing path)
-	workDir, err := os.MkdirTemp("", "autopr-probe-work-*")
-	if err != nil {
-		return fmt.Errorf("probe: create work dir: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-	// create temp runtime dir (RuntimeDir must be a real existing path)
-	runtimeDir, err := os.MkdirTemp("", "autopr-probe-runtime-*")
-	if err != nil {
-		return fmt.Errorf("probe: create runtime dir: %w", err)
-	}
-	defer os.RemoveAll(runtimeDir)
-
-	// write minimal prompt file (PromptPath must exist on disk — CLIProvider reads it)
-	promptPath := filepath.Join(workDir, "probe.md")
-	if err = os.WriteFile(promptPath, []byte("ping"), 0o644); err != nil {
-		return fmt.Errorf("probe: write prompt: %w", err)
-	}
-	// call provider — discard output, only care about ErrTokensExhausted
-	_, err = o.Provider.Execute(ctx, providers.ExecuteRequest{
-		PromptPath:  promptPath,
-		WorkDir:     workDir,
-		RuntimeDir:  runtimeDir,
-		SessionData: "", // fresh call, no session
-	})
-	if errors.Is(err, providers.ErrTokensExhausted) {
-		return providers.ErrTokensExhausted // quota still hit
-	}
-	return nil // any other result = quota not the issue
 }

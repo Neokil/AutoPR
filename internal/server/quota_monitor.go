@@ -53,17 +53,20 @@ func (s *server) checkQuotaStatus() {
 	repos := s.meta.ListRepos()
 	if len(repos) == 0 {
 		slog.Warn("quota monitor: no repos available for probe, skipping")
+
 		return
 	}
 	repoRt, err := s.runtimeForRepo(repos[0].Path)
 	if err != nil {
 		slog.Error("quota monitor: failed to get runtime for probe", "err", err)
+
 		return
 	}
 
 	probeErr := repoRt.svc.ProbeProvider(context.Background())
 	if errors.Is(probeErr, providers.ErrTokensExhausted) {
 		slog.Info("quota monitor: quota still reached, will check again later")
+
 		return
 	}
 

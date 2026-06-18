@@ -25,9 +25,11 @@ func (s *server) workerLoop() {
 				s.setJobStatus(job.record, "queued", "")
 
 				s.setQuotaReached(true)
-				if err := s.reQueueJob(job); err != nil {
+				err := s.reQueueJob(job)
+				if err != nil {
 					slog.Error("quota re-queue failed", "job", job.record.ID, "err", err)
 				}
+
 				continue
 			}
 			s.setJobStatus(job.record, serverstate.JobStatusFailed, err.Error())
