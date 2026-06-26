@@ -7,6 +7,7 @@ const defaultProps = {
   tickets: [],
   loading: false,
   error: "",
+  pendingTicketNumbers: [],
   onAdd: vi.fn(),
   onClose: vi.fn(),
 };
@@ -44,6 +45,18 @@ describe("DiscoverTicketsModal", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Add" })[0]);
     expect(onAdd).toHaveBeenCalledWith("GH-4");
+  });
+
+  it("disables pending add buttons", () => {
+    render(
+      <DiscoverTicketsModal
+        {...defaultProps}
+        tickets={[{ ticket_number: "GH-4", title: "Remove Shortcut references" }]}
+        pendingTicketNumbers={["GH-4"]}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Adding..." })).toBeDisabled();
   });
 
   it("calls onClose when the backdrop is clicked", () => {
