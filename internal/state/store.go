@@ -30,13 +30,13 @@ func NewStore(repoRoot, stateDirName string) *Store {
 	}
 }
 
-// TicketDir returns the directory used to store state for the given ticket before a worktree exists.
+// TicketDir returns the legacy pre-worktree directory for the given ticket.
 func (s *Store) TicketDir(ticketNumber string) string {
 	return filepath.Join(s.StateRoot, ticketNumber)
 }
 
 // LoadState reads the persisted state for the ticket, preferring the worktree location
-// when it exists and falling back to the pre-worktree state directory.
+// and falling back to the legacy pre-worktree state directory for compatibility.
 func (s *Store) LoadState(ticketNumber string) (workflowstate.State, error) {
 	// Prefer the worktree location when it exists.
 	wtStatePath := filepath.Join(s.worktreePath(ticketNumber), ".auto-pr", StateFileName)
@@ -54,7 +54,8 @@ func (s *Store) LoadState(ticketNumber string) (workflowstate.State, error) {
 }
 
 // SaveState persists st, writing to the worktree location once a worktree exists
-// and removing the pre-worktree copy to keep a single source of truth.
+// and removing the legacy copy to keep a single source of truth.
+// Callers that save before a worktree exists still write to the legacy location.
 func (s *Store) SaveState(ticketNumber string, state workflowstate.State) error {
 	state.Touch()
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -101,7 +102,7 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	seen := map[string]struct{}{}
 	var out []string
 
-	// Tickets with state still in the pre-worktree location.
+	// Tickets with state still in the legacy pre-worktree location.
 	entries, err := os.ReadDir(s.StateRoot)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read state root: %w", err)
@@ -141,7 +142,7 @@ func (s *Store) ListTicketDirs() ([]string, error) {
 	return out, nil
 }
 
-// RemoveTicketDir deletes the pre-worktree state directory for the given ticket.
+// RemoveTicketDir deletes the legacy pre-worktree state directory for the given ticket.
 func (s *Store) RemoveTicketDir(ticketNumber string) error {
 	err := os.RemoveAll(s.TicketDir(ticketNumber))
 	if err != nil {

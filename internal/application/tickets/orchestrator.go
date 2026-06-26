@@ -68,12 +68,8 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 	}
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
-	if os.IsNotExist(loadErr) {
+	if errors.Is(loadErr, os.ErrNotExist) {
 		state = workflowstate.New(ticketNumber)
-		saveErr := o.Store.SaveState(ticketNumber, state)
-		if saveErr != nil {
-			return fmt.Errorf("save initial ticket state: %w", saveErr)
-		}
 	} else if loadErr != nil {
 		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
@@ -154,12 +150,8 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 	}
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
-	if os.IsNotExist(loadErr) {
+	if errors.Is(loadErr, os.ErrNotExist) {
 		state = workflowstate.New(ticketNumber)
-		saveErr := o.Store.SaveState(ticketNumber, state)
-		if saveErr != nil {
-			return fmt.Errorf("save initial ticket state: %w", saveErr)
-		}
 	} else if loadErr != nil {
 		return fmt.Errorf("load ticket state: %w", loadErr)
 	}
