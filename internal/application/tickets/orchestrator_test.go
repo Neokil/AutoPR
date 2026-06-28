@@ -13,6 +13,7 @@ import (
 	"github.com/Neokil/AutoPR/internal/config"
 	workflowstate "github.com/Neokil/AutoPR/internal/domain/workflowstate"
 	"github.com/Neokil/AutoPR/internal/providers"
+	statepkg "github.com/Neokil/AutoPR/internal/state"
 )
 
 // ── in-memory mocks ────────────────────────────────────────────────────────
@@ -167,6 +168,15 @@ func setupGitRepoWithBaseBranch(t *testing.T) string {
 	runGit(t, root, "checkout", "main")
 
 	return root
+}
+
+func setupGitRepo(t *testing.T, root string) {
+	t.Helper()
+	runGit(t, root, "init", "-b", "main")
+	runGit(t, root, "config", "user.name", "Test User")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "initial commit")
 }
 
 // ── StartFlow ─────────────────────────────────────────────────────────────
@@ -324,6 +334,44 @@ func TestStartFlow_writesBaseBranchIntoContextFiles(t *testing.T) {
 	}
 	if !strings.Contains(string(runContextData), "Base Branch: release/1.2") {
 		t.Fatalf("expected run-context.md to contain base branch, got:\n%s", string(runContextData))
+	}
+}
+
+func TestStartFlow_newTicketPersistsStateInWorktreeOnly(t *testing.T) {
+	t.Parallel()
+
+	root := setupRepo(t, minimalWorkflow, "Investigate this ticket.")
+	setupGitRepo(t, root)
+	store := statepkg.NewStore(root, ".auto-pr-state")
+	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "analysis done"}}
+	orch := tickets.NewWithStore(
+		config.Config{StateDirName: ".auto-pr-state", BaseBranch: "main"},
+		root,
+		store,
+		prov,
+	)
+
+	err := orch.StartFlow(context.Background(), "42")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	worktreeStatePath := filepath.Join(root, ".auto-pr-state", "worktrees", "42", ".auto-pr", statepkg.StateFileName)
+	_, statErr := os.Stat(worktreeStatePath)
+	if statErr != nil {
+		t.Fatalf("expected worktree-backed state file at %s: %v", worktreeStatePath, statErr)
+	}
+
+	legacyStatePath := filepath.Join(root, ".auto-pr-state", "42", statepkg.StateFileName)
+	_, statErr = os.Stat(legacyStatePath)
+	if !os.IsNotExist(statErr) {
+		t.Fatalf("expected no legacy state file at %s, got err=%v", legacyStatePath, statErr)
+	}
+
+	legacyDirPath := filepath.Join(root, ".auto-pr-state", "42")
+	_, statErr = os.Stat(legacyDirPath)
+	if !os.IsNotExist(statErr) {
+		t.Fatalf("expected no legacy ticket dir at %s, got err=%v", legacyDirPath, statErr)
 	}
 }
 

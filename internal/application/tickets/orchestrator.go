@@ -68,12 +68,8 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) (RunO
 	}
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
-	if os.IsNotExist(loadErr) {
+	if errors.Is(loadErr, os.ErrNotExist) {
 		state = workflowstate.New(ticketNumber)
-		saveErr := o.Store.SaveState(ticketNumber, state)
-		if saveErr != nil {
-			return RunOutcome{}, fmt.Errorf("save initial ticket state: %w", saveErr)
-		}
 	} else if loadErr != nil {
 		return RunOutcome{}, fmt.Errorf("load ticket state: %w", loadErr)
 	}
@@ -154,12 +150,8 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 	}
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
-	if os.IsNotExist(loadErr) {
+	if errors.Is(loadErr, os.ErrNotExist) {
 		state = workflowstate.New(ticketNumber)
-		saveErr := o.Store.SaveState(ticketNumber, state)
-		if saveErr != nil {
-			return RunOutcome{}, fmt.Errorf("save initial ticket state: %w", saveErr)
-		}
 	} else if loadErr != nil {
 		return RunOutcome{}, fmt.Errorf("load ticket state: %w", loadErr)
 	}
@@ -585,7 +577,7 @@ func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *workflo
 	if !ok {
 		return RunOutcome{}, fmt.Errorf("state %q: %w", state.CurrentState, ErrStateNotFound)
 	}
-	
+
 	return o.runState(ctx, state, stateCfg)
 }
 
