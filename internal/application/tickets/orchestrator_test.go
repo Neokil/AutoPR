@@ -351,7 +351,7 @@ func TestStartFlow_newTicketPersistsStateInWorktreeOnly(t *testing.T) {
 		prov,
 	)
 
-	err := orch.StartFlow(context.Background(), "42")
+	_, err := orch.StartFlow(context.Background(), "42")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
