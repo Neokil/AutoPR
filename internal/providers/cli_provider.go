@@ -3,6 +3,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,6 +59,10 @@ func (p *CLIProvider) Execute(ctx context.Context, req ExecuteRequest) (ExecuteR
 		SessionData: sessionData,
 	}
 	if err != nil {
+		if errors.Is(err, ErrTokensExhausted) {
+			result.QuotaReached = true
+		}
+		
 		return result, err
 	}
 

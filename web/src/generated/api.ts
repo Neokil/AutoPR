@@ -233,7 +233,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        FlowStatus: "pending" | "running" | "waiting" | "done" | "failed" | "cancelled";
+        FlowStatus: "pending" | "running" | "waiting" | "done" | "failed" | "cancelled" | "rescheduled";
         /** @enum {string} */
         JobStatus: "queued" | "running" | "done" | "failed";
         HealthResponse: {
