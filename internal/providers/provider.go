@@ -10,7 +10,8 @@ type ExecuteRequest struct {
 
 // ExecuteResult holds the output produced by an AI provider after executing a prompt.
 type ExecuteResult struct {
-	RawOutput   string // text produced by the AI (extracted from structured output when applicable)
-	Stderr      string
-	SessionData string // opaque session token to persist for the next run; empty if unsupported
+	RawOutput    string // text produced by the AI (extracted from structured output when applicable)
+	Stderr       string
+	SessionData  string // opaque session token to persist for the next run; empty if unsupported
+	QuotaReached bool
 }

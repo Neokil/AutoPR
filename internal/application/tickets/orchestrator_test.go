@@ -178,7 +178,7 @@ func TestStartFlow_newTicket_endsWaiting(t *testing.T) {
 	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "analysis done"}}
 	prepareWorktree(t, store, "42")
 
-	err := newOrchestrator(root, store, prov).StartFlow(context.Background(), "42")
+	_, err := newOrchestrator(root, store, prov).StartFlow(context.Background(), "42")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestStartFlow_doneTicket_isNoop(t *testing.T) {
 	st.FlowStatus = workflowstate.FlowStatusDone
 	_ = store.SaveState("10", st)
 
-	err := newOrchestrator(root, store, prov).StartFlow(context.Background(), "10")
+	_, err := newOrchestrator(root, store, prov).StartFlow(context.Background(), "10")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestStartFlow_runningTicket_returnsError(t *testing.T) {
 	st.FlowStatus = workflowstate.FlowStatusRunning
 	_ = store.SaveState("7", st)
 
-	err := newOrchestrator(root, store, &mockProvider{}).StartFlow(context.Background(), "7")
+	_, err := newOrchestrator(root, store, &mockProvider{}).StartFlow(context.Background(), "7")
 	if !errors.Is(err, tickets.ErrTicketRunning) {
 		t.Errorf("expected ErrTicketRunning, got %v", err)
 	}
@@ -236,7 +236,7 @@ func TestStartFlow_providerError_setsFailedStatus(t *testing.T) {
 	prov := &mockProvider{err: provErr}
 	prepareWorktree(t, store, "5")
 
-	err := newOrchestrator(root, store, prov).StartFlow(context.Background(), "5")
+	_, err := newOrchestrator(root, store, prov).StartFlow(context.Background(), "5")
 	if err == nil {
 		t.Fatal("expected error from provider")
 	}
@@ -268,7 +268,7 @@ func TestStartFlow_createsWorktreeFromTicketBaseBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = orch.StartFlow(context.Background(), "42")
+	_, err = orch.StartFlow(context.Background(), "42")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestStartFlow_writesBaseBranchIntoContextFiles(t *testing.T) {
 		prov,
 	)
 
-	err = orch.StartFlow(context.Background(), "77")
+	_, err = orch.StartFlow(context.Background(), "77")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -392,7 +392,7 @@ func TestApplyAction_notWaiting_returnsError(t *testing.T) {
 	st.FlowStatus = workflowstate.FlowStatusRunning
 	_ = store.SaveState("3", st)
 
-	err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "3", "Approve", "")
+	_, err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "3", "Approve", "")
 	if !errors.Is(err, tickets.ErrTicketNotWaiting) {
 		t.Errorf("expected ErrTicketNotWaiting, got %v", err)
 	}
@@ -413,7 +413,7 @@ func TestApplyAction_unknownLabel_returnsError(t *testing.T) {
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("8", st)
 
-	err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "8", "NoSuchAction", "")
+	_, err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "8", "NoSuchAction", "")
 	if !errors.Is(err, tickets.ErrActionNotFound) {
 		t.Errorf("expected ErrActionNotFound, got %v", err)
 	}
@@ -434,7 +434,7 @@ func TestApplyAction_moveToStateDone_setsDone(t *testing.T) {
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("99", st)
 
-	err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "99", "Approve", "")
+	_, err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "99", "Approve", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestApplyAction_provideFeedback_emptyMessage_returnsError(t *testing.T) {
 	st.FlowStatus = workflowstate.FlowStatusWaiting
 	_ = store.SaveState("11", st)
 
-	err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "11", "Feedback", "")
+	_, err := newOrchestrator(root, store, &mockProvider{}).ApplyAction(context.Background(), "11", "Feedback", "")
 	if !errors.Is(err, tickets.ErrFeedbackRequired) {
 		t.Errorf("expected ErrFeedbackRequired, got %v", err)
 	}
@@ -487,7 +487,7 @@ func TestApplyAction_provideFeedback_reruns(t *testing.T) {
 	_ = store.SaveState("12", st)
 	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "re-investigated"}}
 
-	err := newOrchestrator(root, store, prov).ApplyAction(context.Background(), "12", "Feedback", "please dig deeper")
+	_, err := newOrchestrator(root, store, prov).ApplyAction(context.Background(), "12", "Feedback", "please dig deeper")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -592,7 +592,7 @@ func TestApplyAction_moveToNextState_runsNextState(t *testing.T) {
 	_ = store.SaveState("50", st)
 	prov := &mockProvider{result: providers.ExecuteResult{RawOutput: "implemented"}}
 
-	err := newOrchestrator(root, store, prov).ApplyAction(context.Background(), "50", "Continue", "")
+	_, err := newOrchestrator(root, store, prov).ApplyAction(context.Background(), "50", "Continue", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

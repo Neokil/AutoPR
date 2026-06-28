@@ -61,10 +61,10 @@ func NewWithStore(cfg config.Config, repoRoot string, store stateStore, provider
 
 // StartFlow begins or re-runs the workflow for a ticket. Creates a worktree on
 // first call; re-runs the current state if the ticket is already waiting or failed.
-func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error {
+func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) (RunOutcome, error) {
 	wflow, err := workflow.Load(o.RepoRoot)
 	if err != nil {
-		return fmt.Errorf("load workflow: %w", err)
+		return RunOutcome{}, fmt.Errorf("load workflow: %w", err)
 	}
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
@@ -72,28 +72,28 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 		state = workflowstate.New(ticketNumber)
 		saveErr := o.Store.SaveState(ticketNumber, state)
 		if saveErr != nil {
-			return fmt.Errorf("save initial ticket state: %w", saveErr)
+			return RunOutcome{}, fmt.Errorf("save initial ticket state: %w", saveErr)
 		}
 	} else if loadErr != nil {
-		return fmt.Errorf("load ticket state: %w", loadErr)
+		return RunOutcome{}, fmt.Errorf("load ticket state: %w", loadErr)
 	}
 	if state.FlowStatus == workflowstate.FlowStatusDone || state.FlowStatus == workflowstate.FlowStatusCancelled {
 		slog.Info("skipping ticket", "ticket", ticketNumber, "status", state.FlowStatus)
 
-		return nil
+		return RunOutcome{}, nil
 	}
 	if state.FlowStatus == workflowstate.FlowStatusRunning {
-		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
+		return RunOutcome{}, fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
 	err = o.ensureWorktreeAndContext(ctx, &state)
 	if err != nil {
-		return err
+		return RunOutcome{}, err
 	}
 
 	// Determine which state to run.
 	stateCfg, err := resolveStateForStart(state, wflow)
 	if err != nil {
-		return err
+		return RunOutcome{}, err
 	}
 
 	slog.Info("starting flow", "ticket", ticketNumber, "state", stateCfg.Name)
@@ -102,23 +102,23 @@ func (o *Orchestrator) StartFlow(ctx context.Context, ticketNumber string) error
 }
 
 // ApplyAction applies the named action to a ticket that is waiting for input.
-func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) error {
+func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabel, message string) (RunOutcome, error) {
 	wflow, err := workflow.Load(o.RepoRoot)
 	if err != nil {
-		return fmt.Errorf("load workflow: %w", err)
+		return RunOutcome{}, fmt.Errorf("load workflow: %w", err)
 	}
 
 	state, err := o.Store.LoadState(ticketNumber)
 	if err != nil {
-		return fmt.Errorf("load ticket state: %w", err)
+		return RunOutcome{}, fmt.Errorf("load ticket state: %w", err)
 	}
 	if state.FlowStatus != workflowstate.FlowStatusWaiting {
-		return fmt.Errorf("ticket %s (status: %s): %w", ticketNumber, state.FlowStatus, ErrTicketNotWaiting)
+		return RunOutcome{}, fmt.Errorf("ticket %s (status: %s): %w", ticketNumber, state.FlowStatus, ErrTicketNotWaiting)
 	}
 
 	stateCfg, ok := wflow.StateByName(state.CurrentState)
 	if !ok {
-		return fmt.Errorf("state %q: %w", state.CurrentState, ErrStateNotFound)
+		return RunOutcome{}, fmt.Errorf("state %q: %w", state.CurrentState, ErrStateNotFound)
 	}
 
 	var action *workflow.ActionConfig
@@ -135,7 +135,7 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 			labels[i] = a.Label
 		}
 
-		return fmt.Errorf("action %q in state %q (available: %s): %w", actionLabel, state.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
+		return RunOutcome{}, fmt.Errorf("action %q in state %q (available: %s): %w", actionLabel, state.CurrentState, strings.Join(labels, ", "), ErrActionNotFound)
 	}
 
 	slog.Info("applying action", "ticket", ticketNumber, "action", actionLabel, "state", state.CurrentState)
@@ -144,13 +144,13 @@ func (o *Orchestrator) ApplyAction(ctx context.Context, ticketNumber, actionLabe
 }
 
 // MoveToState force-transitions the ticket to target, creating a worktree if needed.
-func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target string) error {
+func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target string) (RunOutcome, error) {
 	wflow, err := workflow.Load(o.RepoRoot)
 	if err != nil {
-		return fmt.Errorf("load workflow: %w", err)
+		return RunOutcome{}, fmt.Errorf("load workflow: %w", err)
 	}
 	if strings.TrimSpace(target) == "" {
-		return ErrTargetStateRequired
+		return RunOutcome{}, ErrTargetStateRequired
 	}
 
 	state, loadErr := o.Store.LoadState(ticketNumber)
@@ -158,17 +158,17 @@ func (o *Orchestrator) MoveToState(ctx context.Context, ticketNumber, target str
 		state = workflowstate.New(ticketNumber)
 		saveErr := o.Store.SaveState(ticketNumber, state)
 		if saveErr != nil {
-			return fmt.Errorf("save initial ticket state: %w", saveErr)
+			return RunOutcome{}, fmt.Errorf("save initial ticket state: %w", saveErr)
 		}
 	} else if loadErr != nil {
-		return fmt.Errorf("load ticket state: %w", loadErr)
+		return RunOutcome{}, fmt.Errorf("load ticket state: %w", loadErr)
 	}
 	if state.FlowStatus == workflowstate.FlowStatusRunning {
-		return fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
+		return RunOutcome{}, fmt.Errorf("ticket %s: %w", ticketNumber, ErrTicketRunning)
 	}
 	err = o.ensureWorktreeAndContext(ctx, &state)
 	if err != nil {
-		return err
+		return RunOutcome{}, err
 	}
 
 	slog.Info("force moving to state", "ticket", ticketNumber, "target", target)
@@ -405,11 +405,11 @@ func (o *Orchestrator) ensureWorktreeAndContext(ctx context.Context, state *work
 
 // --- internal helpers ---
 
-func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State, stateCfg workflow.StateConfig) error {
+func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State, stateCfg workflow.StateConfig) (RunOutcome, error) {
 	slog.Info("running state", "ticket", state.TicketNumber, "state", stateCfg.Name)
 	run, err := startStateRun(state, stateCfg)
 	if err != nil {
-		return err
+		return RunOutcome{}, err
 	}
 	logPath := state.ResolveRef(run.LogRef)
 
@@ -418,33 +418,33 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 	state.LastError = ""
 	err = o.Store.SaveState(state.TicketNumber, *state)
 	if err != nil {
-		return fmt.Errorf("save ticket state: %w", err)
+		return RunOutcome{}, fmt.Errorf("save ticket state: %w", err)
 	}
 	err = o.prepareRunContext(*state, stateCfg, run)
 	if err != nil {
-		return o.failState(state, err)
+		return RunOutcome{}, o.failState(state, err)
 	}
 
 	err = o.runCommands(ctx, state.WorktreePath, stateCfg.PrePromptCommands, logPath, "Pre-prompt")
 	if err != nil {
-		return o.failState(state, err)
+		return RunOutcome{}, o.failState(state, err)
 	}
 
 	promptContent, err := workflow.ReadPrompt(o.RepoRoot, stateCfg.Prompt)
 	if err != nil {
-		return o.failState(state, fmt.Errorf("read prompt %s: %w", stateCfg.Prompt, err))
+		return RunOutcome{}, o.failState(state, fmt.Errorf("read prompt %s: %w", stateCfg.Prompt, err))
 	}
 
 	promptPath := state.RunPath(run.ID, "prompt.md")
 	err = os.WriteFile(promptPath, promptContent, 0o644)
 	if err != nil {
-		return o.failState(state, err)
+		return RunOutcome{}, o.failState(state, err)
 	}
 
 	runtimeDir := state.RunPath(run.ID, "provider")
 	err = os.MkdirAll(runtimeDir, 0o755)
 	if err != nil {
-		return o.failState(state, err)
+		return RunOutcome{}, o.failState(state, err)
 	}
 
 	slog.Info("executing provider", "ticket", state.TicketNumber, "state", stateCfg.Name)
@@ -456,20 +456,21 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 	})
 	rawLogPath := state.RunPath(run.ID, "raw-provider.log")
 	_ = os.WriteFile(rawLogPath, []byte(result.RawOutput+"\n\n[stderr]\n"+result.Stderr), 0o644)
+	outcome := RunOutcome{
+		Provider:     o.Provider.Name(),
+		QuotaReached: result.QuotaReached,
+	}
+	if result.QuotaReached {
+		_ = markdown.AppendSection(logPath, stateCfg.Name+" Reschedule", err.Error())
+
+		return outcome, o.rescheduledState(state, err)
+	}
 	if err != nil {
-		if errors.Is(err, providers.ErrTokensExhausted) {
-			// Mark the ticket as rescheduled to indicate that it should be automatically re-run when the quota resets.
-			err = fmt.Errorf("token usage limit reached — wait for your quota to reset, then rerun this ticket to continue: %w", err)
-			state.FlowStatus = workflowstate.FlowStatusRescheduled
-			_ = o.Store.SaveState(state.TicketNumber, *state)
-
-			return err
-		}
-
 		_ = markdown.AppendSection(logPath, stateCfg.Name+" Failed", err.Error())
 
-		return o.failState(state, err)
+		return outcome, o.failState(state, err)
 	}
+
 	if result.SessionData != "" {
 		state.ProviderSessionData = result.SessionData
 	}
@@ -478,7 +479,7 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 
 	err = o.runCommands(ctx, state.WorktreePath, stateCfg.PostPromptCommands, logPath, "Post-prompt")
 	if err != nil {
-		return o.failState(state, err)
+		return RunOutcome{}, o.failState(state, err)
 	}
 
 	if run.ArtifactRef != "" {
@@ -498,10 +499,10 @@ func (o *Orchestrator) runState(ctx context.Context, state *workflowstate.State,
 	state.FlowStatus = workflowstate.FlowStatusWaiting
 	saveErr := o.Store.SaveState(state.TicketNumber, *state)
 	if saveErr != nil {
-		return fmt.Errorf("save ticket state: %w", saveErr)
+		return RunOutcome{}, fmt.Errorf("save ticket state: %w", saveErr)
 	}
 
-	return nil
+	return RunOutcome{}, nil
 }
 
 func (o *Orchestrator) failState(st *workflowstate.State, cause error) error {
@@ -513,7 +514,16 @@ func (o *Orchestrator) failState(st *workflowstate.State, cause error) error {
 	return cause
 }
 
-func (o *Orchestrator) dispatchAction(ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig, message string) error {
+func (o *Orchestrator) rescheduledState(st *workflowstate.State, cause error) error {
+	slog.Warn("token usage limit reached", "ticket", st.TicketNumber, "state", st.CurrentState, "err", cause)
+	st.FlowStatus = workflowstate.FlowStatusRescheduled
+	st.LastError = cause.Error()
+	_ = o.Store.SaveState(st.TicketNumber, *st)
+
+	return cause
+}
+
+func (o *Orchestrator) dispatchAction(ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig, message string) (RunOutcome, error) {
 	logPath := state.CurrentRunLogPath()
 	_ = markdown.AppendSection(logPath, "Human Action: "+action.Label, "")
 
@@ -525,11 +535,11 @@ func (o *Orchestrator) dispatchAction(ctx context.Context, state *workflowstate.
 	case workflow.ActionRunScript:
 		return o.executeScript(ctx, state, wflow, action)
 	default:
-		return fmt.Errorf("action type %q: %w", action.Type, ErrUnknownActionType)
+		return RunOutcome{}, fmt.Errorf("action type %q: %w", action.Type, ErrUnknownActionType)
 	}
 }
 
-func (o *Orchestrator) transitionTo(ctx context.Context, state *workflowstate.State, wflow workflow.Config, target string) error {
+func (o *Orchestrator) transitionTo(ctx context.Context, state *workflowstate.State, wflow workflow.Config, target string) (RunOutcome, error) {
 	if workflow.IsTerminal(target) {
 		slog.Info("reached terminal state", "ticket", state.TicketNumber, "state", target)
 		switch target {
@@ -543,43 +553,43 @@ func (o *Orchestrator) transitionTo(ctx context.Context, state *workflowstate.St
 
 		saveErr := o.Store.SaveState(state.TicketNumber, *state)
 		if saveErr != nil {
-			return fmt.Errorf("save ticket state: %w", saveErr)
+			return RunOutcome{}, fmt.Errorf("save ticket state: %w", saveErr)
 		}
 
-		return nil
+		return RunOutcome{}, nil
 	}
 	slog.Info("transitioning to state", "ticket", state.TicketNumber, "target", target)
 	stateCfg, ok := wflow.StateByName(target)
 	if !ok {
-		return fmt.Errorf("state %q: %w", target, ErrTargetNotFound)
+		return RunOutcome{}, fmt.Errorf("state %q: %w", target, ErrTargetNotFound)
 	}
 
 	return o.runState(ctx, state, stateCfg)
 }
 
-func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *workflowstate.State, wflow workflow.Config, message string) error {
+func (o *Orchestrator) writeFeedbackAndRerun(ctx context.Context, state *workflowstate.State, wflow workflow.Config, message string) (RunOutcome, error) {
 	if strings.TrimSpace(message) == "" {
-		return ErrFeedbackRequired
+		return RunOutcome{}, ErrFeedbackRequired
 	}
 	slog.Info("applying feedback", "ticket", state.TicketNumber, "state", state.CurrentState)
 	if state.CurrentRunID == "" {
-		return ErrNoCurrentRunID
+		return RunOutcome{}, ErrNoCurrentRunID
 	}
 	content := []byte(strings.TrimSpace(message))
 	runFeedbackPath := state.RunPath(state.CurrentRunID, "feedback.md")
 	writeErr := os.WriteFile(runFeedbackPath, content, 0o644)
 	if writeErr != nil {
-		return fmt.Errorf("write feedback file: %w", writeErr)
+		return RunOutcome{}, fmt.Errorf("write feedback file: %w", writeErr)
 	}
 	stateCfg, ok := wflow.StateByName(state.CurrentState)
 	if !ok {
-		return fmt.Errorf("state %q: %w", state.CurrentState, ErrStateNotFound)
+		return RunOutcome{}, fmt.Errorf("state %q: %w", state.CurrentState, ErrStateNotFound)
 	}
-
+	
 	return o.runState(ctx, state, stateCfg)
 }
 
-func (o *Orchestrator) executeScript(ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig) error {
+func (o *Orchestrator) executeScript(ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig) (RunOutcome, error) {
 	logPath := state.CurrentRunLogPath()
 
 	var out strings.Builder
@@ -601,44 +611,48 @@ func (o *Orchestrator) executeScript(ctx context.Context, state *workflowstate.S
 
 	captured := strings.TrimSpace(out.String())
 
+	var outcome RunOutcome
 	if scriptErr == nil && action.OnSuccess != nil {
-		err := o.dispatchSubAction(ctx, state, wflow, *action.OnSuccess, captured)
+		sub, err := o.dispatchSubAction(ctx, state, wflow, *action.OnSuccess, captured)
 		if err != nil {
-			return err
+			return RunOutcome{}, err
 		}
+		outcome = sub
 	} else if scriptErr != nil && action.OnFailure != nil {
-		err := o.dispatchSubAction(ctx, state, wflow, *action.OnFailure, captured)
+		sub, err := o.dispatchSubAction(ctx, state, wflow, *action.OnFailure, captured)
 		if err != nil {
-			return err
+			return RunOutcome{}, err
 		}
+		outcome = sub
 	}
 
 	if action.Always != nil {
-		err := o.dispatchSubAction(ctx, state, wflow, *action.Always, captured)
+		sub, err := o.dispatchSubAction(ctx, state, wflow, *action.Always, captured)
 		if err != nil {
-			return err
+			return RunOutcome{}, err
 		}
+		outcome = sub
 	}
 
-	return nil
+	return outcome, nil
 }
 
 func (o *Orchestrator) dispatchSubAction(
 	ctx context.Context, state *workflowstate.State, wflow workflow.Config, action workflow.ActionConfig, message string,
-) error {
+) (RunOutcome, error) {
 	switch action.Type {
 	case workflow.ActionProvideFeedback:
 		if strings.TrimSpace(message) == "" {
-			return nil // no script output to feed back
+			return RunOutcome{}, nil // no script output to feed back
 		}
 
 		return o.writeFeedbackAndRerun(ctx, state, wflow, message)
 	case workflow.ActionMoveToState:
 		return o.transitionTo(ctx, state, wflow, action.Target)
 	case workflow.ActionRunScript:
-		return ErrScriptSubAction
+		return RunOutcome{}, ErrScriptSubAction
 	default:
-		return fmt.Errorf("action type %q: %w", action.Type, ErrUnsupportedSubAction)
+		return RunOutcome{}, fmt.Errorf("action type %q: %w", action.Type, ErrUnsupportedSubAction)
 	}
 }
 
